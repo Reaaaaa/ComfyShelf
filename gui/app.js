@@ -742,6 +742,7 @@ async function importPackage() {
 }
 
 function renderIntegrity(pkg) {
+  if (!pkg) return;
   const check = pkg.verification || {state: 'unknown'};
   const state = ['verified', 'invalid', 'stale'].includes(check.state) ? check.state : 'unknown';
   const key = {verified:'valid', invalid:'invalid', stale:'stale', unknown:'unknown'}[state];
@@ -1162,6 +1163,66 @@ async function saveRename() {
   }
 }
 
+let currentDeleteInspection = null;
+
+async function openDeleteModal() {
+  const pkg = selectedPackage();
+  if (!pkg) return;
+
+  $('deleteIntro').textContent = t('delete.intro', {
+    name: pkg.name,
+    size: formatBytes(pkg.archive_size || 0),
+  });
+
+  $('deleteLoadedWarning').classList.toggle('hidden', pkg.state !== 'loaded');
+  $('deleteMethodTrash').checked = true;
+  $('deleteOrphansOption').classList.add('hidden');
+  $('deleteOrphansCheckbox').checked = false;
+  currentDeleteInspection = null;
+
+  $('deleteModal').classList.remove('hidden');
+
+  try {
+    const inspection = await callApi('inspect_archive_deletion', pkg.path);
+    currentDeleteInspection = inspection;
+    if (inspection && inspection.orphaned_models && inspection.orphaned_models.length > 0) {
+      $('deleteOrphansLabel').textContent = t('delete.clean_pool', {
+        count: inspection.orphaned_models.length,
+        size: formatBytes(inspection.orphaned_bytes || 0),
+      });
+      $('deleteOrphansOption').classList.remove('hidden');
+      $('deleteOrphansCheckbox').checked = true;
+    }
+  } catch (_) {}
+}
+
+function closeDeleteModal() {
+  $('deleteModal').classList.add('hidden');
+  currentDeleteInspection = null;
+}
+
+async function confirmDeleteArchive() {
+  const pkg = selectedPackage();
+  if (!pkg) { closeDeleteModal(); return; }
+
+  const sendToTrash = $('deleteMethodTrash').checked;
+  const deleteOrphans = !$('deleteOrphansOption').classList.contains('hidden') && $('deleteOrphansCheckbox').checked;
+
+  const button = $('deleteConfirmButton');
+  button.disabled = true;
+  try {
+    const result = await callApi('delete_archive', pkg.path, sendToTrash, deleteOrphans);
+    closeDeleteModal();
+    renderDetail(null);
+    await refreshState();
+    toast(sendToTrash ? t('delete.success_trash', {name: result.name}) : t('delete.success_permanent', {name: result.name}));
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function setMaximizedButton(maximized) {
   const button = $('maximizeButton');
   const label = t(maximized ? 'window.restore' : 'window.maximize');
@@ -1236,6 +1297,10 @@ function installEvents() {
     if (event.key === 'Enter') { event.preventDefault(); saveRename(); }
     if (event.key === 'Escape') closeRename();
   });
+  $('deletePackageButton').addEventListener('click', openDeleteModal);
+  $('deleteCloseButton').addEventListener('click', closeDeleteModal);
+  $('deleteCancelButton').addEventListener('click', closeDeleteModal);
+  $('deleteConfirmButton').addEventListener('click', confirmDeleteArchive);
   $('settingsButton').addEventListener('click', () => openSettings(false));
   $('settingsCloseButton').addEventListener('click', closeSettings);
   $('settingsCancelButton').addEventListener('click', closeSettings);

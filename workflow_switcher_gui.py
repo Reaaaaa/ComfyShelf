@@ -704,6 +704,45 @@ class WorkflowSwitcherApi:
 
         return self._result(action)
 
+    def inspect_archive_deletion(self, archive_path: str) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            installation = engine.active_installation()
+            if not installation:
+                raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
+            return engine.inspect_archive_deletion(
+                Path(archive_path),
+                Path(installation["archive_root"]),
+            )
+
+        return self._result(action)
+
+    def delete_archive(
+        self,
+        archive_path: str,
+        send_to_trash: bool = True,
+        delete_orphaned_models: bool = False,
+    ) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            installation = engine.active_installation()
+            if not installation:
+                raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
+            target_path = Path(archive_path)
+            result = engine.delete_package_archive(
+                target_path,
+                Path(installation["archive_root"]),
+                send_to_trash=send_to_trash,
+                delete_orphaned_models=delete_orphaned_models,
+            )
+            verification_cache.discard_record(target_path)
+            mode = "Papierkorb" if send_to_trash else "unwiderruflich"
+            detail = f'Workflow-Archiv gelöscht ({mode}): {result["name"]}'
+            if result.get("orphaned_deleted_count"):
+                detail += f' (+ {result["orphaned_deleted_count"]} verwaiste Modelle)'
+            self._record_history("delete", result["name"], detail)
+            return result
+
+        return self._result(action)
+
     def inspect_for_pack(self, workflow_path: str) -> dict[str, Any]:
         return self._operation(lambda: self._inspect_for_pack(Path(workflow_path)))
 

@@ -695,6 +695,103 @@ class ParserTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertTrue((archive_root / "Configured Music.zip").is_file())
 
+    def test_package_archive_delete_permanent_and_trash(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            archive_root = base / "Archive"
+            archive_root.mkdir()
+            source = archive_root / "Workflow.zip"
+            source.write_bytes(b"PK\x03\x04zip")
+
+            with patch.object(MODULE, "_send_to_trash_nt") as trash_mock:
+                result_trash = MODULE.delete_package_archive(source, archive_root, send_to_trash=True)
+                self.assertEqual(result_trash["name"], "Workflow")
+                self.assertTrue(result_trash["trashed"])
+                if os.name == "nt":
+                    trash_mock.assert_called_once_with(source.resolve())
+
+            source2 = archive_root / "Permanent.zip"
+            source2.write_bytes(b"PK\x03\x04zip")
+            result_perm = MODULE.delete_package_archive(source2, archive_root, send_to_trash=False)
+            self.assertEqual(result_perm["name"], "Permanent")
+            self.assertFalse(result_perm["trashed"])
+            self.assertFalse(source2.exists())
+
+    def test_package_archive_delete_rejects_unsafe_locations(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            archive_root = base / "Archive"
+            archive_root.mkdir()
+            outside = base / "Outside.zip"
+            outside.write_bytes(b"PK\x03\x04zip")
+
+            with self.assertRaises(ValueError):
+                MODULE.delete_package_archive(outside, archive_root)
+
+            not_a_zip = archive_root / "not_zip.txt"
+            not_a_zip.write_text("hello")
+            with self.assertRaises(ValueError):
+                MODULE.delete_package_archive(not_a_zip, archive_root)
+
+    def test_package_archive_delete_with_orphaned_pool_models(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            archive_root = base / "Archive"
+            archive_root.mkdir()
+
+            sha_orphan = "a" * 64
+            sha_shared = "b" * 64
+
+            pool_orphan = archive_root / ".comfyshelf" / "objects" / "sha256" / sha_orphan[:2] / sha_orphan
+            pool_orphan.parent.mkdir(parents=True, exist_ok=True)
+            pool_orphan.write_bytes(b"orphan")
+
+            pool_shared = archive_root / ".comfyshelf" / "objects" / "sha256" / sha_shared[:2] / sha_shared
+            pool_shared.parent.mkdir(parents=True, exist_ok=True)
+            pool_shared.write_bytes(b"shared")
+
+            target_zip = archive_root / "Target.zip"
+            with zipfile.ZipFile(target_zip, "w") as zf:
+                zf.writestr(
+                    "comfy-package.json",
+                    json.dumps({
+                        "package_type": "comfyui-workflow-overlay",
+                        "schema_version": 2,
+                        "assets": [
+                            {"filename": "model1.safetensors", "sha256": sha_orphan, "size": 6, "kind": "checkpoint"},
+                            {"filename": "model2.safetensors", "sha256": sha_shared, "size": 6, "kind": "checkpoint"},
+                        ]
+                    })
+                )
+
+            sibling_zip = archive_root / "Sibling.zip"
+            with zipfile.ZipFile(sibling_zip, "w") as zf:
+                zf.writestr(
+                    "comfy-package.json",
+                    json.dumps({
+                        "package_type": "comfyui-workflow-overlay",
+                        "schema_version": 2,
+                        "assets": [
+                            {"filename": "model2.safetensors", "sha256": sha_shared, "size": 6, "kind": "checkpoint"},
+                        ]
+                    })
+                )
+
+            inspection = MODULE.inspect_archive_deletion(target_zip, archive_root)
+            self.assertEqual(len(inspection["orphaned_models"]), 1)
+            self.assertEqual(inspection["orphaned_models"][0]["sha256"], sha_orphan)
+            self.assertEqual(inspection["orphaned_bytes"], 6)
+
+            res = MODULE.delete_package_archive(
+                target_zip, archive_root, send_to_trash=False, delete_orphaned_models=True
+            )
+            self.assertEqual(res["orphaned_deleted_count"], 1)
+            self.assertFalse(target_zip.exists())
+            self.assertFalse(pool_orphan.exists())
+            self.assertTrue(pool_shared.exists())
+            self.assertTrue(sibling_zip.exists())
+
+
 
 if __name__ == "__main__":
     unittest.main()

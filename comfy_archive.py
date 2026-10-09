@@ -2283,6 +2283,160 @@ def rename_package_archive(
     }
 
 
+def _send_to_trash_nt(path: Path) -> None:
+    """Send a file to the Windows Recycle Bin using SHFileOperationW."""
+    import ctypes
+    from ctypes import wintypes
+
+    class SHFILEOPSTRUCTW(ctypes.Structure):
+        _fields_ = [
+            ("hwnd", wintypes.HWND),
+            ("wFunc", wintypes.UINT),
+            ("pFrom", wintypes.LPCWSTR),
+            ("pTo", wintypes.LPCWSTR),
+            ("fFlags", wintypes.WORD),
+            ("fAnyOperationsAborted", wintypes.BOOL),
+            ("hNameMappings", wintypes.LPVOID),
+            ("lpszProgressTitle", wintypes.LPCWSTR),
+        ]
+
+    resolved = str(path.resolve())
+    op = SHFILEOPSTRUCTW()
+    op.wFunc = 3  # FO_DELETE
+    op.pFrom = resolved + "\0"  # double null terminated
+    op.fFlags = 0x0040 | 0x0010 | 0x0004 | 0x0400  # FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
+
+    result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+    if result != 0 or op.fAnyOperationsAborted:
+        raise OSError(f"Konnte Datei nicht in den Papierkorb verschieben (Fehlercode {result}): {path.name}")
+
+
+def _delete_file(path: Path, send_to_trash: bool = True) -> None:
+    if send_to_trash and os.name == "nt":
+        _send_to_trash_nt(path)
+    else:
+        path.unlink(missing_ok=True)
+
+
+def _cleanup_empty_pool_parents(object_path: Path, archive_root: Path) -> None:
+    try:
+        pool_prefix_dir = object_path.parent
+        if pool_prefix_dir.is_dir() and not any(pool_prefix_dir.iterdir()):
+            pool_prefix_dir.rmdir()
+    except OSError:
+        pass
+
+
+def inspect_archive_deletion(
+    archive_path: Path,
+    archive_root: Path,
+) -> dict[str, Any]:
+    """Inspect one package ZIP inside the archive root and find unreferenced pool models."""
+    root = archive_root.resolve()
+    source = archive_path.resolve()
+    if source.parent != root:
+        raise ValueError("Das Paket liegt nicht direkt im eingerichteten Auslagerungsordner.")
+    if not source.is_file() or source.suffix.casefold() != ".zip":
+        raise ValueError("Das zu löschende ZIP-Paket wurde nicht gefunden.")
+
+    archive_size = source.stat().st_size
+    orphaned = []
+    try:
+        manifest = load_package_manifest(source)
+    except Exception:
+        manifest = {}
+
+    target_objects: dict[str, dict[str, Any]] = {}
+    for asset in manifest.get("assets", []):
+        sha = str(asset.get("sha256", "")).casefold()
+        if sha and len(sha) == 64:
+            target_objects[sha] = {
+                "sha256": sha,
+                "filename": asset.get("filename", ""),
+                "kind": asset.get("kind", ""),
+                "size": int(asset.get("size", 0)),
+            }
+    for file_entry in manifest.get("files", []):
+        if file_entry.get("role") == "model":
+            sha = str(file_entry.get("sha256", "")).casefold()
+            if sha and len(sha) == 64 and sha not in target_objects:
+                target_objects[sha] = {
+                    "sha256": sha,
+                    "filename": Path(str(file_entry.get("path", ""))).name,
+                    "kind": "model",
+                    "size": int(file_entry.get("size", 0)),
+                }
+
+    if target_objects:
+        other_hashes: set[str] = set()
+        for sibling in root.iterdir():
+            if sibling.is_file() and sibling.suffix.casefold() == ".zip" and sibling.resolve() != source:
+                try:
+                    s_manifest = load_package_manifest(sibling)
+                    for asset in s_manifest.get("assets", []):
+                        s_sha = str(asset.get("sha256", "")).casefold()
+                        if s_sha:
+                            other_hashes.add(s_sha)
+                    for file_entry in s_manifest.get("files", []):
+                        if file_entry.get("role") == "model":
+                            s_sha = str(file_entry.get("sha256", "")).casefold()
+                            if s_sha:
+                                other_hashes.add(s_sha)
+                except Exception:
+                    continue
+
+        for sha, info in target_objects.items():
+            if sha not in other_hashes:
+                try:
+                    obj_path = _shared_object_path(source, sha)
+                    if obj_path.is_file():
+                        info["path"] = str(obj_path)
+                        orphaned.append(info)
+                except Exception:
+                    pass
+
+    return {
+        "archive_path": str(source),
+        "name": source.stem,
+        "archive_size": archive_size,
+        "orphaned_models": orphaned,
+        "orphaned_bytes": sum(m["size"] for m in orphaned),
+    }
+
+
+def delete_package_archive(
+    archive_path: Path,
+    archive_root: Path,
+    *,
+    send_to_trash: bool = True,
+    delete_orphaned_models: bool = False,
+) -> dict[str, Any]:
+    """Delete or trash one package ZIP and optionally purge orphaned shared pool models."""
+    inspection = inspect_archive_deletion(archive_path, archive_root)
+    source = archive_path.resolve()
+    old_name = source.stem
+
+    deleted_orphans = []
+    if delete_orphaned_models:
+        for orphan in inspection["orphaned_models"]:
+            obj_path = Path(orphan["path"])
+            if obj_path.is_file():
+                _delete_file(obj_path, send_to_trash=send_to_trash)
+                _cleanup_empty_pool_parents(obj_path, archive_root)
+                deleted_orphans.append(orphan)
+
+    _delete_file(source, send_to_trash=send_to_trash)
+
+    return {
+        "name": old_name,
+        "path": str(source),
+        "trashed": send_to_trash,
+        "orphaned_deleted_count": len(deleted_orphans),
+        "orphaned_deleted_bytes": sum(m["size"] for m in deleted_orphans),
+    }
+
+
+
 def _safe_model_target(comfy_root: Path, archive_path: str) -> Path:
     pure = PurePosixPath(archive_path)
     if pure.is_absolute() or not pure.parts or pure.parts[0].casefold() != "models":

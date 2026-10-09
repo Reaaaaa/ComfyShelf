@@ -31,6 +31,7 @@
     <symbol id="i-switch" viewBox="0 0 24 24"><path d="M4 7h13M14 4l3 3-3 3"/><path d="M20 17H7M10 14l-3 3 3 3"/></symbol>
     <symbol id="i-edit" viewBox="0 0 24 24"><path d="m14.5 5.5 4 4M4 20l1.2-5.2L15.8 4.2a1.4 1.4 0 0 1 2 0l2 2a1.4 1.4 0 0 1 0 2L9.2 18.8z"/><path d="m5.2 14.8 4 4"/></symbol>
     <symbol id="i-log" viewBox="0 0 24 24"><path d="M6 3.5h9l3 3v14H6z"/><path d="M15 3.5v3h3M9 11h6M9 15h6"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -169,6 +170,7 @@
             <button class="secondary-button" id="verifyButton"><svg><use href="#i-shield"/></svg><span data-i18n="detail.verify">Verify package</span></button>
             <button class="secondary-button" id="exportButton" data-i18n-title="storage.export_hint"><svg><use href="#i-upload"/></svg><span data-i18n="storage.export_button">Export portable ZIP…</span></button>
             <button class="secondary-button" id="storageButton"></button>
+            <button class="secondary-button danger-action-button" id="deletePackageButton" data-i18n-title="actions.delete_hint"><svg><use href="#i-trash"/></svg><span data-i18n="actions.delete_button">Delete archive…</span></button>
             <div class="dock-spacer"></div>
             <button class="secondary-button hidden" id="secondaryActionButton"></button>
             <button class="primary-button" id="primaryActionButton"></button>
@@ -259,6 +261,53 @@
       </label>
       <div class="validation-box hidden" id="renameValidation"></div>
       <div class="modal-actions"><button class="text-button" id="renameCancelButton" data-i18n="common.cancel">Cancel</button><button class="primary-button" id="renameSaveButton"><svg><use href="#i-check"/></svg><span data-i18n="rename.save">Rename</span></button></div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop hidden" id="deleteModal">
+    <section class="modal delete-modal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
+      <div class="modal-heading">
+        <div><span class="eyebrow" data-i18n="delete.eyebrow">Library</span><h2 id="deleteTitle" data-i18n="delete.title">Delete workflow archive</h2></div>
+        <button class="icon-button modal-close" id="deleteCloseButton" aria-label="Close dialog" data-i18n-aria="common.close_dialog"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <p class="modal-intro" id="deleteIntro"></p>
+
+      <div class="delete-options">
+        <label class="safety-option">
+          <input type="radio" name="deleteMethod" value="trash" id="deleteMethodTrash" checked>
+          <span>
+            <strong data-i18n="delete.method_trash">Move to Recycle Bin (Recommended)</strong>
+            <small data-i18n="delete.method_trash_hint">Can be restored from the Windows Recycle Bin if needed.</small>
+          </span>
+        </label>
+        <label class="safety-option">
+          <input type="radio" name="deleteMethod" value="permanent" id="deleteMethodPermanent">
+          <span>
+            <strong data-i18n="delete.method_permanent">Delete permanently</strong>
+            <small data-i18n="delete.method_permanent_hint">Instantly deletes the file without sending it to the Recycle Bin.</small>
+          </span>
+        </label>
+      </div>
+
+      <label class="safety-option hidden" id="deleteOrphansOption">
+        <input type="checkbox" id="deleteOrphansCheckbox">
+        <span>
+          <strong id="deleteOrphansLabel" data-i18n="delete.clean_pool">Also delete orphaned pool models</strong>
+          <small data-i18n="delete.clean_pool_hint">These models are not referenced by any other archived workflow.</small>
+        </span>
+      </label>
+
+      <div class="notice warning hidden" id="deleteLoadedWarning" style="margin-top: 14px;">
+        <svg><use href="#i-alert"/></svg>
+        <div class="notice-body">
+          <span data-i18n="delete.loaded_warning">This workflow is currently loaded in ComfyUI. The local model files in ComfyUI will remain in place.</span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="text-button" id="deleteCancelButton" data-i18n="common.cancel">Cancel</button>
+        <button class="primary-button danger-button" id="deleteConfirmButton"><svg><use href="#i-trash"/></svg><span data-i18n="delete.confirm">Delete archive</span></button>
+      </div>
     </section>
   </div>
 

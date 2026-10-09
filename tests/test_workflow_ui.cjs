@@ -386,10 +386,51 @@ async function run(language) {
   `, context);
   assert.equal(workflowButton.disabled, false);
   assert.equal(context.lastToast.message, context.messages['errors.workflow_integrity']);
+
+  // Deleting an archive handles trash vs permanent and optional orphaned pool cleanup.
+  const deleteElements = {
+    deleteIntro: {},
+    deleteLoadedWarning: {classList: {toggle() {}}},
+    deleteMethodTrash: {checked: true},
+    deleteMethodPermanent: {checked: false},
+    deleteOrphansOption: {classList: {toggle() {}, add() {}, remove() {}, contains(c) { return c === 'hidden' ? false : false; }}},
+    deleteOrphansCheckbox: {checked: false},
+    deleteOrphansLabel: {},
+    deleteModal: {classList: {add() { deleteElements.deleteModal.hidden = true; }, remove() { deleteElements.deleteModal.hidden = false; }}},
+    deleteConfirmButton: {disabled: false},
+    detailView: {classList: {add() {}, remove() {}}},
+    emptyState: {classList: {add() {}, remove() {}}},
+  };
+  context.document.getElementById = id => deleteElements[id] || {classList: {add(){}, remove(){}, toggle(){}, contains(){ return false; }}, addEventListener(){}};
+  context.deleteInspectCalls = [];
+  context.deleteCalls = [];
+  vm.runInContext(`
+    window.pywebview.api.inspect_archive_deletion = async (...args) => {
+      deleteInspectCalls.push(args);
+      return {ok: true, data: {name: 'TestPackage', orphaned_models: [{sha256: 'xyz'}], orphaned_bytes: 1024}};
+    };
+    window.pywebview.api.delete_archive = async (...args) => {
+      deleteCalls.push(args);
+      return {ok: true, data: {name: 'TestPackage', trashed: true}};
+    };
+    app.state = {packages: [{name: 'TestPackage', path: 'E:/Archive/TestPackage.zip', archive_size: 2048, state: 'archived'}]};
+    app.selectedPath = 'E:/Archive/TestPackage.zip';
+  `, context);
+  await vm.runInContext('openDeleteModal()', context);
+  assert.equal(deleteElements.deleteModal.hidden, false);
+  assert.equal(context.deleteInspectCalls.length, 1);
+  assert.equal(deleteElements.deleteOrphansCheckbox.checked, true);
+  assert.ok(deleteElements.deleteIntro.textContent.includes('TestPackage'));
+
+  await vm.runInContext('confirmDeleteArchive()', context);
+  assert.equal(context.deleteCalls.length, 1);
+  assert.deepEqual(Array.from(context.deleteCalls[0]), ['E:/Archive/TestPackage.zip', true, true]);
+  assert.equal(deleteElements.deleteModal.hidden, true);
+  assert.ok(context.lastToast.message.includes('TestPackage'));
 }
 
 (async () => {
   await run('en');
   await run('de');
-  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import and portable export.');
+  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export and archive deletion modal.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -200,3 +200,14 @@ def finish_rename(archive, manifest, record):
         _write_record(archive, {**record, "snapshot": after})
     except OSError:
         LOGGER.warning("Could not retain verification record after rename: %s", archive, exc_info=True)
+
+
+def discard_record(archive):
+    """Remove any cached verification record for an archive being deleted."""
+    try:
+        record_file = cache_path(archive)
+        if record_file.is_file():
+            record_file.unlink()
+    except Exception:
+        LOGGER.debug("Could not remove verification record: %s", archive, exc_info=True)
+

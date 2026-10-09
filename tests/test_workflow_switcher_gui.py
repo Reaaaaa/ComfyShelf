@@ -340,6 +340,28 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
             self.assertEqual(warnings[0]["name"], "Broken.zip")
             self.assertEqual(len(progress), 2)
 
+    def test_delete_archive_and_inspect_api(self):
+        api = GUI.WorkflowSwitcherApi()
+        base = GUI.PREFERENCES_PATH.parent
+        archive = base / "Workflow.zip"
+
+        with patch.object(GUI.engine, "active_installation", return_value={"archive_root": str(base)}), \
+             patch.object(GUI.engine, "inspect_archive_deletion", return_value={"name": "Workflow", "orphaned_models": []}) as inspect, \
+             patch.object(GUI.engine, "delete_package_archive", return_value={"name": "Workflow", "trashed": True, "orphaned_deleted_count": 0}) as delete_pkg, \
+             patch.object(GUI.verification_cache, "discard_record") as discard, \
+             patch.object(api, "_record_history") as record_hist:
+            inspect_res = api.inspect_archive_deletion(str(archive))
+            self.assertTrue(inspect_res["ok"])
+            self.assertEqual(inspect_res["data"]["name"], "Workflow")
+            inspect.assert_called_once_with(archive, base)
+
+            del_res = api.delete_archive(str(archive), send_to_trash=True, delete_orphaned_models=False)
+            self.assertTrue(del_res["ok"])
+            self.assertEqual(del_res["data"]["name"], "Workflow")
+            delete_pkg.assert_called_once_with(archive, base, send_to_trash=True, delete_orphaned_models=False)
+            discard.assert_called_once_with(archive)
+            record_hist.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
