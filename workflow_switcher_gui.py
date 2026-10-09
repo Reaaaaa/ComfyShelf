@@ -1226,7 +1226,7 @@ def main() -> int:
     api = WorkflowSwitcherApi()
     initial_width, initial_height = _initial_window_size()
     window = webview.create_window(
-        "ComfyShelf — Workflow Switcher",
+        "ComfyShelf — Workflow & Model Shelf",
         url=html_path.as_uri(),
         js_api=api,
         width=initial_width,

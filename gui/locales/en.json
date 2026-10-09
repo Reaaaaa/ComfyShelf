@@ -155,7 +155,7 @@
   "settings.button": "Settings",
   "settings.eyebrow": "Setup",
   "settings.title": "Where are your workflows?",
-  "settings.intro": "Both locations remain entirely under your control. The switcher only changes files that were previously archived and verified.",
+  "settings.intro": "Both locations remain entirely under your control. ComfyShelf only changes files that were previously archived and verified.",
   "settings.language": "Interface language",
   "settings.language_hint": "Used for the interface and user-facing messages.",
   "settings.comfy_root": "ComfyUI root folder",

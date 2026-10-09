@@ -155,7 +155,7 @@
   "settings.button": "Einstellungen",
   "settings.eyebrow": "Einrichtung",
   "settings.title": "Wo liegen deine Workflows?",
-  "settings.intro": "Beide Orte bleiben vollständig unter deiner Kontrolle. Der Switcher verändert nur Dateien, die zuvor geprüft archiviert wurden.",
+  "settings.intro": "Beide Orte bleiben vollständig unter deiner Kontrolle. ComfyShelf verändert nur Dateien, die zuvor geprüft archiviert wurden.",
   "settings.language": "Oberflächensprache",
   "settings.language_hint": "Gilt für die Oberfläche und alle Benutzerhinweise.",
   "settings.comfy_root": "ComfyUI-Hauptordner",
