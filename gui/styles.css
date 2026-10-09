@@ -167,6 +167,11 @@ h1, h2, h3, p { margin: 0; }
   font-size: 12px;
   padding: 0 4px 0 0;
 }
+.search-box input:focus,
+.search-box input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
 .search-box input::placeholder {
   color: #637580;
 }
@@ -183,6 +188,11 @@ h1, h2, h3, p { margin: 0; }
   padding: 0;
   margin-right: 2px;
   transition: color .12s ease;
+}
+.search-clear:focus,
+.search-clear:focus-visible {
+  outline: none !important;
+  color: var(--teal);
 }
 .search-clear:hover {
   color: var(--text);
@@ -688,7 +698,8 @@ h1, h2, h3, p { margin: 0; }
 .toast svg { width: 16px; height: 16px; }
 .toast #toastText { min-width: 0; overflow-wrap: anywhere; }
 
-button:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+button:focus-visible, input:not(.search-box input):focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.search-scope-chip:focus-visible { outline: 1px solid var(--teal) !important; outline-offset: 1px; }
 @media (max-width: 1080px) {
   .workspace { grid-template-columns: 270px 1fr; }
   .sidebar { padding-left: 14px; padding-right: 14px; }
