@@ -650,7 +650,7 @@ def resolve_asset(asset: Asset, comfy_root: Path) -> tuple[Path | None, list[Pat
 
     exact = [root.joinpath(*normalized.parts) for root in roots
              if root.joinpath(*normalized.parts).is_file()
-             and _is_relative_to(root.joinpath(*normalized.parts).resolve(), models_root)]
+             and _is_relative_to(root.joinpath(*normalized.parts).parent.resolve(), models_root)]
     if len(exact) == 1:
         asset.resolution = "exact-path"
         return exact[0], []
@@ -664,11 +664,11 @@ def resolve_asset(asset: Asset, comfy_root: Path) -> tuple[Path | None, list[Pat
         try:
             matches.extend(
                 path for path in root.rglob("*") if path.is_file() and path.name.lower() == wanted_name
-                and _is_relative_to(path.resolve(), models_root)
+                and _is_relative_to(path.parent.resolve(), models_root)
             )
         except OSError:
             continue
-    unique = list(dict.fromkeys(path.resolve() for path in matches))
+    unique = list(dict.fromkeys(path.parent.resolve() / path.name for path in matches))
     if len(normalized.parts) > 1:
         # With an unknown category, match the complete relative suffix. Never
         # replace an explicit subfolder with a same-named file from elsewhere.
@@ -1188,7 +1188,7 @@ def build_package(
                 if asset["resolved_path"]:
                     source = Path(asset["resolved_path"])
                     try:
-                        relative = source.resolve().relative_to(comfy_root.resolve())
+                        relative = (source.parent.resolve() / source.name).relative_to(comfy_root.resolve())
                     except ValueError as exc:
                         raise ValueError(f"Asset liegt außerhalb des ComfyUI-Roots: {source}") from exc
                     arc = _zip_path(relative)
@@ -2605,12 +2605,11 @@ def _safe_model_target(comfy_root: Path, archive_path: str) -> Path:
     if any(part in {"", ".", ".."} for part in pure.parts):
         raise ValueError(f"Manifest enthält einen unsicheren Modellpfad: {archive_path}")
     models_root = (comfy_root / "models").resolve()
-    target = comfy_root.joinpath(*pure.parts).resolve()
-    try:
-        target.relative_to(models_root)
-    except ValueError as exc:
-        raise ValueError(f"Modellpfad verlässt den Models-Ordner: {archive_path}") from exc
-    return target
+    target = comfy_root.joinpath(*pure.parts)
+    parent_resolved = target.parent.resolve()
+    if not _is_relative_to(parent_resolved, models_root):
+        raise ValueError(f"Modellpfad verlässt den Models-Ordner: {archive_path}")
+    return parent_resolved / target.name
 
 
 def _asset_key(kind: str, filename: str) -> tuple[str, str]:
@@ -2664,7 +2663,7 @@ def find_shared_model_references(
             if PurePosixPath(asset.filename.replace("\\", "/")).name.casefold() in included_names:
                 resolved, _ = resolve_asset(asset, comfy_root)
                 if resolved:
-                    matched_keys.update(keys_by_path.get(str(resolved.resolve()).casefold(), set()))
+                    matched_keys.update(keys_by_path.get(str(resolved.parent.resolve() / resolved.name).casefold(), set()))
             for matched_key in matched_keys:
                 reference = str(workflow_path.resolve())
                 if reference not in references[matched_key]:
@@ -2948,12 +2947,11 @@ def _safe_restore_target(comfy_root: Path, archive_path: str, role: str) -> Path
     ):
         raise ValueError(f"Manifest enthält einen unerlaubten Restore-Pfad: {archive_path}")
     user_root = (comfy_root / "user").resolve()
-    target = comfy_root.joinpath(*pure.parts).resolve()
-    try:
-        target.relative_to(user_root)
-    except ValueError as exc:
-        raise ValueError(f"Workflow-Pfad verlässt den User-Ordner: {archive_path}") from exc
-    return target
+    target = comfy_root.joinpath(*pure.parts)
+    parent_resolved = target.parent.resolve()
+    if not _is_relative_to(parent_resolved, user_root):
+        raise ValueError(f"Workflow-Pfad verlässt den User-Ordner: {archive_path}")
+    return parent_resolved / target.name
 
 
 def restore_package(
@@ -3358,7 +3356,7 @@ def switch_package(
             if archive_model_path.casefold() in target_paths or asset_key in target_keys:
                 continue
             target = _safe_model_target(comfy_root, archive_model_path)
-            target_key = str(target.resolve()).casefold()
+            target_key = str(target).casefold()
             if target_key in seen_targets or not target.is_file():
                 continue
             issue = _deletion_access_issue(target)

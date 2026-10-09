@@ -711,6 +711,26 @@ class ParserTests(unittest.TestCase):
             active = MODULE.active_installation(config_path)
             self.assertEqual(active["link_mode"], "copy")
 
+    def test_safe_model_target_allows_symlink_to_external_storage_pool(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy = base / "Comfy"
+            models = comfy / "models" / "bbox"
+            models.mkdir(parents=True)
+            external = base / "ExternalPool" / "object.bin"
+            external.parent.mkdir(parents=True)
+            external.write_bytes(b"pool-object")
+
+            target_file = models / "face_yolov8m.pt"
+            try:
+                os.symlink(external, target_file)
+            except OSError:
+                pass
+
+            target = MODULE._safe_model_target(comfy, "models/bbox/face_yolov8m.pt")
+            self.assertEqual(target.name, "face_yolov8m.pt")
+            self.assertEqual(target.parent.resolve(), models.resolve())
+
     def test_configuration_is_saved_atomically_and_reloaded(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)

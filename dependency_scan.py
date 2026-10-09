@@ -132,7 +132,7 @@ def scan_dependencies(archive, comfy_root, archive_root, progress=None):
         elif asset.resolution == "unsafe-path":
             row["reason"] = "unsafe-path"
         elif local:
-            target = local.resolve().relative_to(comfy_root.resolve()).as_posix()
+            target = (local.parent.resolve() / local.name).relative_to(comfy_root.resolve()).as_posix()
             engine._safe_model_target(comfy_root, target)
             row.update(state="found", source="local", archive_path=target,
                        local={"path": str(local), "stamp": _stamp(local), "size": local.stat().st_size},

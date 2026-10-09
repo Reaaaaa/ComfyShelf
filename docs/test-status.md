@@ -7,7 +7,7 @@ Snapshot date: **2026-09-04**. Environment: Windows, Python 3.11.9 and Node.js 2
 
 | Check | Result |
 | --- | --- |
-| Python unit and regression suite | 171 passed, no failures or skips |
+| Python unit and regression suite | 172 passed, no failures or skips |
 | JavaScript frontend tests | Passed for English and German |
 | Frontend JavaScript syntax | Passed |
 | Python module compilation | Passed |
