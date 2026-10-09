@@ -360,6 +360,13 @@
           <span class="download-info-label" data-i18n="download.target_label">Destination</span>
           <span id="downloadTargetPath" class="download-info-value code-path"></span>
         </div>
+        <div class="download-info-row" id="downloadWebLinkRow">
+          <span class="download-info-label" data-i18n="download.web_label">Web</span>
+          <button type="button" class="link-action-btn" id="downloadOpenWebBtn" data-open-url="" title="Model Card auf Hugging Face öffnen">
+            <svg><use href="#i-external"/></svg>
+            <span id="downloadOpenWebText" data-i18n="download.view_model_card">Model Card auf Hugging Face öffnen</span>
+          </button>
+        </div>
       </div>
 
       <div class="download-source-section">
@@ -374,6 +381,12 @@
         <div class="download-candidates-box hidden" id="downloadCandidatesBox">
           <span class="download-candidates-header" id="downloadCandidatesHeader" data-i18n="download.hf_candidates_header">Suggestions from Hugging Face:</span>
           <div class="download-candidates-list" id="downloadCandidatesList"></div>
+          <div class="download-candidates-fallback hidden" id="downloadCandidatesFallback" style="margin-top: 8px;">
+            <button type="button" class="link-action-btn" id="downloadSearchHfBtn" data-open-url="">
+              <svg><use href="#i-external"/></svg>
+              <span data-i18n="download.open_hf_search">Suche auf Hugging Face im Browser öffnen</span>
+            </button>
+          </div>
         </div>
       </div>
 

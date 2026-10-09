@@ -625,10 +625,10 @@ h1, h2, h3, p { margin: 0; }
 .missing-item.missing-file-row { grid-template-columns: 18px minmax(0, 1fr) auto; }
 .missing-file-copy { min-width: 0; }
 .missing-file-actions { display: inline-flex; align-items: center; gap: 4px; }
-.filename-copy-button, .filename-download-button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(198,160,100,.25); border-radius: 6px; background: transparent; color: #d7ba86; cursor: pointer; transition: background .12s, border-color .12s, color .12s; }
-.filename-copy-button:hover, .filename-download-button:hover { background: rgba(198,160,100,.12); border-color: var(--amber); color: #fff; }
-.filename-copy-button:disabled, .filename-download-button:disabled { opacity: .5; cursor: wait; }
-.filename-copy-button svg, .filename-download-button svg { width: 14px; height: 14px; margin: 0; }
+.filename-copy-button, .filename-download-button, .filename-web-button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(198,160,100,.25); border-radius: 6px; background: transparent; color: #d7ba86; cursor: pointer; transition: background .12s, border-color .12s, color .12s; }
+.filename-copy-button:hover, .filename-download-button:hover, .filename-web-button:hover { background: rgba(198,160,100,.12); border-color: var(--amber); color: #fff; }
+.filename-copy-button:disabled, .filename-download-button:disabled, .filename-web-button:disabled { opacity: .5; cursor: wait; }
+.filename-copy-button svg, .filename-download-button svg, .filename-web-button svg { width: 14px; height: 14px; margin: 0; }
 .import-chain { margin: 13px 0 8px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #141b1f; }
 .import-chain-row { display: grid; grid-template-columns: 19px minmax(0, 1fr); gap: 9px; align-items: center; padding: 9px 11px; color: var(--text-soft); font-size: 12px; }
 .import-chain-row + .import-chain-row { border-top: 1px solid var(--line-soft); }
@@ -883,3 +883,10 @@ button:focus-visible, input:not(.search-box input):focus-visible { outline: 2px 
 .download-candidate-pill.selected { border-color: var(--amber); background: rgba(198, 160, 100, 0.15); box-shadow: 0 0 0 1px var(--amber); color: #fff; }
 .download-candidate-pill strong { color: var(--text-main); font-weight: 600; }
 .download-candidate-pill span { color: var(--muted); font-size: 11px; }
+.link-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); color: var(--amber); font-size: 11px; cursor: pointer; transition: all .12s ease; text-decoration: none; }
+.link-action-btn:hover { border-color: var(--amber); background: rgba(198,160,100,0.12); color: #fff; }
+.link-action-btn svg { width: 12px; height: 12px; margin: 0; }
+.candidate-actions { display: inline-flex; align-items: center; gap: 8px; }
+.candidate-ext-btn { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 4px; border: 1px solid var(--line-soft); background: transparent; color: var(--muted); cursor: pointer; transition: all .12s; padding: 0; }
+.candidate-ext-btn:hover { border-color: var(--amber); color: var(--amber); background: rgba(198,160,100,0.1); }
+.candidate-ext-btn svg { width: 11px; height: 11px; margin: 0; }

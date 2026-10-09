@@ -77,13 +77,16 @@ function missingFileHtml(item, compact = false) {
   const filename = searchableFilename(name);
   const label = t('missing.copy_name', {name: filename});
   const downloadLabel = t('missing.download_model', {name: filename});
+  const searchUrl = item.model_card_url || item.url || `https://huggingface.co/models?search=${encodeURIComponent(filename)}`;
+  const searchLabel = t('missing.open_hf_search', {name: filename});
   return `<div class="${compact ? 'notice-missing-item' : 'missing-item'} missing-file-row">
     ${compact ? '' : icon('alert')}
     <span class="missing-file-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
       <small>${escapeHtml(String(item.kind || item.type || t('notice.dependency')).replaceAll('_', ' '))}</small></span>
     <span class="missing-file-actions">
-      ${filename ? `<button type="button" class="filename-copy-button" data-copy-filename="${escapeHtml(filename)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${icon('copy')}</button>` : ''}
+      ${filename ? `<button type="button" class="filename-web-button" data-open-url="${escapeHtml(searchUrl)}" title="${escapeHtml(searchLabel)}" aria-label="${escapeHtml(searchLabel)}">${icon('external')}</button>` : ''}
       ${filename ? `<button type="button" class="filename-download-button" data-download-filename="${escapeHtml(name)}" data-download-kind="${escapeHtml(item.kind || '')}" title="${escapeHtml(downloadLabel)}" aria-label="${escapeHtml(downloadLabel)}">${icon('download')}</button>` : ''}
+      ${filename ? `<button type="button" class="filename-copy-button" data-copy-filename="${escapeHtml(filename)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${icon('copy')}</button>` : ''}
     </span>
   </div>`;
 }
@@ -191,12 +194,21 @@ async function openDownloadModal(filename, kind = '', archivePath = '') {
     archivePath: archivePath || app.selectedPath || '',
     expectedHash: '',
   };
+  const searchUrl = `https://huggingface.co/models?search=${encodeURIComponent(searchableFilename(filename))}`;
   $('downloadModelName').textContent = filename;
   $('downloadTargetPath').textContent = `models/${defaultModelFolder(kind)}/${searchableFilename(filename)}`;
   $('downloadSourceInput').value = '';
   $('downloadStartButton').disabled = true;
   $('downloadCandidatesBox').classList.add('hidden');
   $('downloadCandidatesList').innerHTML = '';
+  $('downloadCandidatesFallback')?.classList.add('hidden');
+  if ($('downloadOpenWebBtn')) {
+    $('downloadOpenWebBtn').dataset.openUrl = searchUrl;
+    $('downloadOpenWebText').textContent = t('download.open_hf_search');
+  }
+  if ($('downloadSearchHfBtn')) {
+    $('downloadSearchHfBtn').dataset.openUrl = searchUrl;
+  }
   $('downloadModal').classList.remove('hidden');
 
   try {
@@ -214,21 +226,35 @@ async function openDownloadModal(filename, kind = '', archivePath = '') {
     if (Array.isArray(candidates) && candidates.length > 0) {
       $('downloadCandidatesHeader').textContent = t('download.hf_candidates_header');
       $('downloadCandidatesList').innerHTML = candidates.map((cand, idx) => `
-        <button type="button" class="download-candidate-pill ${idx === 0 ? 'selected' : ''}" data-candidate-url="${escapeHtml(cand.download_url)}" data-candidate-hash="${escapeHtml(cand.sha256 || '')}">
-          <strong>${escapeHtml(cand.repo_id)}</strong>
-          <span>${formatBytes(cand.size)}${cand.sha256 ? ' · SHA-256' : ''}</span>
-        </button>
+        <div class="download-candidate-pill ${idx === 0 ? 'selected' : ''}" data-candidate-url="${escapeHtml(cand.download_url)}" data-candidate-hash="${escapeHtml(cand.sha256 || '')}" data-candidate-repo="${escapeHtml(cand.repo_id)}">
+          <div class="candidate-info" style="cursor: pointer; flex: 1;">
+            <strong>${escapeHtml(cand.repo_id)}</strong>
+            <span>${formatBytes(cand.size)}${cand.sha256 ? ' · SHA-256' : ''}</span>
+          </div>
+          <div class="candidate-actions">
+            <button type="button" class="candidate-ext-btn" data-open-url="https://huggingface.co/${escapeHtml(cand.repo_id)}" title="${escapeHtml(t('download.view_model_card'))}" aria-label="${escapeHtml(t('download.view_model_card'))}">
+              ${icon('external')}
+            </button>
+          </div>
+        </div>
       `).join('');
       const top = candidates[0];
       $('downloadSourceInput').value = top.download_url || top.repo_id;
       activeDownloadContext.expectedHash = top.sha256 || '';
       $('downloadStartButton').disabled = false;
+      if ($('downloadOpenWebBtn')) {
+        $('downloadOpenWebBtn').dataset.openUrl = `https://huggingface.co/${top.repo_id}`;
+        $('downloadOpenWebText').textContent = t('download.view_model_card');
+      }
+      $('downloadCandidatesFallback')?.classList.add('hidden');
     } else {
       $('downloadCandidatesHeader').textContent = t('download.no_hf_candidates');
       $('downloadCandidatesList').innerHTML = '';
+      $('downloadCandidatesFallback')?.classList.remove('hidden');
     }
   } catch (_) {
     $('downloadCandidatesHeader').textContent = t('download.no_hf_candidates');
+    $('downloadCandidatesFallback')?.classList.remove('hidden');
   }
 }
 
@@ -1759,6 +1785,9 @@ function installEvents() {
     $('downloadStartButton').disabled = !$('downloadSourceInput').value.trim();
   });
   $('downloadCandidatesList')?.addEventListener('click', event => {
+    if (event.target.closest?.('[data-open-url]')) {
+      return;
+    }
     const pill = event.target.closest?.('.download-candidate-pill');
     if (!pill) return;
     document.querySelectorAll('.download-candidate-pill').forEach(p => p.classList.remove('selected'));
@@ -1767,6 +1796,10 @@ function installEvents() {
     if (activeDownloadContext) {
       activeDownloadContext.expectedHash = pill.dataset.candidateHash || '';
     }
+    if ($('downloadOpenWebBtn') && pill.dataset.candidateRepo) {
+      $('downloadOpenWebBtn').dataset.openUrl = `https://huggingface.co/${pill.dataset.candidateRepo}`;
+      $('downloadOpenWebText').textContent = t('download.view_model_card');
+    }
     $('downloadStartButton').disabled = false;
   });
   window.addEventListener('keydown', event => {
@@ -1774,11 +1807,15 @@ function installEvents() {
       closeDownloadModal();
     }
   });
+  document.body.addEventListener('click', event => {
+    const button = event.target.closest?.('[data-open-url]');
+    if (button) {
+      openExternalUrlAction(event);
+    }
+  });
   $('customNodeList')?.addEventListener('click', event => {
     if (event.target.closest?.('[data-copy-custom-node]')) {
       copyCustomNodePackage(event);
-    } else if (event.target.closest?.('[data-open-url]')) {
-      openExternalUrlAction(event);
     }
   });
   $('openArchiveButton').addEventListener('click', async () => { try { await callApi('open_archive_folder'); } catch (e) { toast(e.message, true); } });
