@@ -546,11 +546,59 @@ function stateLabel(state) {
   return t(`state.${state === 'loaded' ? 'loaded' : state === 'partial' ? 'partial' : 'archived'}`);
 }
 
+function getMatchInfo(item, query, scope = 'all') {
+  if (!query) return { matches: true, reason: null };
+  const nameMatch = Boolean(item.name && item.name.toLowerCase().includes(query));
+  const matchedModel = (scope === 'all' || scope === 'model') && item.models
+    ? item.models.find(m => m.filename && m.filename.toLowerCase().includes(query))
+    : null;
+  const matchedMissing = (scope === 'all' || scope === 'model') && item.missing
+    ? item.missing.find(m => m.name && m.name.toLowerCase().includes(query))
+    : null;
+  const matchedNode = (scope === 'all' || scope === 'node') && item.custom_nodes
+    ? item.custom_nodes.find(cn =>
+        (cn.package && cn.package.toLowerCase().includes(query)) ||
+        (cn.installed_folder && cn.installed_folder.toLowerCase().includes(query))
+      )
+    : null;
+
+  if (scope === 'name') {
+    return nameMatch ? { matches: true, reason: null } : { matches: false };
+  }
+  if (scope === 'model') {
+    if (matchedModel) return { matches: true, reason: { type: 'model', text: matchedModel.filename } };
+    if (matchedMissing) return { matches: true, reason: { type: 'missing', text: matchedMissing.name } };
+    return { matches: false };
+  }
+  if (scope === 'node') {
+    if (matchedNode) return { matches: true, reason: { type: 'node', text: matchedNode.package || matchedNode.installed_folder } };
+    return { matches: false };
+  }
+
+  // scope === 'all':
+  if (nameMatch) {
+    return { matches: true, reason: null };
+  }
+  if (matchedModel) {
+    return { matches: true, reason: { type: 'model', text: matchedModel.filename } };
+  }
+  if (matchedMissing) {
+    return { matches: true, reason: { type: 'missing', text: matchedMissing.name } };
+  }
+  if (matchedNode) {
+    return { matches: true, reason: { type: 'node', text: matchedNode.package || matchedNode.installed_folder } };
+  }
+  return { matches: false };
+}
+
 function renderLibrary() {
   const list = $('workflowList');
   if (!app.state?.configured) return;
   const query = (app.searchQuery || '').trim().toLowerCase();
-  const packages = (app.state.packages || []).filter(item => {
+  const scope = app.searchScope || 'all';
+  const packagesWithMatch = (app.state.packages || []).map(item => {
+    return { item, match: getMatchInfo(item, query, scope) };
+  }).filter(({ item, match }) => {
     if (app.filter !== 'all') {
       if (app.filter === 'archived') {
         if (item.state !== 'archived' && item.state !== 'partial') return false;
@@ -558,13 +606,10 @@ function renderLibrary() {
         return false;
       }
     }
-    if (!query) return true;
-    if (item.name && item.name.toLowerCase().includes(query)) return true;
-    if (item.models && item.models.some(m => m.filename && m.filename.toLowerCase().includes(query))) return true;
-    if (item.missing && item.missing.some(m => m.name && m.name.toLowerCase().includes(query))) return true;
-    if (item.custom_nodes && item.custom_nodes.some(cn => (cn.package && cn.package.toLowerCase().includes(query)) || (cn.installed_folder && cn.installed_folder.toLowerCase().includes(query)))) return true;
-    return false;
+    return match.matches;
   });
+
+  const packages = packagesWithMatch.map(p => p.item);
   const rows = [];
   if (app.state.loading) rows.push(`<div class="library-scan-status"><span class="loading-pulse"></span><span>${t('library.scanning')}</span></div>`);
   if (!packages.length && !app.state.loading && !(app.state.scan_warnings || []).length) {
@@ -573,14 +618,24 @@ function renderLibrary() {
       : (app.state.packages?.length ? t('library.filter_empty') : t('library.empty'));
     rows.push(`<div class="workflow-list-empty">${emptyMsg}</div>`);
   }
-  rows.push(...packages.map(item => `
-    <button class="workflow-item ${item.path === app.selectedPath ? 'active' : ''}" data-path="${escapeHtml(item.path)}" data-state="${item.state}">
-      <div class="workflow-item-thumb">${renderItemThumbHtml(item)}</div>
-      <div class="workflow-item-info">
-        <span class="workflow-name">${escapeHtml(item.name)}</span>
-        <span class="workflow-meta"><span class="workflow-state">${stateLabel(item.state)}</span><span title="${t('detail.model_size')}">${formatBytes(item.model_bytes)}</span></span>
-      </div>
-    </button>`));
+  rows.push(...packagesWithMatch.map(({ item, match }) => {
+    const reason = match.reason;
+    const matchHintHtml = reason ? `
+      <div class="workflow-match-hint" title="${escapeHtml(reason.text)}">
+        <svg><use href="#${reason.type === 'node' ? 'i-expand' : reason.type === 'missing' ? 'i-alert' : 'i-drive'}"/></svg>
+        <span class="match-type">${escapeHtml(t(`library.match_${reason.type}`))}:</span>
+        <span class="match-text">${escapeHtml(reason.text)}</span>
+      </div>` : '';
+    return `
+      <button class="workflow-item ${item.path === app.selectedPath ? 'active' : ''}" data-path="${escapeHtml(item.path)}" data-state="${item.state}">
+        <div class="workflow-item-thumb">${renderItemThumbHtml(item)}</div>
+        <div class="workflow-item-info">
+          <span class="workflow-name">${escapeHtml(item.name)}</span>
+          ${matchHintHtml}
+          <span class="workflow-meta"><span class="workflow-state">${stateLabel(item.state)}</span><span title="${t('detail.model_size')}">${formatBytes(item.model_bytes)}</span></span>
+        </div>
+      </button>`;
+  }));
   if (!query && (app.filter === 'all' || app.filter === 'archived')) rows.push(...(app.state.scan_warnings || []).map(item => `
     <div class="invalid-package" title="${t('errors.invalid_package')}"><strong>${escapeHtml(item.name)}</strong><span>${t('library.invalid')}</span></div>`));
   list.innerHTML = rows.join('');
@@ -1612,6 +1667,13 @@ function installEvents() {
   document.querySelectorAll('.filter-chip').forEach(chip => chip.addEventListener('click', () => {
     document.querySelectorAll('.filter-chip').forEach(item => item.classList.remove('active'));
     chip.classList.add('active'); app.filter = chip.dataset.filter; renderLibrary();
+  }));
+
+  document.querySelectorAll('.search-scope-chip').forEach(chip => chip.addEventListener('click', () => {
+    document.querySelectorAll('.search-scope-chip').forEach(item => item.classList.remove('active'));
+    chip.classList.add('active');
+    app.searchScope = chip.dataset.scope || 'all';
+    renderLibrary();
   }));
 
   const searchInput = $('workflowSearchInput');

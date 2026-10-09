@@ -627,30 +627,51 @@ async function run(language) {
   assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
   assert.ok(context.workflowList.innerHTML.includes('Music Generator'));
 
-  // Filter by workflow name
-  vm.runInContext("app.searchQuery = 'Flux'; renderLibrary();", context);
+  // Filter by workflow name (matches title, no match hint needed)
+  vm.runInContext("app.searchScope = 'all'; app.searchQuery = 'Flux'; renderLibrary();", context);
   assert.ok(context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
   assert.ok(!context.workflowList.innerHTML.includes('SDXL Fast Anime'));
   assert.ok(!context.workflowList.innerHTML.includes('Music Generator'));
+  assert.ok(!context.workflowList.innerHTML.includes('workflow-match-hint'));
 
-  // Filter by model filename
-  vm.runInContext("app.searchQuery = 'lightning'; renderLibrary();", context);
+  // Filter by model filename (shows match hint with model filename)
+  vm.runInContext("app.searchScope = 'all'; app.searchQuery = 'lightning'; renderLibrary();", context);
   assert.ok(!context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
   assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
   assert.ok(!context.workflowList.innerHTML.includes('Music Generator'));
+  assert.ok(context.workflowList.innerHTML.includes('workflow-match-hint'));
+  assert.ok(context.workflowList.innerHTML.includes(context.messages['library.match_model']));
+  assert.ok(context.workflowList.innerHTML.includes('sdxl_lightning.safetensors'));
 
-  // Filter by custom node package name
-  vm.runInContext("app.searchQuery = 'impact'; renderLibrary();", context);
+  // Filter by custom node package name (shows match hint with node package)
+  vm.runInContext("app.searchScope = 'all'; app.searchQuery = 'impact'; renderLibrary();", context);
   assert.ok(!context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
   assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
   assert.ok(!context.workflowList.innerHTML.includes('Music Generator'));
+  assert.ok(context.workflowList.innerHTML.includes('workflow-match-hint'));
+  assert.ok(context.workflowList.innerHTML.includes(context.messages['library.match_node']));
+  assert.ok(context.workflowList.innerHTML.includes('ComfyUI-Impact-Pack'));
+
+  // Scope: 'name' strictly ignores models and nodes
+  vm.runInContext("app.searchScope = 'name'; app.searchQuery = 'lightning'; renderLibrary();", context);
+  assert.ok(!context.workflowList.innerHTML.includes('SDXL Fast Anime'));
+
+  // Scope: 'model' strictly filters by models
+  vm.runInContext("app.searchScope = 'model'; app.searchQuery = 'lightning'; renderLibrary();", context);
+  assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
+  vm.runInContext("app.searchScope = 'model'; app.searchQuery = 'impact'; renderLibrary();", context);
+  assert.ok(!context.workflowList.innerHTML.includes('SDXL Fast Anime'));
+
+  // Scope: 'node' strictly filters by custom nodes
+  vm.runInContext("app.searchScope = 'node'; app.searchQuery = 'impact'; renderLibrary();", context);
+  assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
 
   // No results shows search empty message with query
-  vm.runInContext("app.searchQuery = 'nonexistent'; renderLibrary();", context);
+  vm.runInContext("app.searchScope = 'all'; app.searchQuery = 'nonexistent'; renderLibrary();", context);
   assert.ok(context.workflowList.innerHTML.includes(context.messages['library.search_empty'].replace('{query}', 'nonexistent')));
 
   // Resetting search restores all
-  vm.runInContext("app.searchQuery = ''; renderLibrary();", context);
+  vm.runInContext("app.searchScope = 'all'; app.searchQuery = ''; renderLibrary();", context);
   assert.ok(context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
   assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
   assert.ok(context.workflowList.innerHTML.includes('Music Generator'));
@@ -672,6 +693,11 @@ async function run(language) {
   assert.ok(indexHtml.includes('data-i18n-placeholder="library.search_placeholder"'));
   assert.ok(indexHtml.includes('id="searchClearButton"'));
   assert.ok(indexHtml.includes('id="i-search"'));
+  assert.ok(indexHtml.includes('class="search-scope-row"'));
+  assert.ok(indexHtml.includes('data-scope="all"'));
+  assert.ok(indexHtml.includes('data-scope="name"'));
+  assert.ok(indexHtml.includes('data-scope="model"'));
+  assert.ok(indexHtml.includes('data-scope="node"'));
 
   for (const lang of ['de', 'en']) {
     const loc = JSON.parse(fs.readFileSync(path.join(root, 'locales', `${lang}.json`), 'utf8'));
@@ -687,10 +713,18 @@ async function run(language) {
       'library.search_aria',
       'library.search_clear',
       'library.search_empty',
+      'search.scope',
+      'search.scope_all',
+      'search.scope_name',
+      'search.scope_model',
+      'search.scope_node',
+      'library.match_model',
+      'library.match_node',
+      'library.match_missing',
     ]) {
       assert.ok(loc[key], `Missing key ${key} in ${lang}.json`);
     }
   }
 
-  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, custom nodes live status, Drag & Drop file staging, and library instant search.');
+  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, custom nodes live status, Drag & Drop file staging, and library instant search with match hints and scopes.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

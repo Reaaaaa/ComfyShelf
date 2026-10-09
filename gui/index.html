@@ -80,6 +80,13 @@
           <button class="search-clear hidden" id="searchClearButton" title="Clear search" data-i18n-title="library.search_clear" aria-label="Clear search"><svg><use href="#i-close"/></svg></button>
         </div>
 
+        <div class="search-scope-row" role="tablist" aria-label="Search scope" data-i18n-aria="search.scope">
+          <button class="search-scope-chip active" data-scope="all" data-i18n="search.scope_all">All</button>
+          <button class="search-scope-chip" data-scope="name" data-i18n="search.scope_name">Name</button>
+          <button class="search-scope-chip" data-scope="model" data-i18n="search.scope_model">Model</button>
+          <button class="search-scope-chip" data-scope="node" data-i18n="search.scope_node">Node</button>
+        </div>
+
         <div class="filter-row" role="tablist" aria-label="Workflow filters" data-i18n-aria="library.filters">
           <button class="filter-chip active" data-filter="all" data-i18n="filter.all">All</button>
           <button class="filter-chip" data-filter="loaded" data-i18n="filter.loaded">Loaded</button>
