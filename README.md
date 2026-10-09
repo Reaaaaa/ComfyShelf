@@ -22,6 +22,9 @@ Park unused workflows on secondary storage, free up precious SSD space with abso
 
 ## Key Highlights & USPs
 
+- **Instant Load via Symlinks & Hardlinks (Zero Wait, Zero Extra Space)**  
+  Restoring a 50 GB workflow back into ComfyUI shouldn't keep you waiting for huge files to copy. With **Instant Link** mode, ComfyShelf uses NTFS Hardlinks (on the same drive) or Windows Symlinks to make models available in ComfyUI in milliseconds — consuming 0 additional bytes of disk space. Visual status badges (`🔗 Hardlink`, `⚡ Symlink`) show the link type in the detail view, with automatic fallback to physical copies if needed.
+
 - **Smart Deduplication & Shared Model Pool**  
   When multiple workflows rely on the same 12 GB checkpoint, LoRA, or VAE, ComfyShelf stores that file **only once** in a shared model archive. Individual workflow packages remain featherlight (just the node graph, metadata, and cover art), preventing your backup drive from filling up with redundant duplicates.
 
@@ -52,7 +55,7 @@ Park unused workflows on secondary storage, free up precious SSD space with abso
 
 1. **Archive:** Select or drag & drop a `.png` or `.json` workflow. ComfyShelf analyzes the graph, lists all required models, and copies them to your archive storage. Your local ComfyUI files remain completely untouched.
 2. **Unload:** When you need disk space on your fast drive, click **Unload workflow**. ComfyShelf verifies SHA-256 hashes against the archive and safely removes local copies (or moves them to the Recycle Bin).
-3. **Load:** Ready to generate again? Click **Load workflow**, and ComfyShelf restores the exact models back to their proper ComfyUI folders.
+3. **Load:** Ready to generate again? Click **Load workflow**. With Instant Link mode, multi-gigabyte models are linked back into ComfyUI in milliseconds without consuming duplicate disk space or waiting for lengthy file transfers.
 
 ---
 
@@ -65,7 +68,7 @@ You need an existing ComfyUI installation, installed **64-bit Python 3.10 or new
 1. Save the **whole ComfyShelf folder** in a writable location (e.g. Documents). If you received a ZIP, extract it first; do not run setup from inside the ZIP.
 2. Double-click **Setup_ComfyShelf.cmd**. Choose English or German and confirm the installation. It prepares an isolated Python environment for the app without altering ComfyUI or your models.
 3. When setup finishes, double-click **Start_ComfyShelf.cmd** (or the **ComfyShelf** desktop shortcut).
-4. Select your ComfyUI directory and a separate archive directory (preferably on a secondary drive with ample free space).
+4. Select your ComfyUI directory and a separate archive directory (preferably on a secondary drive with ample free space). You can configure your preferred **Model Loading Method** (Instant Link via Hardlink/Symlink or Full Copy) in the settings dialog.
 
 You do not need to type commands or edit configuration files. If Python is missing, setup guides you on how to install it.
 
