@@ -1,10 +1,14 @@
+<div align="center">
+
 <img src="assets/comfyshelf-mark.png" width="96" height="96" alt="ComfyShelf logo">
 
 # ComfyShelf
 
 [![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 159 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](#get-started-on-windows) [![Platform: Windows preview](docs/assets/windows-preview.svg)](#get-started-on-windows)
 
-Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.
+<sub>Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.</sub>
+
+</div>
 
 More room for creating. Less time moving model files around.
 
