@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ComfyShelf logo concepts</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Segoe UI Variable", "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0d1114; color: #e6ecef; }
+    main { width: min(1080px, calc(100% - 48px)); padding: 48px 0; }
+    h1 { margin: 0 0 10px; font-size: 30px; font-weight: 650; }
+    .intro { margin: 0 0 30px; color: #84939c; }
+    .concepts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    article { padding: 24px; border: 1px solid #2b363e; border-radius: 18px; background: #111519; }
+    img { display: block; width: 100%; aspect-ratio: 1; }
+    h2 { margin: 20px 0 6px; font-size: 19px; font-weight: 650; }
+    p { margin: 0; color: #84939c; line-height: 1.5; }
+    .sizes { display: flex; align-items: end; gap: 15px; margin-top: 20px; padding-top: 18px; border-top: 1px solid #222c32; }
+    .sizes img { flex: 0 0 auto; }
+    .sizes img:nth-child(1) { width: 16px; }
+    .sizes img:nth-child(2) { width: 32px; }
+    .sizes img:nth-child(3) { width: 48px; }
+    @media (max-width: 760px) { .concepts { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ComfyShelf</h1>
+    <p class="intro">Three shelf-module directions, shown large and at Windows icon sizes.</p>
+    <section class="concepts">
+      <article><img src="comfyshelf-a-docked.svg" alt="Docked logo"><h2>A · Docked</h2><p>Calm, balanced, closest to the current mark.</p><div class="sizes"><img src="comfyshelf-a-docked.svg" alt=""><img src="comfyshelf-a-docked.svg" alt=""><img src="comfyshelf-a-docked.svg" alt=""></div></article>
+      <article><img src="comfyshelf-b-switch.svg" alt="Switch logo"><h2>B · Switch</h2><p>One active workflow is pulled from the shelf.</p><div class="sizes"><img src="comfyshelf-b-switch.svg" alt=""><img src="comfyshelf-b-switch.svg" alt=""><img src="comfyshelf-b-switch.svg" alt=""></div></article>
+      <article><img src="comfyshelf-c-flow.svg" alt="Flow logo"><h2>C · Flow</h2><p>A moving sequence with more technical energy.</p><div class="sizes"><img src="comfyshelf-c-flow.svg" alt=""><img src="comfyshelf-c-flow.svg" alt=""><img src="comfyshelf-c-flow.svg" alt=""></div></article>
+    </section>
+  </main>
+</body>
+</html>

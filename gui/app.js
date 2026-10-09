@@ -1,0 +1,1481 @@
+const app = {
+  state: null,
+  selectedPath: null,
+  filter: 'all',
+  pendingConfirm: null,
+  toastTimer: null,
+  loadingTimer: null,
+  requestedPath: null,
+  scanProgress: null,
+  diskRefreshPending: false,
+  language: 'en',
+  messages: {},
+  historyEntries: null,
+  bootstrapStarted: false,
+  bootstrapCompleted: false,
+  bootstrapPoll: null,
+  bootstrapAttempts: 0,
+  bootstrapRetryAfter: 0,
+};
+
+const $ = (id) => document.getElementById(id);
+const icon = (name) => `<svg><use href="#i-${name}"/></svg>`;
+
+function t(key, variables = {}) {
+  let value = app.messages[key] ?? key;
+  for (const [name, replacement] of Object.entries(variables)) value = value.replaceAll(`{${name}}`, String(replacement));
+  return value;
+}
+
+function applyTranslations() {
+  document.documentElement.lang = app.language;
+  document.querySelectorAll('[data-i18n]').forEach(node => { node.textContent = t(node.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-html]').forEach(node => { node.innerHTML = t(node.dataset.i18nHtml); });
+  document.querySelectorAll('[data-i18n-title]').forEach(node => { node.title = t(node.dataset.i18nTitle); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(node => { node.setAttribute('aria-label', t(node.dataset.i18nAria)); });
+  document.querySelectorAll('.language-toggle button').forEach(button => button.classList.toggle('active', button.dataset.language === app.language));
+  setMaximizedButton($('maximizeButton').getAttribute('aria-pressed') === 'true');
+  if (app.state) applyState(app.state, app.selectedPath);
+  if (app.historyEntries) renderHistoryEntries(app.historyEntries);
+}
+
+function installLocale(payload) {
+  app.language = payload?.language === 'de' ? 'de' : 'en';
+  app.messages = payload?.messages || {};
+  applyTranslations();
+}
+
+async function changeLanguage(language) {
+  if (language === app.language) return;
+  try {
+    let payload;
+    if (window.pywebview?.api) payload = await callApi('set_language', language);
+    else payload = {language, messages: await (await fetch(`locales/${language}.json`)).json()};
+    installLocale(payload);
+  } catch (error) { toast(error.message, true); }
+}
+
+function formatBytes(bytes) {
+  if (bytes === null || bytes === undefined) return '—';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  let value = Number(bytes), unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
+  return `${value.toFixed(value >= 10 || unit === 0 ? 1 : 2)} ${units[unit]}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+
+function searchableFilename(value) {
+  return String(value ?? '').split(/[\\/]/).pop();
+}
+
+function missingFileHtml(item, compact = false) {
+  const name = String(item.name || item.filename || '');
+  const filename = searchableFilename(name);
+  const label = t('missing.copy_name', {name: filename});
+  return `<div class="${compact ? 'notice-missing-item' : 'missing-item'} missing-file-row">
+    ${compact ? '' : icon('alert')}
+    <span class="missing-file-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
+      <small>${escapeHtml(String(item.kind || item.type || t('notice.dependency')).replaceAll('_', ' '))}</small></span>
+    ${filename ? `<button type="button" class="filename-copy-button" data-copy-filename="${escapeHtml(filename)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${icon('copy')}</button>` : ''}
+  </div>`;
+}
+
+async function writeClipboardText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch (_) { /* Some embedded browsers require the legacy clipboard path. */ }
+  const previousFocus = document.activeElement;
+  const field = document.createElement('textarea');
+  field.value = text;
+  field.readOnly = true;
+  field.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+  document.body.appendChild(field);
+  try {
+    field.focus({preventScroll: true});
+    field.select();
+    if (!document.execCommand('copy')) throw new Error('Clipboard write failed.');
+  } finally {
+    field.remove();
+    previousFocus?.focus({preventScroll: true});
+  }
+}
+
+async function copyMissingFilename(event) {
+  const button = event.target.closest?.('[data-copy-filename]');
+  if (!button || button.disabled) return;
+  event.preventDefault();
+  event.stopPropagation();
+  button.disabled = true;
+  try {
+    await writeClipboardText(button.dataset.copyFilename);
+    toast(t('missing.name_copied', {name: button.dataset.copyFilename}));
+  } catch (_) {
+    toast(t('missing.copy_failed'), true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function callApi(method, ...args) {
+  if (!window.pywebview?.api?.[method]) throw new Error(app.messages['errors.unexpected'] || 'The native app interface is not ready yet.');
+  const result = await window.pywebview.api[method](...args);
+  if (!result?.ok) {
+    const error = new Error(app.messages[`errors.${result?.error_code}`] || result?.error || app.messages['common.unknown'] || 'Unknown error');
+    error.cancelled = !!result?.cancelled;
+    error.code = result?.error_code;
+    error.details = result?.details;
+    throw error;
+  }
+  return result.data;
+}
+
+function nativeApiReady() {
+  return Boolean(
+    window.pywebview?.api?.get_locale
+    && window.pywebview?.api?.get_state
+    && window.pywebview?.api?.report_startup_stage
+  );
+}
+
+async function reportStartupStage(stage, detail = '') {
+  try { await callApi('report_startup_stage', stage, detail); }
+  catch (_) { /* Startup diagnostics must never block the interface. */ }
+}
+
+async function bootstrapNativeApp(trigger) {
+  if (app.bootstrapStarted || !nativeApiReady() || Date.now() < app.bootstrapRetryAfter) return false;
+  app.bootstrapStarted = true;
+  app.bootstrapAttempts += 1;
+  await reportStartupStage('bridge-ready', trigger);
+  await reportStartupStage('bootstrap-started', trigger);
+  try {
+    installLocale(await callApi('get_locale'));
+    const state = await callApi('get_state');
+    applyState(state, app.selectedPath);
+    app.bootstrapCompleted = true;
+    clearInterval(app.bootstrapPoll);
+    await reportStartupStage('frontend-ready', trigger);
+    return true;
+  } catch (error) {
+    await reportStartupStage('bootstrap-failed', error?.message || 'Unknown startup error');
+    if (app.bootstrapAttempts < 3) {
+      app.bootstrapStarted = false;
+      app.bootstrapRetryAfter = Date.now() + 1000;
+    } else {
+      clearInterval(app.bootstrapPoll);
+      toast(error.message, true);
+    }
+    return false;
+  }
+}
+
+function beginNativeBootstrap() {
+  const attempt = trigger => {
+    if (nativeApiReady()) void bootstrapNativeApp(trigger);
+  };
+  window.addEventListener('pywebviewready', () => attempt('pywebviewready'));
+  queueMicrotask(() => attempt('immediate-api-check'));
+  app.bootstrapPoll = window.setInterval(() => {
+    if (app.bootstrapCompleted) clearInterval(app.bootstrapPoll);
+    else attempt('bridge-poll');
+  }, 250);
+  window.setTimeout(() => clearInterval(app.bootstrapPoll), 12000);
+}
+
+function showBusy(title, detail = t('progress.default_detail'), cancellable = true) {
+  $('busyTitle').textContent = title;
+  $('busyDetail').textContent = detail;
+  $('progressPhase').textContent = t('progress.preparing');
+  $('progressPercent').textContent = '—';
+  $('progressTrack').classList.add('indeterminate');
+  $('progressFill').style.width = '0%';
+  $('progressFile').textContent = t('progress.preparing_package');
+  $('progressAmount').textContent = '';
+  $('processLog').innerHTML = '';
+  $('cancelOperationButton').disabled = !cancellable;
+  $('cancelOperationButton').textContent = cancellable ? t('progress.cancel') : t('progress.wait');
+  appendProcessLog(title, 'info');
+  $('busyOverlay').classList.remove('hidden');
+}
+function hideBusy() { $('busyOverlay').classList.add('hidden'); }
+
+function appendProcessLog(message, level = 'info') {
+  if (!message) return;
+  const log = $('processLog');
+  const previous = log.lastElementChild?.querySelector('.log-message')?.textContent;
+  if (previous === message) return;
+  const row = document.createElement('div');
+  row.className = `process-log-line ${level}`;
+  const timestamp = new Date();
+  const now = [timestamp.getHours(), timestamp.getMinutes(), timestamp.getSeconds()]
+    .map(value => String(value).padStart(2, '0'))
+    .join(':');
+  row.innerHTML = `<span class="log-time">${now}</span><span class="log-message">${escapeHtml(message)}</span>`;
+  log.appendChild(row);
+  while (log.children.length > 30) log.firstElementChild.remove();
+  log.scrollTop = log.scrollHeight;
+}
+
+window.workflowProgress = function(event) {
+  if (!event) return;
+  const phaseKey = `phase.${event.phase || 'processing'}`;
+  const phaseText = t(phaseKey);
+  $('progressPhase').textContent = phaseText === phaseKey ? (event.phase || t('phase.processing')) : phaseText;
+  $('progressFile').textContent = event.file || $('progressPhase').textContent;
+  const current = Number(event.current);
+  const total = Number(event.total);
+  if (Number.isFinite(current) && Number.isFinite(total) && total > 0) {
+    const percent = Math.max(0, Math.min(100, (current / total) * 100));
+    $('progressTrack').classList.remove('indeterminate');
+    $('progressFill').style.width = `${percent}%`;
+    $('progressPercent').textContent = `${percent.toFixed(percent >= 10 ? 0 : 1)} %`;
+    $('progressAmount').textContent = `${formatBytes(current)} / ${formatBytes(total)}`;
+  } else {
+    $('progressTrack').classList.add('indeterminate');
+    $('progressPercent').textContent = '—';
+    $('progressAmount').textContent = '';
+  }
+  if (event.log) appendProcessLog(event.file ? `${$('progressPhase').textContent}: ${event.file}` : $('progressPhase').textContent, event.level || 'info');
+  if (event.cancellable === false) {
+    $('cancelOperationButton').disabled = true;
+    $('cancelOperationButton').textContent = t('progress.safe_finish');
+  }
+};
+
+function toast(message, error = false) {
+  const el = $('toast');
+  $('toastText').textContent = message;
+  el.classList.toggle('error', error);
+  el.querySelector('use').setAttribute('href', error ? '#i-alert' : '#i-check');
+  el.classList.remove('hidden');
+  clearTimeout(app.toastTimer);
+  app.toastTimer = setTimeout(() => el.classList.add('hidden'), 4200);
+}
+
+function operationError(error) {
+  if (error.code === 'removal_incomplete' && error.details) {
+    const details = error.details;
+    const removed = details.removed || [];
+    const remaining = details.remaining || [];
+    const pathList = (label, paths) => paths.length ? `<div class="missing-detail diagnostic-detail"><span class="missing-detail-label">${t(label)}</span>${paths.map(path => `<div class="missing-item">${icon(label === 'removal.removed' ? 'check' : 'drive')}<span><strong>${escapeHtml(path)}</strong></span></div>`).join('')}</div>` : '';
+    openConfirm({
+      eyebrow: t('removal.eyebrow'), title: t(removed.length ? 'removal.partial_title' : 'removal.blocked_title'),
+      copy: `<p>${t('removal.backup_safe')}</p>${details.restore && !details.restore.dry_run ? `<p>${t('removal.target_loaded')}</p>` : ''}
+        <div class="confirm-stat"><span>${t('removal.removed')}</span><strong>${removed.length}</strong></div>
+        <div class="confirm-stat"><span>${t('removal.remaining')}</span><strong>${remaining.length}</strong></div>
+        ${removalIssuesHtml(details.removal_issues)}${pathList('removal.removed', removed)}${pathList('removal.remaining', remaining)}
+        <p>${t('removal.retry_hint')}</p>`,
+      wide: true, danger: true, readOnly: true, proceedLabel: t('common.close'), action: async () => {},
+    });
+    if (window.pywebview?.api) void refreshState();
+    return;
+  }
+  toast(error.cancelled ? t('progress.cancelled') : error.message, !error.cancelled);
+}
+
+function removalIssuesHtml(issues = []) {
+  if (!issues.length) return '';
+  return `<div class="missing-detail diagnostic-detail"><span class="missing-detail-label">${t('removal.issues')}</span>${issues.map(issue => `
+    <div class="missing-item">${icon('alert')}<span><strong>${escapeHtml(issue.path)}</strong>
+      <small>${escapeHtml(app.messages[`removal.${issue.code}`] || t('removal.filesystem_error'))}</small></span></div>`).join('')}</div>`;
+}
+
+function parserWarningText(warning) {
+  return app.messages[`parser.${warning.code}`] || t('parser.review');
+}
+
+function groupParserWarnings(warnings = []) {
+  const groups = new Map();
+  const normalizePath = value => String(value || '').replaceAll('\\', '/').toLowerCase();
+  for (const warning of warnings) {
+    // Keep full paths: equal basenames in different folders are not the same
+    // dependency. Unresolved loaders without a filename stay separate by node.
+    const key = JSON.stringify(warning.filename
+      ? ['file', normalizePath(warning.filename), normalizePath(warning.resolved_path)]
+      : ['node', warning.node_type || '', String(warning.node_id ?? ''), warning.field || '']);
+    if (!groups.has(key)) groups.set(key, {filename: warning.filename || warning.node_type || '', warnings: []});
+    groups.get(key).warnings.push(warning);
+  }
+  return [...groups.values()];
+}
+
+function parserNoticesHtml(warnings = []) {
+  return groupParserWarnings(warnings).map(group => {
+    const messages = [...new Set(group.warnings.map(parserWarningText))];
+    const sources = [...new Set(group.warnings.map(warning =>
+      [warning.node_type, warning.node_id != null ? `#${warning.node_id}` : '', warning.field].filter(Boolean).join(' ')
+    ).filter(Boolean))];
+    const paths = [...new Set(group.warnings.map(warning => warning.resolved_path).filter(Boolean))];
+    return `<div class="notice warning parser-notice">
+      ${icon('alert')}
+      <div class="notice-body">
+        <strong class="parser-notice-filename">${escapeHtml(group.filename)}</strong>
+        <ul class="parser-notice-messages">${messages.map(message => `<li>${escapeHtml(message)}</li>`).join('')}</ul>
+        ${sources.length || paths.length ? `<div class="parser-notice-context">
+          ${sources.map(source => `<small>${escapeHtml(source)}</small>`).join('')}
+          ${paths.map(path => `<small>${escapeHtml(path)}</small>`).join('')}
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function parserWarningsHtml(warnings = []) {
+  if (!warnings.length) return '';
+  return `<div class="missing-detail diagnostic-detail"><span class="missing-detail-label">${t('parser.title')}</span>${warnings.map(warning => `
+    <div class="missing-item">${icon('alert')}<span><strong>${escapeHtml(warning.filename || warning.node_type)}</strong>
+      <small>${escapeHtml(parserWarningText(warning))}</small>
+      <small>${escapeHtml(`${warning.node_type} #${warning.node_id} ${warning.field || ''}`)}</small>
+      ${warning.resolved_path ? `<small>${escapeHtml(warning.resolved_path)}</small>` : ''}</span></div>`).join('')}</div>`;
+}
+
+async function refreshState(selectPath = app.selectedPath) {
+  app.requestedPath = selectPath;
+  try {
+    const state = await callApi('get_state');
+    applyState(state, selectPath);
+    return !state.loading;
+  } catch (error) {
+    toast(error.message, true);
+    return false;
+  }
+}
+
+function setScanActive(active) {
+  ['refreshButton', 'diskRefreshButton'].forEach(id => {
+    $(id).classList.toggle('refreshing', active);
+    $(id).disabled = active;
+  });
+}
+
+function renderLoading() {
+  $('emptyState').classList.add('hidden');
+  $('detailView').classList.add('hidden');
+  $('loadingState').classList.remove('hidden');
+  const progress = app.scanProgress;
+  $('loadingMessage').textContent = progress ? scanProgressText(progress) : t('scan.configuration');
+  $('loadingPackage').textContent = progress?.package || t('loading.responsive');
+  clearTimeout(app.loadingTimer);
+  app.loadingTimer = setTimeout(() => {
+    if (app.state?.loading) {
+      $('loadingPackage').textContent = app.scanProgress?.package || t('loading.slow');
+    }
+  }, 4000);
+}
+
+function hideLoading() {
+  clearTimeout(app.loadingTimer);
+  $('loadingState').classList.add('hidden');
+}
+
+function applyState(state, selectPath = app.selectedPath) {
+  app.state = state;
+  setScanActive(!!state.loading);
+  if (!state.configured) {
+    hideLoading();
+    renderUnconfigured();
+    openSettings(true);
+    return;
+  }
+  renderSummary();
+  const packages = state.packages || [];
+  const desired = packages.find(item => item.path === selectPath) || packages[0];
+  app.selectedPath = desired?.path || null;
+  renderLibrary();
+  if (state.loading && !packages.length) renderLoading();
+  else {
+    hideLoading();
+    renderDetail(desired);
+  }
+  if (state.scan_error) toast(t('scan.failed'), true);
+}
+
+function scanProgressText(progress) {
+  return t(`scan.${progress?.stage || 'default'}`, {current: progress?.current || 0, total: progress?.total || 0});
+}
+
+window.workflowScanProgress = function(progress) {
+  app.scanProgress = progress || null;
+  if (!$('loadingState').classList.contains('hidden')) {
+    $('loadingMessage').textContent = scanProgressText(progress);
+    $('loadingPackage').textContent = progress?.package || t('scan.drive_access');
+  }
+};
+
+window.workflowStateUpdated = function(state) {
+  app.scanProgress = null;
+  applyState(state, app.requestedPath || app.selectedPath);
+  if (app.diskRefreshPending && !state.loading) {
+    app.diskRefreshPending = false;
+    toast(t('toast.storage_refreshed'));
+  }
+};
+
+function renderUnconfigured() {
+  $('installationName').textContent = t('summary.not_configured');
+  $('comfyPath').textContent = t('summary.choose_comfy');
+  $('freeSpace').textContent = '—';
+  $('workflowList').innerHTML = `<div class="workflow-list-empty">${t('settings.title')}</div>`;
+  $('loadingState').classList.add('hidden');
+  $('detailView').classList.add('hidden');
+  $('emptyState').classList.remove('hidden');
+}
+
+function renderSummary() {
+  const { installation, validation } = app.state;
+  $('installationName').textContent = installation.name;
+  $('comfyPath').textContent = installation.comfy_root;
+  $('freeSpace').textContent = formatBytes(validation?.comfy_free);
+}
+
+function stateLabel(state) {
+  return t(`state.${state === 'loaded' ? 'loaded' : state === 'partial' ? 'partial' : 'archived'}`);
+}
+
+function renderLibrary() {
+  const list = $('workflowList');
+  if (!app.state?.configured) return;
+  const packages = (app.state.packages || []).filter(item => {
+    if (app.filter === 'all') return true;
+    if (app.filter === 'archived') return item.state === 'archived' || item.state === 'partial';
+    return item.state === app.filter;
+  });
+  const rows = [];
+  if (app.state.loading) rows.push(`<div class="library-scan-status"><span class="loading-pulse"></span><span>${t('library.scanning')}</span></div>`);
+  if (!packages.length && !app.state.loading && !(app.state.scan_warnings || []).length) {
+    rows.push(`<div class="workflow-list-empty">${app.state.packages?.length ? t('library.filter_empty') : t('library.empty')}</div>`);
+  }
+  rows.push(...packages.map(item => `
+    <button class="workflow-item ${item.path === app.selectedPath ? 'active' : ''}" data-path="${escapeHtml(item.path)}" data-state="${item.state}">
+      <span class="workflow-name">${escapeHtml(item.name)}</span>
+      <span class="workflow-meta"><span class="workflow-state">${stateLabel(item.state)}</span><span title="${t('detail.model_size')}">${formatBytes(item.model_bytes)}</span></span>
+    </button>`));
+  if (app.filter === 'all' || app.filter === 'archived') rows.push(...(app.state.scan_warnings || []).map(item => `
+    <div class="invalid-package" title="${t('errors.invalid_package')}"><strong>${escapeHtml(item.name)}</strong><span>${t('library.invalid')}</span></div>`));
+  list.innerHTML = rows.join('');
+  list.querySelectorAll('.workflow-item').forEach(button => button.addEventListener('click', () => {
+    app.selectedPath = button.dataset.path;
+    renderLibrary();
+    renderDetail(app.state.packages.find(item => item.path === app.selectedPath));
+  }));
+}
+
+function renderDetail(pkg) {
+  if (!pkg) {
+    $('detailView').classList.add('hidden');
+    $('emptyState').classList.remove('hidden');
+    return;
+  }
+  $('emptyState').classList.add('hidden');
+  $('detailView').classList.remove('hidden');
+  $('packageName').textContent = pkg.name;
+  $('packagePath').textContent = pkg.path;
+  $('renameButton').disabled = false;
+  $('modelCount').textContent = String(pkg.model_count);
+  $('modelPresence').textContent = t('detail.local_models', {count: pkg.present_models});
+  $('modelSize').textContent = formatBytes(pkg.model_bytes);
+  const presentBytes = (pkg.models || []).filter(model => model.present).reduce((sum, model) => sum + Number(model.size || 0), 0);
+  const missingBytes = (pkg.models || []).filter(model => !model.present).reduce((sum, model) => sum + Number(model.size || 0), 0);
+  const impactKey = pkg.state === 'loaded' ? 'detail.currently_local_bytes' : pkg.state === 'partial' ? 'detail.still_needed' : 'detail.needed_to_load';
+  const impactBytes = pkg.state === 'loaded' ? presentBytes : missingBytes;
+  $('storageImpactLabel').textContent = t(impactKey, {size: formatBytes(impactBytes)});
+  $('heroMetric').title = t('detail.package_size_tooltip', {size: formatBytes(pkg.archive_size)});
+  $('modelStorageMode').textContent = t(pkg.deduplicated ? 'detail.storage_pool' : 'detail.storage_package');
+  $('modelStorageLabel').textContent = t(pkg.deduplicated ? 'detail.shared_pool' : 'detail.saved_in_package');
+  $('customNodeCount').textContent = String(pkg.custom_nodes?.length || 0);
+
+  const pill = $('statusPill');
+  pill.textContent = stateLabel(pkg.state);
+  pill.className = `status-pill ${pkg.state}`;
+  $('statusRail').className = `status-rail ${pkg.state}`;
+
+  renderIntegrity(pkg);
+
+  $('modelList').innerHTML = pkg.models.length ? pkg.models.map(model => `
+    <div class="dependency-row">
+      <span class="dep-state ${model.present ? 'present' : ''}">${icon(model.present ? 'check' : 'download')}</span>
+      <span class="dep-copy"><strong title="${escapeHtml(model.filename)}">${escapeHtml(model.filename)}</strong><span>${escapeHtml(model.kind.replaceAll('_', ' '))} · ${t(model.present ? 'detail.model_present' : 'detail.model_archived')}</span></span>
+      <span class="dep-size">${formatBytes(model.size)}</span>
+    </div>`).join('') : `<div class="workflow-list-empty">${t('detail.no_models')}</div>`;
+
+  const notices = [];
+  const missingDependencies = pkg.missing || [];
+  if (!pkg.complete) notices.push({
+    warning: true,
+    text: missingDependencies.length === 1
+      ? t('notice.missing_one')
+      : t('notice.missing_many', {count: missingDependencies.length}),
+    missing: missingDependencies,
+  });
+  if (pkg.state === 'partial') notices.push({warning: true, text: t('notice.partial')});
+  if (pkg.complete && pkg.state !== 'partial') notices.push({warning: false, text: t('notice.complete')});
+  notices.push({sharing: true});
+  if (pkg.deduplicated) notices.push({warning: false, text: t('storage.shared_notice')});
+  notices.push({parser: true});
+  notices.push({warning: false, text: t('parser.scope')});
+  notices.push({warning: false, text: t('notice.custom_nodes')});
+  $('noticeList').innerHTML = notices.map(n => n.parser ? parserNoticesHtml(pkg.parser_warnings) : n.sharing ? sharedFilesHtml(pkg.models, {library: true}) : `
+    <div class="notice ${n.warning ? 'warning' : ''}">
+      ${icon(n.warning ? 'alert' : 'shield')}
+      <div class="notice-body">
+        <span>${escapeHtml(n.text)}</span>
+        ${n.missing?.length ? `<div class="notice-missing-list">
+          ${n.missing.map(item => missingFileHtml(item, true)).join('')}
+        </div>` : ''}
+      </div>
+    </div>`).join('');
+  $('customNodeList').innerHTML = pkg.custom_nodes?.length
+    ? pkg.custom_nodes.map(node => `<span class="tag">${escapeHtml(node.package)}</span>`).join('')
+    : `<span class="tag">${t('detail.no_custom_nodes')}</span>`;
+
+  const primary = $('primaryActionButton');
+  const secondary = $('secondaryActionButton');
+  const storage = $('storageButton');
+  storage.innerHTML = `${icon('drive')}${t('storage.optimize_button')}`;
+  storage.classList.toggle('hidden', !!pkg.deduplicated);
+  storage.onclick = managePackageStorage;
+  const otherActive = (app.state.packages || []).some(item =>
+    item.path !== pkg.path && (item.state === 'loaded' || item.state === 'partial')
+  );
+  if (pkg.state === 'loaded') {
+    primary.innerHTML = `${icon('upload')}${t('actions.unload')}`;
+    primary.onclick = () => previewPackageAction('unload');
+    secondary.classList.add('hidden');
+  } else if (pkg.state === 'archived') {
+    if (otherActive) {
+      primary.innerHTML = `${icon('switch')}${t('actions.switch')}`;
+      primary.onclick = previewWorkflowSwitch;
+      secondary.innerHTML = `${icon('download')}${t('actions.load_additional')}`;
+      secondary.onclick = () => previewPackageAction('restore');
+      secondary.classList.remove('hidden');
+    } else {
+      primary.innerHTML = `${icon('download')}${t('actions.load')}`;
+      primary.onclick = () => previewPackageAction('restore');
+      secondary.classList.add('hidden');
+    }
+  } else {
+    if (otherActive) {
+      primary.innerHTML = `${icon('switch')}${t('actions.switch')}`;
+      primary.onclick = previewWorkflowSwitch;
+      secondary.innerHTML = `${icon('upload')}${t('actions.unload_present')}`;
+      secondary.onclick = () => previewPackageAction('unload');
+      secondary.classList.remove('hidden');
+    } else {
+      primary.innerHTML = `${icon('download')}${t('actions.load_missing')}`;
+      primary.onclick = () => previewPackageAction('restore');
+      secondary.innerHTML = `${icon('upload')}${t('actions.unload_present')}`;
+      secondary.onclick = () => previewPackageAction('unload');
+      secondary.classList.remove('hidden');
+    }
+  }
+}
+
+function openSettings(required = false) {
+  const installation = app.state?.installation;
+  $('comfyRootInput').value = installation?.comfy_root || '';
+  $('archiveRootInput').value = installation?.archive_root || '';
+  $('settingsValidation').classList.add('hidden');
+  $('settingsCloseButton').classList.toggle('hidden', required);
+  $('settingsCancelButton').classList.toggle('hidden', required);
+  $('settingsModal').classList.remove('hidden');
+}
+function closeSettings() { if (app.state?.configured) $('settingsModal').classList.add('hidden'); }
+
+async function browseFolder(kind) {
+  try {
+    const path = await callApi('choose_folder', kind);
+    if (path) $(kind === 'comfy' ? 'comfyRootInput' : 'archiveRootInput').value = path;
+  } catch (error) { toast(error.message, true); }
+}
+
+async function saveSettings() {
+  const comfy = $('comfyRootInput').value.trim();
+  const archive = $('archiveRootInput').value.trim();
+  const box = $('settingsValidation');
+  if (!comfy || !archive) {
+    box.textContent = t('settings.choose_both');
+    box.className = 'validation-box';
+    return;
+  }
+  showBusy(t('settings.checking'), t('settings.checking_detail'), false);
+  try {
+    const result = await callApi('save_settings', comfy, archive);
+    hideBusy();
+    const warnings = result.validation.warnings || [];
+    if (warnings.length) {
+      box.textContent = t('settings.warning');
+      box.className = 'validation-box warning';
+    } else {
+      $('settingsModal').classList.add('hidden');
+    }
+    toast(t('settings.saved'));
+    await refreshState();
+    if (!warnings.length) $('settingsModal').classList.add('hidden');
+  } catch (error) {
+    hideBusy();
+    box.textContent = error.message;
+    box.className = 'validation-box';
+  }
+}
+
+async function addWorkflow() {
+  if (!app.state?.configured) { openSettings(true); return; }
+  try {
+    const path = await callApi('choose_workflow');
+    if (!path) return;
+    showBusy(t('pack.analyzing'), t('pack.analyzing_detail'));
+    const report = await callApi('inspect_for_pack', path);
+    hideBusy();
+    const missing = report.missing || [];
+    const exists = (app.state.packages || []).some(item => item.path.toLowerCase() === report.output_path.toLowerCase());
+    const missingDetails = missing.length ? `
+      <div class="missing-detail">
+        <span class="missing-detail-label">${t('pack.missing_label')}</span>
+        ${missing.map(item => missingFileHtml(item)).join('')}
+      </div>` : '';
+    const copy = `
+      <p>${t('pack.copy', {workflow: escapeHtml(report.workflow)})}</p>
+      <div class="confirm-stat"><span>${t('pack.detected')}</span><strong>${report.assets.length}</strong></div>
+      <div class="confirm-stat"><span>${t('pack.missing')}</span><strong>${missing.length}</strong></div>
+      ${missingDetails}
+      ${parserWarningsHtml(report.parser_warnings)}
+      <p>${t('parser.scope')}</p>
+      <div class="confirm-stat"><span>${t('common.target')}</span><strong>${escapeHtml(report.output_path)}</strong></div>
+      ${exists ? `<p>${t('pack.replace')}</p>` : ''}`;
+    openConfirm({
+      eyebrow: t('pack.eyebrow'), title: t(missing.length ? 'pack.title_incomplete' : 'pack.title'),
+      copy, danger: false, proceedLabel: t(missing.length ? 'pack.proceed_incomplete' : 'pack.proceed'),
+      showIncomplete: missing.length > 0,
+      action: async () => {
+        showBusy(t('pack.running'), t('pack.running_detail'));
+        const result = await callApi('pack_workflow', path, missing.length > 0, exists);
+        hideBusy(); toast(t('pack.done', {name: report.workflow})); await refreshState(result.output_path);
+      }
+    });
+  } catch (error) { hideBusy(); operationError(error); }
+}
+
+async function importPackage() {
+  if (!app.state?.configured) { openSettings(true); return; }
+  try {
+    const path = await callApi('choose_archive');
+    if (!path) return;
+    showBusy(t('import.inspecting'), t('import.inspecting_detail'));
+    const report = await callApi('inspect_archive_import', path);
+    hideBusy();
+    const missing = report.missing || [];
+    const extras = report.extra_models || [];
+    const direct = report.direct_load || {bytes_required:0, bytes_free:0, present_models:0, blockers:[]};
+    const directBlocked = (direct.blockers || []).length > 0;
+    const missingDetails = missing.length ? `
+      <div class="missing-detail">
+        <span class="missing-detail-label">${t('import.missing_label')}</span>
+        ${missing.map(item => missingFileHtml(item)).join('')}
+      </div>` : '';
+    const replacementText = report.source_is_target
+      ? t('import.replace_selected')
+      : report.target_exists
+        ? t('import.replace_existing')
+        : t('import.add_library');
+    const copy = `
+      <p>${t('import.copy', {package: escapeHtml(report.package)})}</p>
+      <div class="import-chain">
+        <div class="import-chain-row">${icon('check')}<span>${t('import.paths_ok')}<small>${t('import.paths_hint')}</small></span></div>
+        <div class="import-chain-row ${missing.length ? 'warning' : ''}">${icon(missing.length ? 'alert' : 'check')}<span>${t('import.models_matched', {matched: report.matched_count, total: report.assets.length})}<small>${t('import.models_hint')}</small></span></div>
+        <div class="import-chain-row">${icon('shield')}<span>${t('import.manifest')}<small>${t('import.manifest_hint')}</small></span></div>
+      </div>
+      <div class="confirm-stat"><span>${t('import.extras')}</span><strong>${extras.length}</strong></div>
+      <div class="confirm-stat"><span>${t('common.target')}</span><strong>${escapeHtml(report.target_path)}</strong></div>
+      ${missingDetails}
+      ${parserWarningsHtml(report.parser_warnings)}
+      <p>${t('parser.scope')}</p>
+      <p>${escapeHtml(replacementText)}</p>
+      <div class="destination-heading"><span>${t('import.after')}</span><small>${t('import.choose_state')}</small></div>
+      <div class="import-destinations" role="radiogroup" aria-label="${t('import.destination')}">
+        <label class="import-destination ${report.archive_space_sufficient ? '' : 'blocked'}">
+          <input type="radio" name="importDestination" value="archive" checked ${report.archive_space_sufficient ? '' : 'disabled'}>
+          <span class="destination-icon">${icon('shelf')}</span>
+          <span class="destination-copy"><strong>${t('import.seal_archive')}</strong><small>${t('import.seal_archive_hint')}</small><em>${t('import.temp_free', {needed: formatBytes(report.reseal_bytes_required), free: formatBytes(report.archive_bytes_free)})}</em></span>
+        </label>
+        <label class="import-destination ${directBlocked || !report.archive_space_sufficient ? 'blocked' : ''}">
+          <input type="radio" name="importDestination" value="load" ${directBlocked || !report.archive_space_sufficient ? 'disabled' : ''}>
+          <span class="destination-icon">${icon('drive')}</span>
+          <span class="destination-copy"><strong>${t('import.seal_load')}</strong><small>${directBlocked ? t('import.direct_blocked') : t('import.seal_load_hint')}</small><em>${t('import.required_present', {required: formatBytes(direct.bytes_required), present: direct.present_models})}</em></span>
+        </label>
+      </div>`;
+    openConfirm({
+      eyebrow: t('import.eyebrow'),
+      title: t(missing.length ? 'import.title_incomplete' : 'import.title'),
+      copy,
+      danger: false,
+      wide: true,
+      proceedLabel: t(missing.length ? 'import.proceed_incomplete' : 'import.proceed'),
+      showIncomplete: missing.length > 0,
+      disabled: !report.archive_space_sufficient,
+      action: async () => {
+        const destination = document.querySelector('input[name="importDestination"]:checked')?.value || 'archive';
+        const loadAfterImport = destination === 'load';
+        showBusy(
+          t(loadAfterImport ? 'import.running_load' : 'import.running'),
+          t(loadAfterImport ? 'import.running_load_detail' : 'import.running_detail')
+        );
+        const result = await callApi(
+          'import_archive', path, missing.length > 0, report.target_exists, loadAfterImport
+        );
+        hideBusy();
+        toast(t(loadAfterImport ? 'import.done_load' : 'import.done', {name: result.package}));
+        await refreshState(result.output_path);
+      }
+    });
+    document.querySelectorAll('input[name="importDestination"]').forEach(option => {
+      option.addEventListener('change', () => {
+        $('confirmProceedButton').textContent = option.value === 'load'
+          ? t('import.proceed_load')
+          : t(missing.length ? 'import.proceed_incomplete' : 'import.proceed');
+      });
+    });
+  } catch (error) { hideBusy(); operationError(error); }
+}
+
+function renderIntegrity(pkg) {
+  const check = pkg.verification || {state: 'unknown'};
+  const state = ['verified', 'invalid', 'stale'].includes(check.state) ? check.state : 'unknown';
+  const key = {verified:'valid', invalid:'invalid', stale:'stale', unknown:'unknown'}[state];
+  const label = $('integrityLabel');
+  label.className = `integrity-label ${state === 'verified' ? 'valid' : state}`;
+  label.innerHTML = `${icon(state === 'stale' ? 'alert' : 'shield')}${escapeHtml(t(`detail.integrity_${key}`))}`;
+  const date = check.checked_at ? new Date(check.checked_at) : null;
+  label.title = date && !Number.isNaN(date.getTime())
+    ? `${t('detail.integrity_checked', {date: date.toLocaleString(app.language === 'de' ? 'de-DE' : 'en-GB', {hour12:false})})}\n${t('detail.integrity_cached_hint')}`
+    : t('detail.integrity_unknown');
+  if (check.persisted === false) label.title += `\n${t('verify.not_saved')}`;
+  if (state === 'stale') label.title += `\n${t('detail.integrity_stale_hint')}`;
+}
+
+async function verifySelected() {
+  const pkg = app.state?.packages?.find(item => item.path === app.selectedPath);
+  if (!pkg) return;
+  showBusy(t('verify.running'), t('verify.detail'));
+  try {
+    const result = await callApi('verify_archive', pkg.path);
+    pkg.verification = result.verification || {state: result.valid ? 'verified' : 'invalid'};
+    hideBusy(); renderDetail(pkg);
+    const changed = pkg.verification.state === 'stale';
+    const unsaved = pkg.verification.persisted === false;
+    toast(t(changed ? 'verify.changed' : !result.valid ? 'verify.invalid' : unsaved ? 'verify.not_saved' : 'verify.valid'), changed || unsaved || !result.valid);
+  } catch (error) {
+    hideBusy();
+    operationError(error);
+    await refreshState(pkg.path);
+  }
+}
+
+async function managePackageStorage() {
+  const pkg = selectedPackage();
+  if (!pkg) return;
+  if (pkg.deduplicated) return;
+  openConfirm({
+    eyebrow: t('storage.eyebrow'),
+    title: t('storage.optimize_title'),
+    copy: `<p>${t('storage.optimize_copy')}</p><div class="confirm-stat"><span>${t('storage.model_payload')}</span><strong>${formatBytes(pkg.model_bytes)}</strong></div>`,
+    proceedLabel: t('storage.optimize_proceed'),
+    action: async () => {
+      showBusy(t('storage.optimize_running'), t('storage.optimize_detail'));
+      const result = await callApi('optimize_archive', pkg.path);
+      hideBusy();
+      toast(t('storage.optimize_done', {size: formatBytes(result.reused_object_bytes)}));
+      await refreshState(pkg.path);
+    },
+  });
+}
+
+async function showSelectedWorkflowFile() {
+  const pkg = selectedPackage();
+  if (!pkg) return;
+  const button = $('showWorkflowFileButton');
+  button.disabled = true;
+  try {
+    const report = await callApi('show_workflow_file', pkg.path);
+    if (report.exists) { toast(t('workflow_file.shown')); return; }
+    openConfirm({
+      eyebrow: t('workflow_file.button'), title: t('workflow_file.missing'),
+      copy: `<p>${t('workflow_file.copy')}</p><p class="workflow-file-path">${escapeHtml(report.path)}</p><p>${t('workflow_file.note')}</p>`,
+      proceedLabel: t('workflow_file.restore'),
+      action: async () => {
+        showBusy(t('workflow_file.restoring'), t('workflow_file.note'), false);
+        try {
+          await callApi('restore_workflow_file', pkg.path, report.token);
+          toast(t('workflow_file.restored'));
+        } finally { hideBusy(); }
+      },
+    });
+  } catch (error) { operationError(error); }
+  finally { button.disabled = false; }
+}
+
+async function scanSelectedDependencies() {
+  const pkg = selectedPackage();
+  if (!pkg) return;
+  showBusy(t('dependencies.running'), t('dependencies.hint'));
+  try {
+    const report = await callApi('scan_archive_dependencies', pkg.path);
+    hideBusy();
+    const addable = report.counts.found > 0;
+    const noSpace = report.space_required > report.space_free;
+    const rows = report.rows.map(row => {
+      const state = ['found', 'included', 'ambiguous', 'missing'].includes(row.state) ? row.state : 'missing';
+      const source = row.source === 'pool' ? row.pool?.package : row.local?.path;
+      return `<li class="dependency-scan-row ${state}">
+        <div class="dependency-scan-name"><strong>${escapeHtml(row.name)}</strong><span>${escapeHtml(row.kind.replaceAll('_', ' '))}</span></div>
+        <span class="dependency-scan-status">${escapeHtml(t(`dependencies.${state}`))}</span>
+        ${source ? `<small class="dependency-scan-source">${escapeHtml(t(`dependencies.source_${row.source}`))}: ${escapeHtml(source)}</small>` : ''}
+        ${state === 'ambiguous' && row.candidates?.length ? `<details><summary>${t('dependencies.candidates')}</summary><ul>${row.candidates.map(value => `<li>${escapeHtml(value)}</li>`).join('')}</ul></details>` : ''}
+      </li>`;
+    }).join('');
+    openConfirm({
+      wide: true, eyebrow: t('dependencies.eyebrow'), title: t('dependencies.title'),
+      copy: `<p>${t('dependencies.readonly')}</p>
+        <p class="dependency-scan-summary">${t('dependencies.counts', report.counts)}</p>
+        <ul class="dependency-scan-results">${rows || `<li>${t('dependencies.empty')}</li>`}</ul>
+        ${parserWarningsHtml(report.parser_warnings)}
+        ${report.warnings?.length ? `<p class="dependency-scan-warning">${t('dependencies.skipped')} ${report.warnings.map(escapeHtml).join(', ')}</p>` : ''}
+        ${addable ? `<p>${t('dependencies.confirm_hint')}</p><p>${t('dependencies.space', {size: formatBytes(report.space_required), free: formatBytes(report.space_free)})}</p>` : `<p>${t('dependencies.nothing')}</p>`}
+        ${addable && noSpace ? `<p class="dependency-scan-warning">${t('errors.dependency_space')}</p>` : ''}`,
+      proceedLabel: t(addable ? 'dependencies.add' : 'common.close'),
+      readOnly: !addable, disabled: addable && noSpace,
+      action: async () => {
+        if (!addable) return;
+        showBusy(t('dependencies.adding'), t('dependencies.hash_hint'));
+        const result = await callApi('complete_archive_dependencies', pkg.path, report.token);
+        hideBusy();
+        await refreshState(pkg.path);
+        openConfirm({
+          wide: true, readOnly: true, eyebrow: t('dependencies.eyebrow'), title: t('dependencies.done', {count: result.added}),
+          copy: `<p>${t(result.complete ? 'dependencies.complete' : 'dependencies.incomplete')}</p>
+            <p>${t('dependencies.reused', {size: formatBytes(result.reused_object_bytes)})}</p>
+            <p>${t('dependencies.backup')}</p><p class="dependency-backup-path">${escapeHtml(result.backup)}</p>
+            ${result.verification?.state === 'stale' ? `<p class="dependency-scan-warning">${t('verify.changed')}</p>` : ''}
+            ${result.verification?.persisted === false ? `<p class="dependency-scan-warning">${t('verify.not_saved')}</p>` : ''}`,
+          proceedLabel: t('common.close'), action: async () => {},
+        });
+      },
+    });
+  } catch (error) { hideBusy(); operationError(error); }
+}
+
+function showPortableExportPreview(pkg, report) {
+  const missing = report.missing || [];
+  const blockers = report.blockers || [];
+  const copy = `<div class="export-summary">
+    <p>${t('storage.export_includes')}</p>
+    <p class="export-exclusion">${t('storage.export_excludes')}</p>
+    <div class="export-destination"><span>${t('common.target')}</span><strong>${escapeHtml(report.output_path)}</strong></div>
+    <div class="confirm-stat"><span>${t('storage.export_space')}</span><strong>${formatBytes(report.bytes_required)}</strong></div>
+    <div class="confirm-stat"><span>${t('storage.export_free')}</span><strong>${formatBytes(report.bytes_free)}</strong></div>
+    <p class="export-footnote">${t('storage.export_unchanged')}</p>
+    ${!report.complete ? `<div class="missing-detail"><span class="missing-detail-label">${t('storage.export_missing')}</span>${missing.map(item => missingFileHtml(item)).join('')}${!missing.length ? `<p>${t('storage.export_incomplete')}</p>` : ''}</div>` : ''}
+    ${blockers.length ? `<div class="missing-detail diagnostic-detail">${blockers.map(item => `<p>${escapeHtml(t(`export_blocker.${item.code}`))}${item.path ? `<br><strong>${escapeHtml(item.path)}</strong>` : ''}</p>`).join('')}</div>` : ''}
+  </div>`;
+  openConfirm({
+    eyebrow: t('storage.export_button'), title: t('storage.export_title'), copy,
+    wide: true, showIncomplete: !report.complete, disabled: blockers.length > 0,
+    proceedLabel: t('storage.export_proceed'),
+    action: async (flags = {}) => {
+      showBusy(t('storage.export_running'), t('storage.export_detail'));
+      const result = await callApi('export_portable_archive', pkg.path, report.output_path, !!flags.allowIncomplete);
+      hideBusy();
+      toast(t('storage.export_done', {name: result.output_path}));
+    },
+  });
+}
+
+async function exportSelectedPackage() {
+  const pkg = selectedPackage();
+  if (!pkg) return;
+  const button = $('exportButton');
+  button.disabled = true;
+  try {
+    const output = await callApi('choose_export_destination', pkg.path);
+    if (!output) return;
+    showBusy(t('storage.export_checking'), t('storage.export_checking_detail'));
+    const report = await callApi('preview_portable_archive', pkg.path, output);
+    hideBusy();
+    showPortableExportPreview(pkg, report);
+  } catch (error) { hideBusy(); operationError(error); }
+  finally { button.disabled = false; }
+}
+
+async function optimizeEntireLibrary() {
+  showBusy(t('library_optimize.inspecting'), t('library_optimize.inspecting_detail'));
+  try {
+    const report = await callApi('inspect_library_optimization');
+    hideBusy();
+    if (!report.package_count) {
+      toast(t('library_optimize.none'));
+      return;
+    }
+    closeSettings();
+    openConfirm({
+      eyebrow: t('library_optimize.eyebrow'),
+      title: t('library_optimize.title'),
+      wide: true,
+      copy: `
+        <p>${t('library_optimize.copy')}</p>
+        <div class="confirm-stat"><span>${t('library_optimize.packages')}</span><strong>${report.package_count}</strong></div>
+        <div class="confirm-stat"><span>${t('library_optimize.models')}</span><strong>${report.model_count}</strong></div>
+        <div class="confirm-stat"><span>${t('library_optimize.payload')}</span><strong>${formatBytes(report.model_bytes)}</strong></div>
+        <div class="confirm-stat"><span>${t('library_optimize.already_shared')}</span><strong>${report.already_shared}</strong></div>`,
+      proceedLabel: t('library_optimize.proceed'),
+      action: async () => {
+        showBusy(t('library_optimize.running'), t('library_optimize.running_detail'));
+        const result = await callApi('optimize_library');
+        hideBusy();
+        toast(t('library_optimize.done', {count: result.optimized_count}));
+        await refreshState(app.selectedPath);
+      },
+    });
+  } catch (error) { hideBusy(); operationError(error); }
+}
+
+function sharedFilesHtml(candidates = [], {library = false, force = false} = {}) {
+  const files = new Map();
+  const normalize = value => String(value).replaceAll('\\', '/').toLowerCase();
+  for (const item of candidates) {
+    const references = library ? item.library_shared_by : item.shared_by;
+    if (!references?.length) continue;
+    const path = String(item.archive_path || item.path || item.filename || '');
+    const key = normalize(path);
+    if (!files.has(key)) files.set(key, {path, references: new Map()});
+    for (const reference of references) {
+      const workflowPath = typeof reference === 'string' ? reference : reference.path;
+      if (!workflowPath) continue;
+      files.get(key).references.set(normalize(workflowPath), {
+        path: String(workflowPath),
+        name: typeof reference === 'string'
+          ? searchableFilename(reference).replace(/\.json$/i, '')
+          : String(reference.name || searchableFilename(workflowPath)),
+      });
+    }
+  }
+  const rows = [...files.values()].filter(item => item.references.size);
+  if (!rows.length && !force) return '';
+  const workflowCount = new Set(rows.flatMap(item => [...item.references.keys()])).size;
+  const summary = t('sharing.counts', {files: rows.length, workflows: workflowCount});
+  const prefix = library ? 'sharing.library' : 'sharing.warning';
+  return `<section class="sharing-box ${library ? 'sharing-library' : 'sharing-warning'}" aria-label="${escapeHtml(t(`${prefix}_title`))}">
+    <div class="sharing-heading">${icon(library ? 'shelf' : 'alert')}<strong>${escapeHtml(t(`${prefix}_title`))}</strong></div>
+    <p class="sharing-impact">${escapeHtml(t(`${prefix}_impact`))}</p>
+    ${rows.length ? `<p class="sharing-counts">${escapeHtml(summary)}</p>
+      <details class="sharing-details"><summary>${escapeHtml(t('sharing.details'))}</summary>
+        <ul class="sharing-files">${rows.map(item => `<li>
+          <strong class="sharing-filename">${escapeHtml(searchableFilename(item.path))}</strong>
+          <small class="sharing-path">${escapeHtml(item.path)}</small>
+          <ul class="sharing-workflows">${[...item.references.values()].map(reference => `<li>
+            <strong>${escapeHtml(reference.name)}</strong><small class="sharing-path">${escapeHtml(reference.path)}</small>
+          </li>`).join('')}</ul>
+        </li>`).join('')}</ul>
+        ${library ? `<p class="sharing-scope">${escapeHtml(t(`${prefix}_scope`))}</p>` : ''}
+      </details>` : `<p>${escapeHtml(t('sharing.details_unavailable'))}</p>`}
+    ${!library ? `<p class="sharing-scope">${escapeHtml(t(`${prefix}_scope`))}</p>` : ''}
+  </section>`;
+}
+
+async function previewPackageAction(actionName) {
+  const pkg = app.state?.packages?.find(item => item.path === app.selectedPath);
+  if (!pkg) return;
+  showBusy(t(actionName === 'restore' ? 'restore.preparing' : 'restore.unload_preparing'), t('restore.checking'));
+  try {
+    const preview = await callApi('preview_action', actionName, pkg.path);
+    hideBusy();
+    const isRestore = actionName === 'restore';
+    const count = isRestore ? preview.candidates.length : preview.candidates.length;
+    const bytes = isRestore ? preview.bytes_required : preview.bytes_reclaimable;
+    const shared = !isRestore && preview.candidates.some(item => item.shared_by?.length);
+    const conflictCount = preview.conflicts?.length || 0;
+    const copy = `
+      <p>${t(isRestore ? 'restore.copy' : 'restore.unload_copy')}</p>
+      ${shared ? sharedFilesHtml(preview.candidates) : ''}
+      <div class="confirm-stat"><span>${t(isRestore ? 'restore.restorable' : 'restore.unloadable')}</span><strong>${count}</strong></div>
+      <div class="confirm-stat"><span>${t(isRestore ? 'restore.required' : 'restore.reclaimed')}</span><strong>${formatBytes(bytes)}</strong></div>
+      <div class="confirm-stat"><span>${t('common.conflicts')}</span><strong>${conflictCount}</strong></div>
+      ${removalIssuesHtml(preview.removal_issues)}
+      ${!isRestore && preview.pool_preparation_required ? `<p>${t('restore.pool_prepare')}</p>` : ''}`;
+    openConfirm({
+      eyebrow: t('restore.eyebrow'),
+      title: t(isRestore ? 'restore.title' : 'restore.unload_title'),
+      copy, danger: !isRestore, proceedLabel: t(isRestore ? 'restore.proceed' : 'restore.unload_proceed', {count}),
+      showIncomplete: !pkg.complete, showShared: shared, wide: shared,
+      disabled: conflictCount > 0 || !!preview.removal_issues?.length,
+      action: async ({allowIncomplete, allowShared}) => {
+        showBusy(t(isRestore ? 'restore.running' : 'restore.unload_running'), t(isRestore ? 'restore.running_detail' : 'restore.unload_running_detail'));
+        await callApi('execute_action', actionName, pkg.path, allowIncomplete, allowShared);
+        hideBusy(); toast(t(isRestore ? 'restore.done' : 'restore.unload_done')); await refreshState(pkg.path);
+      }
+    });
+  } catch (error) { hideBusy(); operationError(error); }
+}
+
+async function previewWorkflowSwitch() {
+  const pkg = app.state?.packages?.find(item => item.path === app.selectedPath);
+  if (!pkg) return;
+  showBusy(t('switch.preparing'), t('switch.preparing_detail'));
+  try {
+    const preview = await callApi('preview_switch', pkg.path);
+    hideBusy();
+    const conflictCount = (preview.conflicts?.length || 0) + (preview.restore?.conflicts?.length || 0);
+    const shared = (preview.shared_count || 0) > 0 || !!preview.unload_candidates?.some(item => item.shared_by?.length);
+    const hardBlockers = (preview.blockers || []).filter(item => !item.toLowerCase().includes('unvollständig') && !item.toLowerCase().includes('referenziert'));
+    const copy = `
+      <p>${t('switch.copy', {name: escapeHtml(pkg.name)})}</p>
+      ${shared ? sharedFilesHtml(preview.unload_candidates, {force: true}) : ''}
+      <div class="confirm-stat"><span>${t('switch.load')}</span><strong>${formatBytes(preview.bytes_required)}</strong></div>
+      <div class="confirm-stat"><span>${t('switch.unload')}</span><strong>${formatBytes(preview.bytes_reclaimable)}</strong></div>
+      <div class="confirm-stat"><span>${t('switch.other')}</span><strong>${preview.source_packages.length}</strong></div>
+      <div class="confirm-stat"><span>${t('common.conflicts')}</span><strong>${conflictCount}</strong></div>
+      ${removalIssuesHtml(preview.removal_issues)}
+      ${hardBlockers.length ? `<div class="missing-detail"><span class="missing-detail-label">${t('switch.blocked')}</span>${hardBlockers.map(() => `<div class="missing-item">${icon('alert')}<span><strong>${t('switch.blocker')}</strong></span></div>`).join('')}</div>` : ''}`;
+    openConfirm({
+      eyebrow: t('switch.eyebrow'), title: t('switch.title'), copy,
+      danger: false, proceedLabel: t('switch.proceed'),
+      showIncomplete: !pkg.complete, showShared: shared, wide: shared,
+      disabled: conflictCount > 0 || hardBlockers.length > 0,
+      action: async ({allowIncomplete, allowShared}) => {
+        showBusy(t('switch.running'), t('switch.running_detail'));
+        const result = await callApi('execute_switch', pkg.path, allowIncomplete, allowShared);
+        hideBusy();
+        toast(t('switch.done', {name: result.package}));
+        await refreshState(pkg.path);
+      }
+    });
+  } catch (error) {
+    hideBusy();
+    operationError(error);
+  }
+}
+
+async function refreshDiskState() {
+  const button = $('diskRefreshButton');
+  button.classList.add('refreshing');
+  button.disabled = true;
+  app.diskRefreshPending = true;
+  try {
+    const refreshed = await refreshState(app.selectedPath);
+    if (refreshed) {
+      app.diskRefreshPending = false;
+      toast(t('toast.storage_refreshed'));
+    }
+  } finally {
+    if (!app.state?.loading) {
+      button.classList.remove('refreshing');
+      button.disabled = false;
+    }
+  }
+}
+
+const historyIcons = {
+  archive: 'upload', import: 'import', import_load: 'download', restore: 'download',
+  unload: 'upload', switch: 'switch', rename: 'edit', optimize: 'drive', export: 'upload', optimize_library: 'drive',
+  unload_partial: 'alert', switch_partial: 'alert'
+};
+
+function renderHistoryEntries(entries) {
+  app.historyEntries = entries;
+  $('historyList').innerHTML = entries.length ? entries.map(entry => {
+    const labelKey = `history.${entry.action}`;
+    const label = app.messages[labelKey] || t('history.action');
+    const iconName = historyIcons[entry.action] || 'history';
+    const date = new Date(entry.timestamp);
+    return `<div class="history-item">
+      <span class="history-icon">${icon(iconName)}</span>
+      <span class="history-copy"><strong>${escapeHtml(entry.package)}</strong><span>${escapeHtml(label)}</span></span>
+      <span class="history-meta"><time>${date.toLocaleString(app.language === 'de' ? 'de-DE' : 'en-US', {dateStyle:'short', timeStyle:'short'})}</time><span>${entry.bytes ? formatBytes(entry.bytes) : ''}</span></span>
+    </div>`;
+  }).join('') : `<div class="history-empty">${t('history.empty')}</div>`;
+}
+
+async function openHistory() {
+  $('historyModal').classList.remove('hidden');
+  $('historyList').innerHTML = `<div class="history-empty">${t('history.loading')}</div>`;
+  try {
+    const entries = await callApi('get_history');
+    renderHistoryEntries(entries);
+  } catch (error) { $('historyList').innerHTML = `<div class="history-empty">${escapeHtml(error.message)}</div>`; }
+}
+
+function closeHistory() { $('historyModal').classList.add('hidden'); }
+
+async function clearHistory() {
+  try { await callApi('clear_history'); await openHistory(); toast(t('history.cleared')); }
+  catch (error) { toast(error.message, true); }
+}
+
+function selectedPackage() {
+  return app.state?.packages?.find(item => item.path === app.selectedPath);
+}
+
+function showRenameError(message = '') {
+  const validation = $('renameValidation');
+  validation.textContent = message;
+  validation.classList.toggle('hidden', !message);
+}
+
+function openRename() {
+  const pkg = selectedPackage();
+  if (!pkg) return;
+  $('renameInput').value = pkg.name;
+  showRenameError();
+  $('renameModal').classList.remove('hidden');
+  requestAnimationFrame(() => {
+    $('renameInput').focus();
+    $('renameInput').select();
+  });
+}
+
+function closeRename() {
+  $('renameModal').classList.add('hidden');
+  showRenameError();
+}
+
+async function saveRename() {
+  const pkg = selectedPackage();
+  if (!pkg) { closeRename(); return; }
+  const newName = $('renameInput').value.trim();
+  if (!newName) { showRenameError(t('rename.required')); return; }
+
+  const button = $('renameSaveButton');
+  button.disabled = true;
+  showRenameError();
+  try {
+    const result = await callApi('rename_archive', pkg.path, newName);
+    closeRename();
+    await refreshState(result.path);
+    toast(result.changed ? t('rename.done', {name: result.name}) : t('rename.unchanged'));
+  } catch (error) {
+    showRenameError(error.message);
+    $('renameInput').focus();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function setMaximizedButton(maximized) {
+  const button = $('maximizeButton');
+  const label = t(maximized ? 'window.restore' : 'window.maximize');
+  button.querySelector('use').setAttribute('href', maximized ? '#i-restore' : '#i-max');
+  button.setAttribute('aria-label', label);
+  button.setAttribute('title', label);
+  button.setAttribute('aria-pressed', String(maximized));
+}
+
+async function toggleWindowMaximize() {
+  const api = window.pywebview?.api?.toggle_maximize_window;
+  if (!api) return;
+  const button = $('maximizeButton');
+  button.disabled = true;
+  try { setMaximizedButton(await api()); }
+  finally { button.disabled = false; }
+}
+
+function openConfirm(options) {
+  app.pendingConfirm = options;
+  document.querySelector('.confirm-modal').classList.toggle('wide', !!options.wide);
+  $('confirmEyebrow').textContent = options.eyebrow;
+  $('confirmTitle').textContent = options.title;
+  $('confirmCopy').innerHTML = options.copy;
+  $('confirmCopy').scrollTop = 0;
+  $('confirmCancelButton').classList.toggle('hidden', !!options.readOnly);
+  $('confirmIcon').classList.toggle('danger', !!options.danger);
+  $('confirmIcon').innerHTML = icon(options.danger ? 'alert' : 'shield');
+  $('confirmProceedButton').textContent = options.proceedLabel;
+  $('confirmProceedButton').disabled = !!options.disabled;
+  $('incompleteOption').classList.toggle('hidden', !options.showIncomplete);
+  $('sharedOption').classList.toggle('hidden', !options.showShared);
+  $('allowIncompleteCheckbox').checked = false;
+  $('allowSharedCheckbox').checked = false;
+  $('confirmModal').classList.remove('hidden');
+}
+function closeConfirm() { $('confirmModal').classList.add('hidden'); app.pendingConfirm = null; }
+async function proceedConfirm() {
+  if (!app.pendingConfirm) return;
+  if (app.pendingConfirm.showIncomplete && !$('allowIncompleteCheckbox').checked) {
+    toast(t('confirm.incomplete_required'), true); return;
+  }
+  if (app.pendingConfirm.showShared && !$('allowSharedCheckbox').checked) {
+    toast(t('confirm.shared_required'), true); return;
+  }
+  const action = app.pendingConfirm.action;
+  const flags = {allowIncomplete: $('allowIncompleteCheckbox').checked, allowShared: $('allowSharedCheckbox').checked};
+  closeConfirm();
+  try { await action(flags); } catch (error) { hideBusy(); operationError(error); }
+}
+
+function installEvents() {
+  $('showWorkflowFileButton').addEventListener('click', showSelectedWorkflowFile);
+  $('dependencyScanButton').addEventListener('click', scanSelectedDependencies);
+  $('exportButton').addEventListener('click', exportSelectedPackage);
+  $('minimizeButton').addEventListener('click', () => window.pywebview?.api?.minimize_window());
+  $('maximizeButton').addEventListener('click', toggleWindowMaximize);
+  $('closeButton').addEventListener('click', () => window.pywebview?.api?.close_window());
+  document.querySelector('.titlebar-drag').addEventListener('dblclick', toggleWindowMaximize);
+  $('refreshButton').addEventListener('click', () => refreshState());
+  $('diskRefreshButton').addEventListener('click', refreshDiskState);
+  $('historyButton').addEventListener('click', openHistory);
+  $('historyCloseButton').addEventListener('click', closeHistory);
+  $('historyDoneButton').addEventListener('click', closeHistory);
+  $('clearHistoryButton').addEventListener('click', clearHistory);
+  $('renameButton').addEventListener('click', openRename);
+  $('renameCloseButton').addEventListener('click', closeRename);
+  $('renameCancelButton').addEventListener('click', closeRename);
+  $('renameSaveButton').addEventListener('click', saveRename);
+  $('renameInput').addEventListener('input', () => showRenameError());
+  $('renameInput').addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); saveRename(); }
+    if (event.key === 'Escape') closeRename();
+  });
+  $('settingsButton').addEventListener('click', () => openSettings(false));
+  $('settingsCloseButton').addEventListener('click', closeSettings);
+  $('settingsCancelButton').addEventListener('click', closeSettings);
+  $('browseComfyButton').addEventListener('click', () => browseFolder('comfy'));
+  $('browseArchiveButton').addEventListener('click', () => browseFolder('archive'));
+  $('saveSettingsButton').addEventListener('click', saveSettings);
+  $('openLogButton').addEventListener('click', async () => { try { await callApi('open_diagnostic_log'); } catch (e) { toast(e.message, true); } });
+  $('optimizeLibraryButton').addEventListener('click', optimizeEntireLibrary);
+  document.querySelectorAll('.language-toggle button').forEach(button => button.addEventListener('click', () => changeLanguage(button.dataset.language)));
+  $('addWorkflowButton').addEventListener('click', addWorkflow);
+  $('importPackageButton').addEventListener('click', importPackage);
+  $('emptyAddButton').addEventListener('click', addWorkflow);
+  $('verifyButton').addEventListener('click', verifySelected);
+  $('confirmCancelButton').addEventListener('click', closeConfirm);
+  $('confirmProceedButton').addEventListener('click', proceedConfirm);
+  $('noticeList').addEventListener('click', copyMissingFilename);
+  $('confirmCopy').addEventListener('click', copyMissingFilename);
+  $('openArchiveButton').addEventListener('click', async () => { try { await callApi('open_archive_folder'); } catch (e) { toast(e.message, true); } });
+  $('copyLogsButton').addEventListener('click', async () => {
+    const text = [...$('processLog').querySelectorAll('.process-log-line')].map(row => row.textContent.trim()).join('\n');
+    try { await navigator.clipboard.writeText(text); toast(t('progress.copied')); } catch (_) { toast(t('progress.copy_failed'), true); }
+  });
+  $('cancelOperationButton').addEventListener('click', async () => {
+    const button = $('cancelOperationButton');
+    button.disabled = true;
+    button.textContent = t('progress.cancel_pending');
+    appendProcessLog(t('progress.cancel_requested'), 'info');
+    try { await window.pywebview?.api?.cancel_operation(); } catch (_) {}
+  });
+  document.querySelectorAll('.filter-chip').forEach(chip => chip.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(item => item.classList.remove('active'));
+    chip.classList.add('active'); app.filter = chip.dataset.filter; renderLibrary();
+  }));
+}
+
+function installResizeHandles() {
+  let drag = null;
+  let pending = false;
+  let latestSize = null;
+
+  async function applyLatestSize() {
+    if (pending || !latestSize || !window.pywebview?.api?.resize_window) return;
+    pending = true;
+    const next = latestSize;
+    latestSize = null;
+    try { await window.pywebview.api.resize_window(next.width, next.height, next.edge); }
+    finally {
+      pending = false;
+      if (latestSize) requestAnimationFrame(applyLatestSize);
+    }
+  }
+
+  document.querySelectorAll('.resize-handle').forEach(handle => {
+    handle.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      handle.setPointerCapture(event.pointerId);
+      drag = {
+        edge: handle.dataset.edge,
+        startX: event.screenX,
+        startY: event.screenY,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      };
+      event.preventDefault();
+    });
+    handle.addEventListener('pointermove', event => {
+      if (!drag || !handle.hasPointerCapture(event.pointerId)) return;
+      const dx = event.screenX - drag.startX;
+      const dy = event.screenY - drag.startY;
+      latestSize = {
+        edge: drag.edge,
+        width: drag.width + (drag.edge.includes('w') ? -dx : drag.edge.includes('e') ? dx : 0),
+        height: drag.height + (drag.edge.includes('n') ? -dy : drag.edge.includes('s') ? dy : 0),
+      };
+      requestAnimationFrame(applyLatestSize);
+    });
+    const stop = event => {
+      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+      drag = null;
+    };
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
+  });
+}
+
+function renderDemo() {
+  app.state = {
+    configured: true,
+    installation: {name:'Example ComfyUI', comfy_root:'C:\\AI\\ComfyUI', archive_root:'E:\\WorkflowArchive'},
+    validation: {comfy_free: 18930000000},
+    packages: [{name:'Minimax Music 3 — Text to Music', path:'E:\\WorkflowArchive\\Minimax Music 3.zip', archive_size:9427000000, complete:false, state:'archived', present_models:0, model_count:3, model_bytes:22016000000, modified:1,
+      models:[
+        {filename:'minimax_music3_dit_fp16.safetensors',kind:'diffusion_model',size:12600000000,present:false},
+        {filename:'minimax_music3_text_encoder_pruned_int8_convrot.safetensors',kind:'text_encoder',size:9200000000,present:false},
+        {filename:'minimax_music3_dav.safetensors',kind:'vae',size:216000000,present:false}],
+      missing:[{kind:'diffusion_model',name:'minimax_music3_dit_fp16.safetensors'}], custom_nodes:[{package:'ComfyUI-Pixaroma'}], workflow:{}}]
+  };
+  renderSummary(); app.selectedPath = app.state.packages[0].path; renderLibrary(); renderDetail(app.state.packages[0]);
+}
+
+installEvents();
+installResizeHandles();
+const demoParams = new URLSearchParams(location.search);
+if (demoParams.has('demo')) {
+  const demoLanguage = demoParams.get('lang') === 'de' ? 'de' : 'en';
+  fetch(`locales/${demoLanguage}.json`).then(response => response.json()).then(messages => {
+  installLocale({language: demoLanguage, messages});
+  renderDemo();
+  if (demoParams.has('loaded')) {
+    app.state.packages[0].state = 'loaded';
+    app.state.packages[0].present_models = app.state.packages[0].model_count;
+    renderLibrary();
+    renderDetail(app.state.packages[0]);
+  }
+  if (demoParams.has('workflowfile')) {
+    // Browser-only fixture: no native bridge and no filesystem changes.
+    window.pywebview = {api:{show_workflow_file:async () => ({ok:true, data:{
+      exists:false, token:'demo-json',
+      path:'J:/ComfyUI/user/default/workflows/My music collection/Minimax Music 3 - Text to Music.json',
+    }})}};
+    showSelectedWorkflowFile();
+  }
+  if (demoParams.has('dependencies')) {
+    // Browser-only UI fixture. It does not connect to files or the native API.
+    window.pywebview = {api:{scan_archive_dependencies:async () => ({ok:true, data:{
+      token:'demo', counts:{included:1, found:2, missing:1, ambiguous:1},
+      space_required:1048576, space_free:48000000000, warnings:[], parser_warnings:[], rows:[
+        {name:'qwen_image_vae.safetensors', kind:'vae', state:'included'},
+        {name:'qwen_2.5_vl_7b_fp8_scaled.safetensors', kind:'text_encoder', state:'found', source:'pool', pool:{package:'Qwen Image Edit.zip'}},
+        {name:'Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors', kind:'lora', state:'found', source:'local', local:{path:'J:/ComfyUI/models/loras/Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors'}},
+        {name:'qwen_image_2512_fp8_e4m3fn.safetensors', kind:'diffusion_model', state:'missing'},
+        {name:'portraits/identity-detail.safetensors', kind:'lora', state:'ambiguous', candidates:['Portrait collection.zip: aaaa…', 'Alternative portraits.zip: bbbb…']},
+      ],
+    }})}};
+    scanSelectedDependencies();
+  }
+  if (demoParams.has('loading')) {
+    app.state.loading = true;
+    app.state.packages = [];
+    app.scanProgress = {stage:'package', current:1, total:2, package:'Example_Image_Workflow.zip'};
+    applyState(app.state, null);
+  }
+  if (demoParams.has('maximized')) setMaximizedButton(true);
+  if (demoParams.has('verification')) {
+    const pkg = selectedPackage();
+    const value = demoParams.get('verification');
+    pkg.verification = {state:['verified', 'invalid', 'stale'].includes(value) ? value : 'unknown',
+      checked_at:'2026-09-03T10:15:00Z', persisted:true};
+    renderDetail(pkg);
+  }
+  if (demoParams.has('features')) {
+    app.state.packages.push({
+      name:'Qwen Image Edit', path:'E:\\WorkflowArchive\\Qwen Image Edit.zip',
+      archive_size:16300000000, complete:true, state:'loaded', present_models:2,
+      model_count:2, model_bytes:16300000000, modified:0,
+      models:[{filename:'qwen_image_edit_fp8.safetensors',kind:'diffusion_model',size:16300000000,present:true}],
+      missing:[], custom_nodes:[], workflow:{}
+    });
+    renderLibrary();
+    renderDetail(app.state.packages[0]);
+  }
+  if (demoParams.has('long')) {
+    const pkg = app.state.packages[0];
+    pkg.missing = [{kind:'lora', name:'Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors', reason:'nicht gefunden'}];
+    pkg.complete = false;
+    renderDetail(pkg);
+  }
+  if (demoParams.has('parser')) {
+    const pkg = app.state.packages[0];
+    pkg.parser_warnings = [
+      {code:'heuristic', node_type:'ExampleCustomLoader', node_id:'12', field:'widgets_values[0]', filename:'minimax_music3_dit_fp16.safetensors'},
+      {code:'path-mismatch', node_type:'VAELoader', node_id:'14', field:'widgets_values[0]', filename:'audio/alternative/minimax_music3_dav.safetensors'},
+    ];
+    renderDetail(pkg);
+  }
+  if (demoParams.has('removal')) {
+    const remaining = Array.from({length:12}, (_, i) => `C:\\AI\\ComfyUI\\models\\loras\\long-subfolder\\example-model-${i + 1}.safetensors`);
+    operationError({code:'removal_incomplete', details:{
+      removed:['C:\\AI\\ComfyUI\\models\\vae\\previous-model.safetensors'], remaining,
+      removal_issues:[{path:remaining[0], code:'file_locked'}],
+      restore:{dry_run:false, restored:['target-model.safetensors']},
+    }});
+  }
+  if (demoParams.has('export')) {
+    const pkg = selectedPackage();
+    const incomplete = demoParams.has('long');
+    showPortableExportPreview(pkg, {
+      output_path: 'E:\\Portable Workflows\\Workflows to share with friends\\Minimax Music 3 - Text to Music - portable.zip',
+      complete: !incomplete, missing: incomplete ? pkg.missing : [], blockers: [],
+      bytes_required: 22240000000, bytes_free: 48200000000,
+    });
+  }
+  if (demoParams.has('shared')) {
+    const pkg = selectedPackage();
+    const references = Array.from({length: demoParams.has('long') ? 8 : 2}, (_, index) =>
+      `C:\\AI\\ComfyUI\\user\\default\\workflows\\Music collection\\Another music workflow ${index + 1}.json`);
+    const candidates = pkg.models.slice(0, 2).map(model => ({
+      path: `C:\\AI\\ComfyUI\\models\\audio\\${model.filename}`, shared_by: references,
+    }));
+    pkg.models[0].library_shared_by = references.map((path, index) => ({name: `Music workflow ${index + 1}`, path: `E:\\Archive\\Music workflow ${index + 1}.zip`}));
+    pkg.models[0].archive_path = `models/diffusion_models/${pkg.models[0].filename}`;
+    renderDetail(pkg);
+    if (demoParams.get('shared') !== 'library') openConfirm({
+      eyebrow:t('restore.eyebrow'), title:t('restore.unload_title'), wide:true, danger:true,
+      copy:sharedFilesHtml(candidates), showShared:true, showIncomplete:demoParams.has('long'),
+      proceedLabel:t('restore.unload_proceed', {count:2}), action:async () => {},
+    });
+  }
+  if (demoParams.has('history')) {
+    renderHistoryEntries([
+      {timestamp:new Date().toISOString(), action:'switch', package:'Minimax Music 3 — Text to Music', detail:'Workflow gewechselt: 2 alte Dateien entladen', bytes:28600000000},
+      {timestamp:new Date(Date.now()-3600000).toISOString(), action:'import_load', package:'Qwen Image Edit', detail:'Paket importiert und in ComfyUI geladen', bytes:16300000000},
+      {timestamp:new Date(Date.now()-86400000).toISOString(), action:'archive', package:'Example Image Workflow', detail:'Workflow-Paket erstellt', bytes:31900000000}
+    ]);
+    $('historyModal').classList.remove('hidden');
+  } else if (demoParams.has('progress')) {
+    showBusy(t('pack.running'), t('pack.running_detail'));
+    window.workflowProgress({phase:'pack', log:true});
+    window.workflowProgress({phase:'pack', file:'minimax_music3_text_encoder_pruned_int8_convrot.safetensors', current:5140000000, total:9200000000, log:true});
+  } else if (demoParams.has('import')) {
+    openConfirm({
+      eyebrow:t('import.eyebrow'), title:t('import.title'), danger:false,
+      wide:true, proceedLabel:t('import.proceed'), showIncomplete:false,
+      copy:`<p>${t('import.copy', {package:'Minimax Music 3 — Text to Music'})}</p>
+        <div class="import-chain">
+          <div class="import-chain-row">${icon('check')}<span>${t('import.paths_ok')}<small>${t('import.paths_hint')}</small></span></div>
+          <div class="import-chain-row">${icon('check')}<span>${t('import.models_matched',{matched:3,total:3})}<small>${t('import.models_hint')}</small></span></div>
+          <div class="import-chain-row">${icon('shield')}<span>${t('import.manifest')}<small>${t('import.manifest_hint')}</small></span></div>
+        </div>
+        <div class="confirm-stat"><span>${t('import.extras')}</span><strong>0</strong></div>
+        <div class="confirm-stat"><span>${t('common.target')}</span><strong>E:\\WorkflowArchive\\Minimax Music 3.zip</strong></div>
+        <p>${t('import.replace_selected')}</p>
+        <div class="destination-heading"><span>${t('import.after')}</span><small>${t('import.choose_state')}</small></div>
+        <div class="import-destinations">
+          <label class="import-destination"><input type="radio" name="importDestination" checked><span class="destination-icon">${icon('shelf')}</span><span class="destination-copy"><strong>${t('import.seal_archive')}</strong><small>${t('import.seal_archive_hint')}</small><em>${t('import.temp_free',{needed:'13.34 GiB',free:'44.27 GiB'})}</em></span></label>
+          <label class="import-destination"><input type="radio" name="importDestination"><span class="destination-icon">${icon('drive')}</span><span class="destination-copy"><strong>${t('import.seal_load')}</strong><small>${t('import.seal_load_hint')}</small><em>${t('import.required_present',{required:'13.34 GiB',present:0})}</em></span></label>
+        </div>`
+    });
+  }
+  });
+} else {
+  beginNativeBootstrap();
+}

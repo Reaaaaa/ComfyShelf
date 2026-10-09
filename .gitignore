@@ -1,0 +1,64 @@
+# Local application state and machine-specific configuration
+.gui-state/
+.comfyshelf/
+config.json
+config.local.json
+*.local.json
+node-rules.local.json
+create_backup.*
+patch_app.py
+*.lnk
+*.log
+*.log.*
+
+# Credentials and local tooling
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.codex/
+.agents/
+.vscode/
+.idea/
+
+# Model data and archives never belong in this source repository
+models/
+archives/
+Portable Exports/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.onnx
+*.gguf
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.rar
+
+# Python / Node / build output
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+htmlcov/
+node_modules/
+build/
+dist/
+*.egg-info/
+
+# Temporary browser profiles, screenshots and OS metadata
+work/
+edge-*/
+*.tmp
+*.bak
+Thumbs.db
+Desktop.ini
+.DS_Store

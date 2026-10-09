@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ComfyShelf logo concept C — Flow</title>
+  <desc id="desc">Three staggered shelf rails and rounded cartridges suggesting a workflow moving through storage.</desc>
+  <rect x="28" y="28" width="456" height="456" rx="108" fill="#162126" stroke="#31504d" stroke-width="8"/>
+  <rect x="96" y="132" width="20" height="64" rx="10" fill="#426d68"/>
+  <rect x="142" y="143" width="274" height="42" rx="21" fill="#79afa7"/>
+  <rect x="128" y="224" width="20" height="64" rx="10" fill="#79afa7"/>
+  <rect x="174" y="235" width="230" height="42" rx="21" fill="#a8d0ca"/>
+  <rect x="96" y="316" width="20" height="64" rx="10" fill="#426d68"/>
+  <rect x="142" y="327" width="196" height="42" rx="21" fill="#79afa7"/>
+</svg>

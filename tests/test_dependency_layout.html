@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Dependency layout check</title>
+<style>html,body,iframe{width:100%;height:100%;margin:0;border:0;display:block;overflow:hidden}</style>
+<iframe title="ComfyShelf layout test" src="../gui/index.html?demo=1"></iframe>
+<script>
+// Local visual-test fixture only: change demo rows, never load the native bridge.
+const frame = document.querySelector('iframe');
+const count = Math.max(1, Math.min(40, Number(new URLSearchParams(location.search).get('count')) || 6));
+let attempts = 0;
+const ready = setInterval(() => {
+  const doc = frame.contentDocument;
+  const list = doc?.getElementById('modelList');
+  if (!list?.children.length) {
+    if (++attempts > 100) { clearInterval(ready); document.title = 'FAIL: demo did not load'; }
+    return;
+  }
+  clearInterval(ready);
+  const template = list.firstElementChild.cloneNode(true);
+  list.replaceChildren();
+  for (let i = 0; i < count; i++) {
+    const row = template.cloneNode(true);
+    row.querySelector('strong').textContent = `workflow-model-${i + 1}.safetensors`;
+    list.appendChild(row);
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const panel = list.closest('.dependency-panel');
+    const box = panel.getBoundingClientRect();
+    const bounds = list.getBoundingClientRect();
+    const style = frame.contentWindow.getComputedStyle(panel);
+    const checks = {
+      count, listHeight: list.clientHeight, contentHeight: list.scrollHeight,
+      scrolls: list.scrollHeight > list.clientHeight,
+      bottomGap: Math.round(box.bottom - bounds.bottom),
+      padding: style.padding,
+      fillsPanel: Math.abs(box.bottom - bounds.bottom - parseFloat(style.paddingBottom) - 1) < 2,
+      visibleHeight: list.clientHeight > 80,
+      noHorizontalOverflow: list.scrollWidth <= list.clientWidth,
+    };
+    document.body.dataset.result = JSON.stringify(checks);
+    document.title = checks.fillsPanel && checks.visibleHeight && checks.noHorizontalOverflow ? 'PASS: dependency layout' : 'FAIL: dependency layout';
+  }));
+}, 50);
+</script>
+</html>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ComfyShelf logo concept B — Switch</title>
+  <desc id="desc">Three workflow cartridges and shelf rails, with the active middle cartridge pulled out.</desc>
+  <rect x="28" y="28" width="456" height="456" rx="108" fill="#162126" stroke="#31504d" stroke-width="8"/>
+  <rect x="104" y="132" width="20" height="64" rx="10" fill="#426d68"/>
+  <rect x="150" y="143" width="226" height="42" rx="21" fill="#426d68"/>
+  <rect x="104" y="224" width="20" height="64" rx="10" fill="#79afa7"/>
+  <rect x="190" y="235" width="252" height="42" rx="21" fill="#a8d0ca"/>
+  <rect x="104" y="316" width="20" height="64" rx="10" fill="#426d68"/>
+  <rect x="150" y="327" width="190" height="42" rx="21" fill="#426d68"/>
+</svg>

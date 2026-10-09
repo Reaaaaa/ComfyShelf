@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "nodes": {
+    "ExampleCustomLoader": {
+      "ui": [
+        {"path": ["widgets_values", 0], "kind": "checkpoint", "categories": ["checkpoints"]},
+        {"path": ["properties", "adapters", "*", "filename"], "kind": "lora", "categories": ["loras"]}
+      ],
+      "api": [
+        {"path": ["inputs", "custom_model_path"], "kind": "diffusion_model", "categories": ["diffusion_models", "unet"]}
+      ]
+    }
+  }
+}

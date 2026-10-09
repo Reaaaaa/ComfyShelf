@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ComfyShelf logo concept A — Docked</title>
+  <desc id="desc">Three rounded workflow cartridges resting beside three short shelf rails.</desc>
+  <rect x="28" y="28" width="456" height="456" rx="108" fill="#162126" stroke="#31504d" stroke-width="8"/>
+  <rect x="112" y="132" width="20" height="64" rx="10" fill="#79afa7"/>
+  <rect x="158" y="143" width="242" height="42" rx="21" fill="#79afa7"/>
+  <rect x="112" y="224" width="20" height="64" rx="10" fill="#79afa7"/>
+  <rect x="158" y="235" width="184" height="42" rx="21" fill="#79afa7"/>
+  <rect x="112" y="316" width="20" height="64" rx="10" fill="#79afa7"/>
+  <rect x="158" y="327" width="278" height="42" rx="21" fill="#79afa7"/>
+</svg>
