@@ -57,6 +57,7 @@
   "detail.still_needed": "{size} still needed",
   "detail.currently_local_bytes": "{size} currently local",
   "detail.package_size_tooltip": "Package metadata: {size}",
+  "detail.preview_zoom": "Enlarge preview",
   "detail.saved_in_package": "saved in package",
   "detail.shared_pool": "deduplicated in shared pool",
   "detail.documented_only": "documented only",

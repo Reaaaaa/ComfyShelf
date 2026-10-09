@@ -432,6 +432,84 @@ function renderSummary() {
   $('freeSpace').textContent = formatBytes(validation?.comfy_free);
 }
 
+const thumbnailCache = new Map();
+
+function renderItemThumbHtml(item) {
+  if (thumbnailCache.has(item.path)) {
+    return `<img src="${escapeHtml(thumbnailCache.get(item.path))}" alt="">`;
+  }
+  if (item.has_thumbnail) {
+    return `<span class="thumb-pending" data-thumb-path="${escapeHtml(item.path)}">${icon('image')}</span>`;
+  }
+  return `<span class="thumb-empty">${icon('workflow')}</span>`;
+}
+
+async function loadVisibleThumbnails() {
+  const elements = document.querySelectorAll?.('[data-thumb-path]') || [];
+  for (const el of elements) {
+    const path = el.dataset?.thumbPath;
+    if (!path || thumbnailCache.has(path)) continue;
+    try {
+      const data = await callApi('get_archive_thumbnail', path);
+      if (data) {
+        thumbnailCache.set(path, data);
+        const current = document.querySelector?.(`[data-thumb-path="${escapeHtml(path)}"]`);
+        if (current) {
+          current.outerHTML = `<img src="${escapeHtml(data)}" alt="">`;
+        }
+      }
+    } catch (_) {}
+  }
+}
+
+function renderDetailThumbnail(pkg) {
+  const cover = $('heroCover');
+  const img = $('heroCoverImg');
+  if (!cover || !img) return Promise.resolve();
+  if (!pkg || !pkg.has_thumbnail) {
+    cover.classList.add('hidden');
+    img.src = '';
+    return Promise.resolve();
+  }
+  const cached = thumbnailCache.get(pkg.path);
+  if (cached) {
+    img.src = cached;
+    cover.classList.remove('hidden');
+    return Promise.resolve();
+  }
+  cover.classList.add('hidden');
+  return callApi('get_archive_thumbnail', pkg.path).then(data => {
+    if (data && app.selectedPath === pkg.path) {
+      thumbnailCache.set(pkg.path, data);
+      img.src = data;
+      cover.classList.remove('hidden');
+      const itemThumb = document.querySelector?.(`[data-thumb-path="${escapeHtml(pkg.path)}"]`);
+      if (itemThumb) {
+        itemThumb.outerHTML = `<img src="${escapeHtml(data)}" alt="">`;
+      }
+    }
+  }).catch(() => {});
+}
+
+function openLightbox() {
+  const pkg = selectedPackage();
+  const img = $('heroCoverImg');
+  if (!pkg || !img || !img.src) return;
+  const modalImg = $('lightboxImage');
+  const caption = $('lightboxCaption');
+  const modal = $('lightboxModal');
+  if (modalImg) modalImg.src = img.src;
+  if (caption) caption.textContent = pkg.name;
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeLightbox() {
+  const modal = $('lightboxModal');
+  if (modal) modal.classList.add('hidden');
+  const modalImg = $('lightboxImage');
+  if (modalImg) modalImg.src = '';
+}
+
 function stateLabel(state) {
   return t(`state.${state === 'loaded' ? 'loaded' : state === 'partial' ? 'partial' : 'archived'}`);
 }
@@ -451,8 +529,11 @@ function renderLibrary() {
   }
   rows.push(...packages.map(item => `
     <button class="workflow-item ${item.path === app.selectedPath ? 'active' : ''}" data-path="${escapeHtml(item.path)}" data-state="${item.state}">
-      <span class="workflow-name">${escapeHtml(item.name)}</span>
-      <span class="workflow-meta"><span class="workflow-state">${stateLabel(item.state)}</span><span title="${t('detail.model_size')}">${formatBytes(item.model_bytes)}</span></span>
+      <div class="workflow-item-thumb">${renderItemThumbHtml(item)}</div>
+      <div class="workflow-item-info">
+        <span class="workflow-name">${escapeHtml(item.name)}</span>
+        <span class="workflow-meta"><span class="workflow-state">${stateLabel(item.state)}</span><span title="${t('detail.model_size')}">${formatBytes(item.model_bytes)}</span></span>
+      </div>
     </button>`));
   if (app.filter === 'all' || app.filter === 'archived') rows.push(...(app.state.scan_warnings || []).map(item => `
     <div class="invalid-package" title="${t('errors.invalid_package')}"><strong>${escapeHtml(item.name)}</strong><span>${t('library.invalid')}</span></div>`));
@@ -462,16 +543,19 @@ function renderLibrary() {
     renderLibrary();
     renderDetail(app.state.packages.find(item => item.path === app.selectedPath));
   }));
+  loadVisibleThumbnails();
 }
 
 function renderDetail(pkg) {
   if (!pkg) {
     $('detailView').classList.add('hidden');
     $('emptyState').classList.remove('hidden');
+    renderDetailThumbnail(null);
     return;
   }
   $('emptyState').classList.add('hidden');
   $('detailView').classList.remove('hidden');
+  renderDetailThumbnail(pkg);
   $('packageName').textContent = pkg.name;
   $('packagePath').textContent = pkg.path;
   $('renameButton').disabled = false;
@@ -1301,6 +1385,16 @@ function installEvents() {
   $('deleteCloseButton').addEventListener('click', closeDeleteModal);
   $('deleteCancelButton').addEventListener('click', closeDeleteModal);
   $('deleteConfirmButton').addEventListener('click', confirmDeleteArchive);
+  $('heroCover')?.addEventListener('click', openLightbox);
+  $('lightboxCloseButton')?.addEventListener('click', closeLightbox);
+  $('lightboxModal')?.addEventListener('click', event => {
+    if (event.target === $('lightboxModal')) closeLightbox();
+  });
+  window.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !$('lightboxModal')?.classList.contains('hidden')) {
+      closeLightbox();
+    }
+  });
   $('settingsButton').addEventListener('click', () => openSettings(false));
   $('settingsCloseButton').addEventListener('click', closeSettings);
   $('settingsCancelButton').addEventListener('click', closeSettings);

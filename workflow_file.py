@@ -29,8 +29,8 @@ def _metadata(archive_path, comfy_root):
                          or any(c in p for c in '\\:<>"|?*')
                          or any(ord(c) < 32 for c in p)
                          or p.split(".")[0].upper() in engine._WINDOWS_RESERVED_STEMS
-                         for p in parts) or not name.lower().endswith(".json")):
-        raise ValueError("Invalid workflow JSON path in package manifest")
+                         for p in parts) or not (name.lower().endswith(".json") or name.lower().endswith(".png"))):
+        raise ValueError("Invalid workflow file path in package manifest")
     target = engine._safe_restore_target(comfy_root, name, "workflow")
     target.relative_to(comfy_root)
     entries = [entry for entry in manifest.get("files", [])
@@ -83,11 +83,14 @@ def restore(archive_path, comfy_root, token):
             or hashlib.sha256(payload).hexdigest() != entry.get("sha256")):
         raise WorkflowFileError("workflow_integrity", "Workflow JSON checksum or size mismatch")
     try:
-        data = json.loads(payload)
+        if name.lower().endswith(".png"):
+            data = engine.load_png_workflow_from_bytes(payload)
+        else:
+            data = json.loads(payload)
         if not isinstance(data, dict) or engine.workflow_format(data) == "unknown":
-            raise ValueError("Unsupported workflow JSON")
+            raise ValueError("Unsupported workflow")
     except (ValueError, UnicodeError) as exc:
-        raise WorkflowFileError("workflow_integrity", "Invalid workflow JSON") from exc
+        raise WorkflowFileError("workflow_integrity", "Invalid workflow file") from exc
     if inspect(archive_path, comfy_root)["token"] != token:
         raise WorkflowFileError("workflow_changed", "Package or destination changed; preview again")
     target.parent.mkdir(parents=True, exist_ok=True)

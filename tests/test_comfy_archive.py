@@ -791,6 +791,133 @@ class ParserTests(unittest.TestCase):
             self.assertTrue(pool_shared.exists())
             self.assertTrue(sibling_zip.exists())
 
+    def test_png_workflow_extraction_text_and_itxt(self):
+        import struct
+        import zlib
+
+        def make_png(meta, use_itxt=False, compress=False):
+            def chunk(t, d):
+                crc = zlib.crc32(t + d) & 0xffffffff
+                return struct.pack(">I", len(d)) + t + d + struct.pack(">I", crc)
+            chunks = [
+                b"\x89PNG\r\n\x1a\n",
+                chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)),
+            ]
+            for k, v in meta.items():
+                if use_itxt:
+                    kb, vb = k.encode("utf-8"), v.encode("utf-8")
+                    d = kb + b"\x00\x01\x00\x00\x00" + zlib.compress(vb) if compress else kb + b"\x00\x00\x00\x00\x00" + vb
+                    chunks.append(chunk(b"iTXt", d))
+                else:
+                    chunks.append(chunk(b"tEXt", k.encode("latin-1") + b"\x00" + v.encode("utf-8")))
+            chunks.extend([chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\xff")), chunk(b"IEND", b"")])
+            return b"".join(chunks)
+
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            # tEXt chunk
+            png_text = folder / "workflow_text.png"
+            png_text.write_bytes(make_png({"workflow": json.dumps({"nodes": [{"id": 1, "type": "CheckpointLoaderSimple"}]})}))
+            loaded1 = MODULE.load_workflow(png_text)
+            self.assertIn("nodes", loaded1)
+            self.assertEqual(MODULE.workflow_format(loaded1), "comfyui-ui-workflow")
+
+            # iTXt compressed chunk
+            png_itxt = folder / "workflow_itxt.png"
+            png_itxt.write_bytes(make_png({"prompt": json.dumps({"1": {"class_type": "KSampler", "inputs": {}}})}, use_itxt=True, compress=True))
+            loaded2 = MODULE.load_workflow(png_itxt)
+            self.assertIn("1", loaded2)
+            self.assertEqual(MODULE.workflow_format(loaded2), "comfyui-api-prompt")
+
+            # Non-PNG file
+            not_png = folder / "bad.png"
+            not_png.write_bytes(b"not a png image")
+            with self.assertRaises(ValueError):
+                MODULE.load_workflow(not_png)
+
+            # PNG without ComfyUI metadata
+            empty_png = folder / "empty.png"
+            empty_png.write_bytes(make_png({"Author": "Artist"}))
+            with self.assertRaises(ValueError):
+                MODULE.load_workflow(empty_png)
+
+    def test_png_workflow_packaging_and_thumbnail(self):
+        import struct
+        import zlib
+
+        def make_png(meta):
+            def chunk(t, d):
+                crc = zlib.crc32(t + d) & 0xffffffff
+                return struct.pack(">I", len(d)) + t + d + struct.pack(">I", crc)
+            chunks = [
+                b"\x89PNG\r\n\x1a\n",
+                chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)),
+            ]
+            for k, v in meta.items():
+                chunks.append(chunk(b"tEXt", k.encode("latin-1") + b"\x00" + v.encode("utf-8")))
+            chunks.extend([chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\xff")), chunk(b"IEND", b"")])
+            return b"".join(chunks)
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy_root = base / "ComfyUI"
+            archive_root = base / "Archive"
+            model_dir = comfy_root / "models" / "checkpoints"
+            wf_dir = comfy_root / "user" / "default" / "workflows"
+            model_dir.mkdir(parents=True)
+            wf_dir.mkdir(parents=True)
+            archive_root.mkdir()
+
+            model_file = model_dir / "base.safetensors"
+            model_file.write_bytes(b"model data")
+
+            png_file = wf_dir / "Art.png"
+            wf_content = {
+                "nodes": [
+                    {"id": 1, "type": "CheckpointLoaderSimple", "widgets_values": ["base.safetensors"]}
+                ]
+            }
+            png_file.write_bytes(make_png({"workflow": json.dumps(wf_content)}))
+
+            zip_pkg = archive_root / "Art.zip"
+            MODULE.build_package(png_file, comfy_root, zip_pkg, allow_missing=False, force=False)
+            self.assertTrue(zip_pkg.exists())
+
+            manifest = MODULE.load_package_manifest(zip_pkg)
+            self.assertEqual(manifest["thumbnail"], "user/default/workflows/Art.png")
+
+            thumb_data = MODULE.get_package_thumbnail(zip_pkg)
+            self.assertIsNotNone(thumb_data)
+            self.assertTrue(thumb_data.startswith("data:image/png;base64,"))
+
+    def test_json_workflow_companion_thumbnail(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy_root = base / "ComfyUI"
+            archive_root = base / "Archive"
+            model_dir = comfy_root / "models" / "checkpoints"
+            wf_dir = comfy_root / "user" / "default" / "workflows"
+            model_dir.mkdir(parents=True)
+            wf_dir.mkdir(parents=True)
+            archive_root.mkdir()
+
+            (model_dir / "model.safetensors").write_bytes(b"test")
+
+            json_file = wf_dir / "Design.json"
+            json_file.write_text(json.dumps({
+                "nodes": [{"id": 1, "type": "CheckpointLoaderSimple", "widgets_values": ["model.safetensors"]}]
+            }))
+            # Companion thumbnail image
+            (wf_dir / "Design.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+
+            zip_pkg = archive_root / "Design.zip"
+            MODULE.build_package(json_file, comfy_root, zip_pkg, allow_missing=False, force=False)
+            manifest = MODULE.load_package_manifest(zip_pkg)
+            self.assertEqual(manifest["thumbnail"], "thumbnail.png")
+
+            thumb_data = MODULE.get_package_thumbnail(zip_pkg)
+            self.assertIsNotNone(thumb_data)
+            self.assertTrue(thumb_data.startswith("data:image/png;base64,"))
 
 
 if __name__ == "__main__":

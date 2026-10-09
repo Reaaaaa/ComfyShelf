@@ -427,10 +427,76 @@ async function run(language) {
   assert.deepEqual(Array.from(context.deleteCalls[0]), ['E:/Archive/TestPackage.zip', true, true]);
   assert.equal(deleteElements.deleteModal.hidden, true);
   assert.ok(context.lastToast.message.includes('TestPackage'));
+
+  // Thumbnails render in list and detail hero, and lightbox opens and closes.
+  const heroCover = {classList: {add(){ heroCover.hidden = true; }, remove(){ heroCover.hidden = false; }}, hidden: true};
+  const heroCoverImg = {src: ''};
+  const lightboxModal = {classList: {add(){ lightboxModal.hidden = true; }, remove(){ lightboxModal.hidden = false; }}, hidden: true};
+  const lightboxImage = {src: ''};
+  const lightboxCaption = {textContent: ''};
+  const workflowList = {innerHTML: '', querySelectorAll(){ return []; }};
+  const thumbElements = {
+    heroCover, heroCoverImg, lightboxModal, lightboxImage, lightboxCaption, workflowList,
+    detailView: {classList: {add(){}, remove(){}}},
+    emptyState: {classList: {add(){}, remove(){}}},
+    packageName: {textContent: ''},
+    packagePath: {textContent: ''},
+    renameButton: {disabled: false},
+    modelCount: {textContent: ''},
+    modelPresence: {textContent: ''},
+    modelSize: {textContent: ''},
+    storageImpactLabel: {textContent: ''},
+    heroMetric: {title: ''},
+    modelStorageMode: {textContent: ''},
+    modelStorageLabel: {textContent: ''},
+    customNodeCount: {textContent: ''},
+    statusPill: {className: ''},
+    statusRail: {className: ''},
+    modelList: {innerHTML: ''},
+    noticeList: {innerHTML: ''},
+    customNodeList: {innerHTML: ''},
+    primaryActionButton: {innerHTML: ''},
+    secondaryActionButton: {innerHTML: '', classList: {add(){}, remove(){}}},
+    storageButton: {innerHTML: '', classList: {toggle(){}}},
+    showWorkflowFileButton: {disabled: false},
+  };
+  context.document.getElementById = id => thumbElements[id] || {classList: {add(){}, remove(){}, toggle(){}, contains(){ return false; }}, addEventListener(){}};
+  context.thumbCalls = [];
+  vm.runInContext(`
+    window.pywebview.api.get_archive_thumbnail = async (path) => {
+      thumbCalls.push(path);
+      return {ok: true, data: 'data:image/png;base64,samplethumb'};
+    };
+    app.state = {
+      configured: true,
+      packages: [
+        {name: 'WithThumb', path: 'E:/Archive/WithThumb.zip', has_thumbnail: true, state: 'archived', model_bytes: 100, models: []},
+        {name: 'NoThumb', path: 'E:/Archive/NoThumb.zip', has_thumbnail: false, state: 'archived', model_bytes: 200, models: []}
+      ]
+    };
+    app.selectedPath = 'E:/Archive/WithThumb.zip';
+    renderLibrary();
+  `, context);
+  assert.ok(workflowList.innerHTML.includes('thumb-pending'));
+  assert.ok(workflowList.innerHTML.includes('thumb-empty'));
+
+  vm.runInContext('renderDetail(app.state.packages[0])', context);
+  await vm.runInContext('renderDetailThumbnail(app.state.packages[0])', context);
+  assert.equal(heroCover.hidden, false);
+  assert.equal(heroCoverImg.src, 'data:image/png;base64,samplethumb');
+
+  vm.runInContext('openLightbox()', context);
+  assert.equal(lightboxModal.hidden, false);
+  assert.equal(lightboxImage.src, 'data:image/png;base64,samplethumb');
+  assert.equal(lightboxCaption.textContent, 'WithThumb');
+
+  vm.runInContext('closeLightbox()', context);
+  assert.equal(lightboxModal.hidden, true);
+  assert.equal(lightboxImage.src, '');
 }
 
 (async () => {
   await run('en');
   await run('de');
-  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export and archive deletion modal.');
+  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, and PNG thumbnails with lightbox.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

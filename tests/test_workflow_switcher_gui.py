@@ -362,6 +362,15 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
             discard.assert_called_once_with(archive)
             record_hist.assert_called_once()
 
+    def test_get_archive_thumbnail_api(self):
+        api = GUI.WorkflowSwitcherApi()
+        archive = Path("C:/Archive/Art.zip")
+        with patch.object(GUI.engine, "get_package_thumbnail", return_value="data:image/png;base64,mocked") as get_thumb:
+            res = api.get_archive_thumbnail(str(archive))
+            self.assertTrue(res["ok"])
+            self.assertEqual(res["data"], "data:image/png;base64,mocked")
+            get_thumb.assert_called_once_with(archive)
+
 
 if __name__ == "__main__":
     unittest.main()

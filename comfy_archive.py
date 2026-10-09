@@ -4,15 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from datetime import datetime, timezone
 import hashlib
 import json
 import os
 import shutil
 import stat
+import struct
 import sys
 import tempfile
 import zipfile
+import zlib
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
@@ -336,7 +339,78 @@ class CustomNode:
     revision: str | None
 
 
+def read_png_metadata(data: bytes) -> dict[str, str]:
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("Keine gültige PNG-Datei.")
+    offset = 8
+    metadata: dict[str, str] = {}
+    data_len = len(data)
+    while offset + 8 <= data_len:
+        length, chunk_type = struct.unpack(">I4s", data[offset:offset+8])
+        offset += 8
+        if offset + length > data_len:
+            break
+        chunk_data = data[offset:offset+length]
+        offset += length + 4  # skip CRC
+        if chunk_type == b"tEXt":
+            parts = chunk_data.split(b"\x00", 1)
+            if len(parts) == 2:
+                key = parts[0].decode("latin-1", "replace")
+                try:
+                    val = parts[1].decode("utf-8")
+                except UnicodeDecodeError:
+                    val = parts[1].decode("latin-1", "replace")
+                metadata[key] = val
+        elif chunk_type == b"iTXt":
+            parts = chunk_data.split(b"\x00", 1)
+            if len(parts) == 2:
+                key = parts[0].decode("utf-8", "replace")
+                remainder = parts[1]
+                if len(remainder) >= 2:
+                    compression_flag = remainder[0]
+                    null1 = remainder.find(b"\x00", 2)
+                    if null1 != -1:
+                        null2 = remainder.find(b"\x00", null1 + 1)
+                        if null2 != -1:
+                            text_bytes = remainder[null2 + 1:]
+                            if compression_flag == 1:
+                                try:
+                                    text_bytes = zlib.decompress(text_bytes)
+                                except Exception:
+                                    continue
+                            metadata[key] = text_bytes.decode("utf-8", "replace")
+        elif chunk_type == b"IEND":
+            break
+    return metadata
+
+
+def load_png_workflow_from_bytes(raw_bytes: bytes) -> dict[str, Any]:
+    metadata = read_png_metadata(raw_bytes)
+    target_raw = metadata.get("workflow") or metadata.get("prompt")
+    if not target_raw:
+        raise ValueError("In der PNG-Datei wurden keine ComfyUI-Metadaten ('workflow' oder 'prompt') gefunden.")
+    try:
+        data = json.loads(target_raw)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ValueError(f"Ungültige JSON-Metadaten im PNG-Bild ({exc})") from exc
+    if not isinstance(data, dict):
+        raise ValueError("Die extrahierten Workflow-Metadaten müssen ein JSON-Objekt sein.")
+    return data
+
+
+def load_png_workflow(path: Path) -> dict[str, Any]:
+    try:
+        raw_bytes = path.read_bytes()
+    except FileNotFoundError as exc:
+        raise ValueError(f"Workflow nicht gefunden: {path}") from exc
+    except OSError as exc:
+        raise ValueError(f"PNG-Datei konnte nicht gelesen werden: {exc}") from exc
+    return load_png_workflow_from_bytes(raw_bytes)
+
+
 def load_workflow(path: Path) -> dict[str, Any]:
+    if path.suffix.casefold() == ".png":
+        return load_png_workflow(path)
     try:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
     except FileNotFoundError as exc:
@@ -1069,6 +1143,29 @@ def build_package(
             )
             archive_paths.add(workflow_arc.casefold())
 
+            if workflow_path.suffix.casefold() == ".png":
+                manifest["thumbnail"] = workflow_arc
+            else:
+                companion = None
+                for ext in (".png", ".jpg", ".jpeg", ".webp"):
+                    cand = workflow_path.with_suffix(ext)
+                    if cand.is_file():
+                        companion = cand
+                        break
+                if not companion:
+                    for name in ("cover.png", "thumbnail.png", "cover.jpg", "thumbnail.jpg", "cover.webp", "thumbnail.webp"):
+                        cand = workflow_path.parent / name
+                        if cand.is_file():
+                            companion = cand
+                            break
+                if companion:
+                    thumb_arc = f"thumbnail{companion.suffix.lower()}"
+                    manifest["thumbnail"] = thumb_arc
+                    manifest["files"].append(
+                        _add_file_to_zip(archive, companion, thumb_arc, "thumbnail", progress)
+                    )
+                    archive_paths.add(thumb_arc.casefold())
+
             for asset in report["assets"]:
                 entry = {
                     "kind": asset["kind"],
@@ -1227,7 +1324,7 @@ def _workflow_data_from_import(
     candidates = [
         member
         for key, member in members.items()
-        if key.endswith(".json")
+        if (key.endswith(".json") or key.endswith(".png"))
         and key != "comfy-package.json"
         and key.startswith("user/")
         and "/workflows/" in key
@@ -1241,15 +1338,18 @@ def _workflow_data_from_import(
             )
         preferred = candidates[0]
     if preferred.info.file_size > 64 * 1024 * 1024:
-        raise ValueError("Die Workflow-JSON ist ungewöhnlich groß und wird nicht importiert.")
-    try:
-        data = json.loads(archive.read(preferred.info).decode("utf-8-sig"))
-    except UnicodeDecodeError as exc:
-        raise ValueError("Die Workflow-JSON ist nicht als UTF-8 lesbar.") from exc
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Ungültige Workflow-JSON im Paket ({exc})") from exc
+        raise ValueError("Die Workflow-Datei ist ungewöhnlich groß und wird nicht importiert.")
+    if preferred.path.casefold().endswith(".png"):
+        data = load_png_workflow_from_bytes(archive.read(preferred.info))
+    else:
+        try:
+            data = json.loads(archive.read(preferred.info).decode("utf-8-sig"))
+        except UnicodeDecodeError as exc:
+            raise ValueError("Die Workflow-JSON ist nicht als UTF-8 lesbar.") from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Ungültige Workflow-JSON im Paket ({exc})") from exc
     if not isinstance(data, dict):
-        raise ValueError("Die oberste Workflow-JSON-Struktur muss ein Objekt sein.")
+        raise ValueError("Die oberste Workflow-Struktur muss ein Objekt sein.")
     return preferred, data, old_manifest
 
 
@@ -2435,6 +2535,59 @@ def delete_package_archive(
         "orphaned_deleted_bytes": sum(m["size"] for m in deleted_orphans),
     }
 
+
+def get_package_thumbnail(archive_path: Path, max_bytes: int = 15 * 1024 * 1024) -> str | None:
+    """Extract a thumbnail/cover preview data URI from a package ZIP."""
+    if not archive_path.is_file():
+        return None
+    try:
+        with zipfile.ZipFile(archive_path, "r") as archive:
+            namelist = archive.namelist()
+            names_by_lower = {name.casefold(): name for name in namelist}
+
+            target_entry = None
+            try:
+                manifest = json.loads(archive.read("comfy-package.json"))
+                thumb = manifest.get("thumbnail")
+                if thumb and thumb.casefold() in names_by_lower:
+                    target_entry = names_by_lower[thumb.casefold()]
+            except Exception:
+                pass
+
+            if not target_entry:
+                for candidate in (
+                    "thumbnail.png", "workflow.png", "cover.png",
+                    "thumbnail.jpg", "cover.jpg", "thumbnail.webp", "cover.webp"
+                ):
+                    if candidate.casefold() in names_by_lower:
+                        target_entry = names_by_lower[candidate.casefold()]
+                        break
+
+            if not target_entry:
+                for name in namelist:
+                    lower = name.casefold()
+                    if lower.endswith((".png", ".jpg", ".jpeg", ".webp")) and not lower.startswith(".comfyshelf/"):
+                        target_entry = name
+                        break
+
+            if not target_entry:
+                return None
+
+            info = archive.getinfo(target_entry)
+            if info.file_size > max_bytes:
+                return None
+
+            raw = archive.read(target_entry)
+            ext = Path(target_entry).suffix.casefold()
+            mime = "image/png"
+            if ext in (".jpg", ".jpeg"):
+                mime = "image/jpeg"
+            elif ext == ".webp":
+                mime = "image/webp"
+            encoded = base64.b64encode(raw).decode("ascii")
+            return f"data:{mime};base64,{encoded}"
+    except Exception:
+        return None
 
 
 def _safe_model_target(comfy_root: Path, archive_path: str) -> Path:

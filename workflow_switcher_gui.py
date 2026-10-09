@@ -398,7 +398,12 @@ class WorkflowSwitcherApi:
                 webview.FileDialog.OPEN,
                 directory=initial,
                 allow_multiple=False,
-                file_types=("ComfyUI Workflow (*.json)",),
+                file_types=(
+                    "ComfyUI Workflows (*.json;*.png)",
+                    "ComfyUI Workflow (*.json)",
+                    "ComfyUI Image (*.png)",
+                    "All files (*.*)",
+                ),
             )
             return selected[0] if selected else None
 
@@ -625,6 +630,14 @@ class WorkflowSwitcherApi:
                     "workflow": manifest.get("workflow", {}),
                     "storage_mode": manifest.get("storage_mode", "embedded-portable"),
                     "deduplicated": manifest.get("storage_mode") == "shared-object-pool",
+                    "has_thumbnail": bool(
+                        manifest.get("thumbnail")
+                        or any(
+                            f.get("role") == "thumbnail"
+                            or Path(str(f.get("path", ""))).suffix.casefold() in {".png", ".jpg", ".jpeg", ".webp"}
+                            for f in manifest.get("files", [])
+                        )
+                    ),
                     "verification": verification_cache.status(archive_path, manifest, verification_stamps),
                 }
             )
@@ -740,6 +753,12 @@ class WorkflowSwitcherApi:
                 detail += f' (+ {result["orphaned_deleted_count"]} verwaiste Modelle)'
             self._record_history("delete", result["name"], detail)
             return result
+
+        return self._result(action)
+
+    def get_archive_thumbnail(self, archive_path: str) -> dict[str, Any]:
+        def action() -> str | None:
+            return engine.get_package_thumbnail(Path(archive_path))
 
         return self._result(action)
 

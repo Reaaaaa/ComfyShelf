@@ -4,7 +4,7 @@
 
 # ComfyShelf
 
-[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 163 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](#get-started-on-windows) [![Platform: Windows preview](docs/assets/windows-preview.svg)](#get-started-on-windows)
+[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 167 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](#get-started-on-windows) [![Platform: Windows preview](docs/assets/windows-preview.svg)](#get-started-on-windows)
 
 <sub>Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.</sub>
 
@@ -22,6 +22,8 @@ archived copy instead of filling your archive drive with duplicates.
 [User guide (English)](docs/guide.en.md) · [Deutsche Anleitung](docs/guide.de.md)
 
 ## What can I do with it?
+
+- Load and archive workflows directly from `.json` files or `.png` images with embedded metadata and visual thumbnails.
 
 - Archive the files detected in a workflow: models, VAEs, LoRAs, text encoders and
   other supported model files.
