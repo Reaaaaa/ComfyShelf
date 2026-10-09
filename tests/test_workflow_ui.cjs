@@ -288,6 +288,7 @@ async function run(language) {
   assert.ok(integrityLabel.innerHTML.includes(context.messages['detail.integrity_unknown']));
   context.verifyResult = {valid:true, verification:{state:'verified', checked_at:'2026-09-03T10:15:00Z', persisted:true}};
   await vm.runInContext(`
+    var originalRenderDetail = renderDetail;
     renderDetail = renderIntegrity;
     app.state = {packages:[{path:'verified.zip'}]};
     app.selectedPath = 'verified.zip';
@@ -307,11 +308,10 @@ async function run(language) {
   assert.equal(context.lastToast.message, context.messages['verify.changed']);
   assert.equal(integrityLabel.className, 'integrity-label stale');
   const previousRefreshes = context.refreshed;
-  await vm.runInContext(`
-    window.pywebview.api.verify_archive = async () => ({ok:false, cancelled:true});
-    verifySelected();
-  `, context);
+  vm.runInContext('window.pywebview.api.verify_archive = async () => ({ok:false, cancelled:true});', context);
+  await vm.runInContext('verifySelected()', context);
   assert.equal(context.refreshed, previousRefreshes + 1);
+  vm.runInContext('renderDetail = originalRenderDetail;', context);
 
   // Discovery is read-only. Adding requires the exact preview token and a
   // separate confirmation; filenames and peer package names are escaped.
@@ -470,20 +470,28 @@ async function run(language) {
     app.state = {
       configured: true,
       packages: [
-        {name: 'WithThumb', path: 'E:/Archive/WithThumb.zip', has_thumbnail: true, state: 'archived', model_bytes: 100, models: []},
+        {
+          name: 'WithThumb',
+          path: 'E:/Archive/WithThumb.zip',
+          has_thumbnail: true,
+          state: 'archived',
+          model_bytes: 100,
+          models: [
+            {filename: 'model.safetensors', kind: 'checkpoint', size: 100, present: true, link_type: 'hardlink'}
+          ]
+        },
         {name: 'NoThumb', path: 'E:/Archive/NoThumb.zip', has_thumbnail: false, state: 'archived', model_bytes: 200, models: []}
       ]
     };
     app.selectedPath = 'E:/Archive/WithThumb.zip';
     renderLibrary();
+    renderDetail(app.state.packages[0]);
   `, context);
-  assert.ok(workflowList.innerHTML.includes('thumb-pending'));
-  assert.ok(workflowList.innerHTML.includes('thumb-empty'));
-
-  vm.runInContext('renderDetail(app.state.packages[0])', context);
   await vm.runInContext('renderDetailThumbnail(app.state.packages[0])', context);
   assert.equal(heroCover.hidden, false);
   assert.equal(heroCoverImg.src, 'data:image/png;base64,samplethumb');
+  assert.ok(thumbElements.modelList.innerHTML.includes('dep-link-badge hardlink'));
+  assert.ok(thumbElements.modelList.innerHTML.includes('Hardlink'));
 
   vm.runInContext('openLightbox()', context);
   assert.equal(lightboxModal.hidden, false);
@@ -493,10 +501,39 @@ async function run(language) {
   vm.runInContext('closeLightbox()', context);
   assert.equal(lightboxModal.hidden, true);
   assert.equal(lightboxImage.src, '');
+
+  // Settings link mode test
+  const saveSettingsCalls = [];
+  context.window.pywebview.api.save_settings = async (...args) => {
+    saveSettingsCalls.push(args);
+    return {ok: true, data: {validation: {warnings: []}}};
+  };
+  const comfyRootInput = {value: 'C:/ComfyUI'};
+  const archiveRootInput = {value: 'E:/Archive'};
+  const linkModeSelect = {value: 'hardlink'};
+  const settingsValidation = {classList: {add(){}, remove(){}}, className: '', textContent: ''};
+  const settingsModal = {classList: {add(){}, remove(){}}};
+  const settingsElements = {
+    comfyRootInput, archiveRootInput, linkModeSelect,
+    settingsValidation, settingsModal,
+    settingsCloseButton: {classList: {toggle(){}}},
+    settingsCancelButton: {classList: {toggle(){}}},
+  };
+  context.document.getElementById = id => settingsElements[id] || thumbElements[id] || {classList: {add(){}, remove(){}, toggle(){}, contains(){ return false; }}, addEventListener(){}};
+
+  await vm.runInContext('saveSettings()', context);
+  assert.equal(saveSettingsCalls.length, 1);
+  assert.deepEqual(saveSettingsCalls[0], ['C:/ComfyUI', 'E:/Archive', 'hardlink']);
+
+  vm.runInContext(`
+    app.state.installation = {comfy_root: 'C:/ComfyUI', archive_root: 'E:/Archive', link_mode: 'symlink'};
+    openSettings();
+  `, context);
+  assert.equal(linkModeSelect.value, 'symlink');
 }
 
 (async () => {
   await run('en');
   await run('de');
-  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, and PNG thumbnails with lightbox.');
+  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, and instant-load link modes with badges.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

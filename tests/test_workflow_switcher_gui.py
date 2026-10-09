@@ -6,6 +6,7 @@ import time
 import types
 import unittest
 import json
+import zipfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -370,6 +371,58 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
             self.assertTrue(res["ok"])
             self.assertEqual(res["data"], "data:image/png;base64,mocked")
             get_thumb.assert_called_once_with(archive)
+
+    def test_save_settings_persists_link_mode(self):
+        api = GUI.WorkflowSwitcherApi()
+        with patch.object(GUI.engine, "set_installation_config", return_value=({}, {"valid": True, "errors": [], "warnings": []}, Path("C:/config.json"))) as mock_set, \
+             patch.object(GUI.engine, "active_installation", return_value={"id": "default", "comfy_root": "C:/ComfyUI", "archive_root": "E:/Archive", "link_mode": "hardlink"}):
+            res = api.save_settings("C:/ComfyUI", "E:/Archive", "hardlink")
+            self.assertTrue(res["ok"])
+            mock_set.assert_called_once_with(
+                "default",
+                "ComfyUI",
+                Path("C:/ComfyUI"),
+                Path("E:/Archive"),
+                link_mode="hardlink"
+            )
+
+    def test_scan_packages_detects_link_type(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy = base / "Comfy"
+            archive_dir = base / "Archive"
+            comfy.mkdir()
+            archive_dir.mkdir()
+            model_dest = comfy / "models" / "checkpoints" / "model.safetensors"
+            model_dest.parent.mkdir(parents=True)
+            model_dest.write_bytes(b"pool-object-data")
+
+            pool_obj = archive_dir / ".comfyshelf" / "objects" / "sha256" / "12" / "123456"
+            pool_obj.parent.mkdir(parents=True)
+            # Create a hardlink from pool_obj to model_dest
+            try:
+                os.link(model_dest, pool_obj)
+            except OSError:
+                # If linking is not supported on the test environment, skip
+                return
+
+            manifest = {
+                "manifest_version": 2,
+                "package_type": "comfyui-workflow-overlay",
+                "name": "LinkedFlow",
+                "storage_mode": "shared-object-pool",
+                "files": [
+                    {"path": "models/checkpoints/model.safetensors", "role": "model", "sha256": "123456", "size": len(b"pool-object-data")}
+                ]
+            }
+
+            archive_zip = archive_dir / "LinkedFlow.zip"
+            with zipfile.ZipFile(archive_zip, "w") as zf:
+                zf.writestr("comfy-package.json", json.dumps(manifest))
+
+            packages = GUI.WorkflowSwitcherApi._scan_packages(comfy, archive_dir)
+            self.assertEqual(len(packages), 1)
+            self.assertEqual(packages[0]["models"][0]["link_type"], "hardlink")
 
 
 if __name__ == "__main__":

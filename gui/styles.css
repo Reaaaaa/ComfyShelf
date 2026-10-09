@@ -598,3 +598,63 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outl
   color: var(--text-soft);
   text-align: center;
 }
+
+.link-mode-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 16px;
+  padding: 12px 14px;
+  background: #141b1f;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.link-mode-setting > span strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+.link-mode-setting > span small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.select-field {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #192329;
+  border: 1px solid var(--line);
+  color: var(--text-soft);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s ease;
+}
+.select-field:focus {
+  border-color: var(--teal);
+}
+.select-field option {
+  background: #192329;
+  color: var(--text-soft);
+}
+.dep-link-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  background: rgba(66, 109, 104, 0.25);
+  color: #79c5bb;
+  border: 1px solid rgba(121, 197, 187, 0.35);
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.dep-link-badge.symlink {
+  background: rgba(147, 112, 219, 0.22);
+  color: #bfa4e8;
+  border-color: rgba(191, 164, 232, 0.35);
+}

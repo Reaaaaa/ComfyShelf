@@ -582,7 +582,7 @@ function renderDetail(pkg) {
   $('modelList').innerHTML = pkg.models.length ? pkg.models.map(model => `
     <div class="dependency-row">
       <span class="dep-state ${model.present ? 'present' : ''}">${icon(model.present ? 'check' : 'download')}</span>
-      <span class="dep-copy"><strong title="${escapeHtml(model.filename)}">${escapeHtml(model.filename)}</strong><span>${escapeHtml(model.kind.replaceAll('_', ' '))} · ${t(model.present ? 'detail.model_present' : 'detail.model_archived')}</span></span>
+      <span class="dep-copy"><strong title="${escapeHtml(model.filename)}">${escapeHtml(model.filename)}</strong><span>${escapeHtml(model.kind.replaceAll('_', ' '))} · ${t(model.present ? 'detail.model_present' : 'detail.model_archived')}${model.present && model.link_type && model.link_type !== 'copy' ? ` · <span class="dep-link-badge ${model.link_type}">${model.link_type === 'hardlink' ? '⚡ ' + t('detail.link_hardlink') : '🔗 ' + t('detail.link_symlink')}</span>` : ''}</span></span>
       <span class="dep-size">${formatBytes(model.size)}</span>
     </div>`).join('') : `<div class="workflow-list-empty">${t('detail.no_models')}</div>`;
 
@@ -662,6 +662,7 @@ function openSettings(required = false) {
   const installation = app.state?.installation;
   $('comfyRootInput').value = installation?.comfy_root || '';
   $('archiveRootInput').value = installation?.archive_root || '';
+  if ($('linkModeSelect')) $('linkModeSelect').value = installation?.link_mode || 'auto';
   $('settingsValidation').classList.add('hidden');
   $('settingsCloseButton').classList.toggle('hidden', required);
   $('settingsCancelButton').classList.toggle('hidden', required);
@@ -679,6 +680,7 @@ async function browseFolder(kind) {
 async function saveSettings() {
   const comfy = $('comfyRootInput').value.trim();
   const archive = $('archiveRootInput').value.trim();
+  const linkMode = $('linkModeSelect')?.value || 'auto';
   const box = $('settingsValidation');
   if (!comfy || !archive) {
     box.textContent = t('settings.choose_both');
@@ -687,7 +689,7 @@ async function saveSettings() {
   }
   showBusy(t('settings.checking'), t('settings.checking_detail'), false);
   try {
-    const result = await callApi('save_settings', comfy, archive);
+    const result = await callApi('save_settings', comfy, archive, linkMode);
     hideBusy();
     const warnings = result.validation.warnings || [];
     if (warnings.length) {
@@ -1086,6 +1088,7 @@ async function previewPackageAction(actionName) {
       ${shared ? sharedFilesHtml(preview.candidates) : ''}
       <div class="confirm-stat"><span>${t(isRestore ? 'restore.restorable' : 'restore.unloadable')}</span><strong>${count}</strong></div>
       <div class="confirm-stat"><span>${t(isRestore ? 'restore.required' : 'restore.reclaimed')}</span><strong>${formatBytes(bytes)}</strong></div>
+      ${isRestore && preview.bytes_linkable ? `<div class="confirm-stat"><span>${t('restore.instant_link')}</span><strong>${formatBytes(preview.bytes_linkable)} (${t('restore.zero_storage')})</strong></div>` : ''}
       <div class="confirm-stat"><span>${t('common.conflicts')}</span><strong>${conflictCount}</strong></div>
       ${removalIssuesHtml(preview.removal_issues)}
       ${!isRestore && preview.pool_preparation_required ? `<p>${t('restore.pool_prepare')}</p>` : ''}`;

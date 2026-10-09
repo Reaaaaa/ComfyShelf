@@ -423,23 +423,24 @@ class WorkflowSwitcherApi:
 
         return self._result(action)
 
-    def save_settings(self, comfy_root: str, archive_root: str) -> dict[str, Any]:
+    def save_settings(self, comfy_root: str, archive_root: str, link_mode: str = "auto") -> dict[str, Any]:
         def action() -> dict[str, Any]:
-            result = self._save_settings(Path(comfy_root), Path(archive_root))
+            result = self._save_settings(Path(comfy_root), Path(archive_root), link_mode)
             with self._state_lock:
                 self._state_cache = None
-            LOGGER.info("ComfyUI and archive paths saved")
+            LOGGER.info("ComfyUI and archive paths saved (link_mode=%s)", link_mode)
             return result
 
         return self._result(action)
 
     @staticmethod
-    def _save_settings(comfy_root: Path, archive_root: Path) -> dict[str, Any]:
+    def _save_settings(comfy_root: Path, archive_root: Path, link_mode: str = "auto") -> dict[str, Any]:
         _, validation, saved = engine.set_installation_config(
             "default",
             "ComfyUI",
             comfy_root,
             archive_root,
+            link_mode=link_mode,
         )
         return {"validation": validation, "config_path": str(saved)}
 
@@ -581,9 +582,15 @@ class WorkflowSwitcherApi:
             models: list[dict[str, Any]] = []
             present = 0
             for entry in model_files:
+                link_type = None
                 try:
                     target = engine._safe_model_target(comfy_root, str(entry["path"]))
                     exists = target.is_file() and target.stat().st_size == int(entry.get("size", -1))
+                    if exists:
+                        stat_val = target.stat()
+                        is_sym = target.is_symlink()
+                        is_hard = not is_sym and getattr(stat_val, "st_nlink", 1) > 1
+                        link_type = "symlink" if is_sym else ("hardlink" if is_hard else "copy")
                 except (OSError, ValueError):
                     target = comfy_root / str(entry.get("path", ""))
                     exists = False
@@ -602,6 +609,7 @@ class WorkflowSwitcherApi:
                         "sha256": entry.get("sha256"),
                         "detection": asset.get("detection"),
                         "resolution": asset.get("resolution"),
+                        "link_type": link_type,
                     }
                 )
             if not model_files or present == len(model_files):
@@ -886,6 +894,7 @@ class WorkflowSwitcherApi:
             installation = engine.active_installation()
             if not installation:
                 raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
+            link_mode = str(installation.get("link_mode") or "auto")
             result = engine.import_package(
                 Path(archive_path),
                 Path(installation["comfy_root"]),
@@ -894,6 +903,7 @@ class WorkflowSwitcherApi:
                 force,
                 load_after_import,
                 progress=self._progress,
+                link_mode=link_mode,
             )
             storage = engine.deduplicate_package(Path(result["output_path"]), self._progress)
             result["storage"] = storage
@@ -1069,6 +1079,7 @@ class WorkflowSwitcherApi:
             if item["path"].casefold() != str(archive_path.resolve()).casefold()
             and item["state"] in {"loaded", "partial"}
         ]
+        link_mode = str(installation.get("link_mode") or "auto")
         return engine.switch_package(
             archive_path,
             other_archives,
@@ -1077,6 +1088,7 @@ class WorkflowSwitcherApi:
             allow_incomplete,
             allow_shared,
             self._progress,
+            link_mode=link_mode,
         )
 
     @staticmethod
@@ -1093,8 +1105,9 @@ class WorkflowSwitcherApi:
             raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
         comfy_root = Path(installation["comfy_root"])
         if action_name == "restore":
+            link_mode = str(installation.get("link_mode") or "auto")
             return engine.restore_package(
-                archive_path, comfy_root, confirm, allow_incomplete, progress
+                archive_path, comfy_root, confirm, allow_incomplete, progress, link_mode=link_mode
             )
         if action_name == "unload":
             return engine.unload_package(

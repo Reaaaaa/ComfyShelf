@@ -223,6 +223,16 @@
         <small data-i18n="settings.archive_hint">Portable workflow ZIPs are stored here.</small>
       </label>
 
+      <div class="link-mode-setting">
+        <span><strong data-i18n="settings.link_mode">Model Loading Method</strong><small data-i18n="settings.link_mode_hint">Choose between instant links (hardlink/symlink) and physical file copies.</small></span>
+        <select id="linkModeSelect" class="select-field">
+          <option value="auto" data-i18n="settings.link_mode_auto">Instant Link (Recommended: Hardlink / Symlink with copy fallback)</option>
+          <option value="copy" data-i18n="settings.link_mode_copy">Full Copy (Standard, maximum compatibility)</option>
+          <option value="hardlink" data-i18n="settings.link_mode_hardlink">Force Hardlink (Same NTFS volume only)</option>
+          <option value="symlink" data-i18n="settings.link_mode_symlink">Force Symlink (Windows Developer Mode)</option>
+        </select>
+      </div>
+
       <div class="validation-box hidden" id="settingsValidation"></div>
       <button class="diagnostic-button maintenance-button" id="optimizeLibraryButton"><svg><use href="#i-drive"/></svg><span><strong data-i18n="library_optimize.button">Optimize entire library</strong><small data-i18n="library_optimize.hint">Move older full packages into the shared model pool</small></span></button>
       <button class="diagnostic-button" id="openLogButton"><svg><use href="#i-log"/></svg><span><strong data-i18n="settings.open_log">Open diagnostic log</strong><small data-i18n="settings.log_hint">Startup timings, package checks and technical errors</small></span></button>

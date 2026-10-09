@@ -86,14 +86,14 @@ subcommand. Every subcommand also accepts `-h` / `--help` for its own help.
 
 | Command | Arguments and options | Effect |
 | --- | --- | --- |
-| `config set` | `--comfy-root PATH`, `--archive-root PATH` (required); `--id ID` (default: `default`), `--name NAME` (default: `ComfyUI`) | Saves and activates an installation; may create the archive folder. |
+| `config set` | `--comfy-root PATH`, `--archive-root PATH` (required); `--id ID` (default: `default`), `--name NAME` (default: `ComfyUI`), `--link-mode MODE` (default: `auto`) | Saves and activates an installation; may create the archive folder. |
 | `config show` | `--json` | Prints the active installation. |
 | `config validate` | `--json` | Checks configured paths without creating a new archive folder. |
 | `config path` | No additional options | Prints the configuration file location. |
 | `inspect` | `WORKFLOW`; `--comfy-root PATH`, `--hash`, `--json`, `--write-manifest PATH` | Analyzes the workflow; only `--write-manifest` writes an analysis report. |
 | `pack` | `WORKFLOW`; `--comfy-root PATH`, `--output PATH` / `-o PATH`, `--allow-missing`, `--force` | Writes a full portable ZIP. Existing output is replaced only with `--force`. |
 | `verify` | `ARCHIVE`; `--json` | Checks package integrity and reports recorded completeness separately. |
-| `restore` | `ARCHIVE`; `--comfy-root PATH`, `--confirm`, `--allow-incomplete`, `--json` | Previews restoration; `--confirm` writes missing files. |
+| `restore` | `ARCHIVE`; `--comfy-root PATH`, `--confirm`, `--allow-incomplete`, `--link-mode MODE`, `--json` | Previews restoration; `--confirm` writes missing files. |
 | `unload` | `ARCHIVE`; `--comfy-root PATH`, `--confirm`, `--allow-incomplete`, `--allow-shared`, `--json` | Previews removal; `--confirm` prepares storage as needed and removes verified model copies. |
 
 Import, switching, deduplication and portable export are available through the

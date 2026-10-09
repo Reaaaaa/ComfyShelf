@@ -638,6 +638,79 @@ class ParserTests(unittest.TestCase):
             MODULE.restore_package(archive, root, True, True)
             self.assertEqual(model.read_bytes(), b"available")
 
+    def test_restore_instant_link_modes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "ComfyUI"
+            archive_root = base / "Archive"
+            archive_root.mkdir(parents=True)
+            model_dir = root / "models" / "checkpoints"
+            model_dir.mkdir(parents=True)
+            workflow_dir = root / "user" / "default" / "workflows"
+            workflow_dir.mkdir(parents=True)
+            (root / "custom_nodes").mkdir()
+
+            model = model_dir / "instant_model.safetensors"
+            model_bytes = b"instant-load-test-content-12345678"
+            model.write_bytes(model_bytes)
+
+            workflow = workflow_dir / "instant_flow.json"
+            workflow.write_text(
+                json.dumps({"nodes": [{"id": 1, "type": "CheckpointLoaderSimple", "widgets_values": ["instant_model.safetensors"]}]}),
+                encoding="utf-8"
+            )
+
+            archive = archive_root / "InstantFlow.zip"
+            MODULE.build_package(workflow, root, archive, False, False, shared_pool=True)
+
+            # Unload model so it's only in pool
+            MODULE.unload_package(archive, root, True, False, True)
+            self.assertFalse(model.exists())
+
+            # Preview with link_mode="hardlink"
+            preview = MODULE.restore_package(archive, root, False, False, link_mode="hardlink")
+            self.assertEqual(preview["bytes_linkable"], len(model_bytes))
+
+            # Restore with hardlink
+            res = MODULE.restore_package(archive, root, True, False, link_mode="hardlink")
+            self.assertTrue(model.exists())
+            self.assertEqual(res["restored_methods"].get(str(model.resolve())), "hardlink")
+            self.assertGreater(model.stat().st_nlink, 1)
+
+            # Re-restore when already identical file (samefile)
+            res_same = MODULE.restore_package(archive, root, True, False, link_mode="hardlink")
+            self.assertIn(str(model.resolve()), res_same["identical"])
+            self.assertEqual(res_same["restored"], [])
+
+            # Unload and restore with copy
+            model.unlink()
+            res_copy = MODULE.restore_package(archive, root, True, False, link_mode="copy")
+            self.assertEqual(res_copy["restored_methods"].get(str(model.resolve())), "copy")
+            self.assertEqual(model.stat().st_nlink, 1)
+            self.assertEqual(model.read_bytes(), model_bytes)
+
+    def test_configuration_saves_link_mode(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "ComfyUI"
+            (root / "models").mkdir(parents=True)
+            (root / "user").mkdir()
+            (root / "custom_nodes").mkdir()
+            archive = base / "Archive"
+            config_path = base / "settings" / "config.json"
+
+            _, _, _ = MODULE.set_installation_config(
+                "main", "Main Comfy", root, archive, config_path, link_mode="symlink"
+            )
+            active = MODULE.active_installation(config_path)
+            self.assertEqual(active["link_mode"], "symlink")
+
+            _, _, _ = MODULE.set_installation_config(
+                "main", "Main Comfy", root, archive, config_path, link_mode="copy"
+            )
+            active = MODULE.active_installation(config_path)
+            self.assertEqual(active["link_mode"], "copy")
+
     def test_configuration_is_saved_atomically_and_reloaded(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)

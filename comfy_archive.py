@@ -14,6 +14,7 @@ import stat
 import struct
 import sys
 import tempfile
+import uuid
 import zipfile
 import zlib
 from dataclasses import asdict, dataclass
@@ -178,6 +179,7 @@ def set_installation_config(
     comfy_root: Path,
     archive_root: Path,
     config_path: Path | None = None,
+    link_mode: str = "auto",
 ) -> tuple[dict[str, Any], dict[str, Any], Path]:
     if not installation_id or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for char in installation_id):
         raise ValueError("Installations-ID darf nur Kleinbuchstaben, Zahlen, '-' und '_' enthalten.")
@@ -185,11 +187,14 @@ def set_installation_config(
     if not validation["valid"]:
         details = "\n".join(f"- {error}" for error in validation["errors"])
         raise ValueError(f"Pfade konnten nicht gespeichert werden:\n{details}")
+    if link_mode not in {"copy", "auto", "hardlink", "symlink"}:
+        link_mode = "auto"
     data = load_config(config_path)
     data["installations"][installation_id] = {
         "name": name.strip() or installation_id,
         "comfy_root": validation["comfy_root"],
         "archive_root": validation["archive_root"],
+        "link_mode": link_mode,
     }
     data["active_installation"] = installation_id
     saved_path = save_config(data, config_path)
@@ -202,7 +207,7 @@ def active_installation(config_path: Path | None = None) -> dict[str, Any] | Non
     installation = data.get("installations", {}).get(active_id)
     if not installation:
         return None
-    return {"id": active_id, **installation}
+    return {"id": active_id, "link_mode": installation.get("link_mode", "auto"), **installation}
 
 # node type -> widget position -> (asset kind, model directory categories)
 UI_NODE_RULES: dict[str, dict[int, tuple[str, tuple[str, ...]]]] = {
@@ -1577,6 +1582,7 @@ def import_package(
     force: bool,
     load_after_import: bool = False,
     progress: ProgressCallback = None,
+    link_mode: str = "auto",
 ) -> dict[str, Any]:
     _emit_progress(progress, phase="scan", message="Importpaket wird neu analysiert", log=True)
     report = inspect_import_package(source_path, archive_root, comfy_root)
@@ -1726,6 +1732,7 @@ def import_package(
                 allow_missing,
                 progress,
                 archive_preverified=True,
+                link_mode=link_mode,
             )
             if restore_preview["blockers"]:
                 details = "\n".join(f"- {item}" for item in restore_preview["blockers"])
@@ -1748,6 +1755,7 @@ def import_package(
             allow_missing,
             progress,
             archive_preverified=True,
+            link_mode=link_mode,
         )
 
     _emit_progress(
@@ -2695,7 +2703,8 @@ def _deletion_access_issue(path: Path) -> dict[str, Any] | None:
             close_handle.restype = wintypes.BOOL
             # DELETE permission, full sharing, OPEN_EXISTING. No delete-on-close
             # flag: opening/closing this probe must never change the model file.
-            handle = create_file(str(path), 0x00010000, 0x7, None, 3, 0, None)
+            flags = 0x00200000 if path.is_symlink() else 0
+            handle = create_file(str(path), 0x00010000, 0x7, None, 3, flags, None)
             if handle == ctypes.c_void_p(-1).value:
                 raise ctypes.WinError(ctypes.get_last_error())
             close_handle(handle)
@@ -2954,6 +2963,7 @@ def restore_package(
     allow_incomplete: bool,
     progress: ProgressCallback = None,
     archive_preverified: bool = False,
+    link_mode: str = "auto",
 ) -> dict[str, Any]:
     verification = (
         {"valid": True, "errors": []}
@@ -2992,6 +3002,21 @@ def restore_package(
         expected_hash = str(file_entry.get("sha256", ""))
         expected_size = int(file_entry.get("size", 0))
         if target.is_file():
+            is_same = False
+            if file_entry.get("storage") == SHARED_OBJECT_STORAGE:
+                try:
+                    source_obj = _shared_object_path(
+                        archive_path,
+                        str(file_entry.get("object_sha256") or expected_hash),
+                    )
+                    if source_obj.is_file() and os.path.samefile(target, source_obj):
+                        is_same = True
+                except (OSError, ValueError):
+                    pass
+            if is_same:
+                identical.append(str(target))
+                continue
+
             actual_hash = sha256_file(
                 target,
                 progress=progress,
@@ -3037,7 +3062,24 @@ def restore_package(
 
     if conflicts:
         blockers.append("Mindestens ein lokales Modell kollidiert mit dem Paketmanifest.")
-    required = sum(item["size"] for item in candidates)
+
+    bytes_linkable = 0
+    bytes_copy_needed = 0
+    for item in candidates:
+        can_link = (
+            item.get("role") == "model"
+            and item.get("storage") == SHARED_OBJECT_STORAGE
+            and link_mode in {"auto", "hardlink", "symlink"}
+        )
+        if can_link and link_mode == "hardlink":
+            if archive_path.anchor.casefold() != comfy_root.anchor.casefold():
+                can_link = False
+        if can_link:
+            bytes_linkable += item["size"]
+        else:
+            bytes_copy_needed += item["size"]
+
+    required = bytes_copy_needed if (link_mode in {"auto", "hardlink", "symlink"} and bytes_linkable > 0) else sum(item["size"] for item in candidates)
     free = shutil.disk_usage(comfy_root).free
     if required > free:
         blockers.append(
@@ -3058,8 +3100,11 @@ def restore_package(
         "ignored": ignored,
         "blockers": list(dict.fromkeys(blockers)),
         "bytes_required": required,
+        "bytes_linkable": bytes_linkable,
         "bytes_free": free,
+        "link_mode": link_mode,
         "restored": [],
+        "restored_methods": {},
         "rolled_back": [],
     }
     if not confirm:
@@ -3070,11 +3115,88 @@ def restore_package(
 
     restored_paths: list[Path] = []
     temporary_paths: list[Path] = []
+    restored_methods: dict[str, str] = result["restored_methods"]
     try:
         with zipfile.ZipFile(archive_path, "r") as archive:
             for item in candidates:
                 target = Path(item["path"])
                 target.parent.mkdir(parents=True, exist_ok=True)
+                role = str(item.get("role", ""))
+                storage = item.get("storage")
+
+                link_method_used = None
+                if (
+                    role == "model"
+                    and storage == SHARED_OBJECT_STORAGE
+                    and link_mode in {"auto", "hardlink", "symlink"}
+                ):
+                    source_obj = _shared_object_path(
+                        archive_path,
+                        str(item.get("object_sha256") or item["sha256"]),
+                    )
+                    if source_obj.is_file():
+                        temp_link = target.parent / f".{target.name}.{uuid.uuid4().hex[:8]}.restore-tmp"
+                        try:
+                            if link_mode in {"hardlink", "auto"}:
+                                same_volume = (
+                                    source_obj.anchor.casefold() == target.parent.anchor.casefold()
+                                    if (source_obj.anchor and target.parent.anchor)
+                                    else True
+                                )
+                                if same_volume or link_mode == "hardlink":
+                                    try:
+                                        os.link(source_obj, temp_link)
+                                        link_method_used = "hardlink"
+                                    except OSError:
+                                        if link_mode == "hardlink":
+                                            raise
+                            if not link_method_used and link_mode in {"symlink", "auto"}:
+                                try:
+                                    os.symlink(source_obj, temp_link)
+                                    link_method_used = "symlink"
+                                except OSError:
+                                    if link_mode == "symlink":
+                                        raise
+
+                            if link_method_used:
+                                temporary_paths.append(temp_link)
+                                if temp_link.stat().st_size != item["size"]:
+                                    raise ValueError(
+                                        f"Verknüpftes Modell hat unerwartete Größe: {target} "
+                                        f"({temp_link.stat().st_size} != {item['size']})"
+                                    )
+                                if target.exists():
+                                    if target.is_file() and sha256_file(target) == item["sha256"]:
+                                        temp_link.unlink(missing_ok=True)
+                                        temporary_paths.remove(temp_link)
+                                        continue
+                                    raise ValueError(f"Zieldatei erschien während der Wiederherstellung: {target}")
+                                os.replace(temp_link, target)
+                                temporary_paths.remove(temp_link)
+                                restored_paths.append(target)
+                                result["restored"].append(str(target))
+                                restored_methods[str(target)] = link_method_used
+                                _emit_progress(
+                                    progress,
+                                    phase="restore",
+                                    message=f"Verknüpft: {target.name} ({link_method_used})",
+                                    current=item["size"],
+                                    total=item["size"],
+                                    file=target.name,
+                                    log=True,
+                                )
+                                continue
+                        except Exception:
+                            if temp_link.exists() or temp_link.is_symlink():
+                                try:
+                                    temp_link.unlink(missing_ok=True)
+                                except OSError:
+                                    pass
+                            if temp_link in temporary_paths:
+                                temporary_paths.remove(temp_link)
+                            if link_mode != "auto":
+                                raise
+
                 with tempfile.NamedTemporaryFile(
                     prefix=f".{target.name}.", suffix=".restore-tmp", dir=target.parent, delete=False
                 ) as temporary:
@@ -3127,6 +3249,7 @@ def restore_package(
                 temporary_paths.remove(temporary_path)
                 restored_paths.append(target)
                 result["restored"].append(str(target))
+                restored_methods[str(target)] = "copy"
     except Exception:
         for temporary_path in temporary_paths:
             try:
@@ -3162,6 +3285,7 @@ def switch_package(
     allow_incomplete: bool,
     allow_shared: bool,
     progress: ProgressCallback = None,
+    link_mode: str = "auto",
 ) -> dict[str, Any]:
     """Load the target first, then remove verified models not needed by it."""
     pool_preparations: list[dict[str, Any]] = []
@@ -3198,7 +3322,7 @@ def switch_package(
         if item.get("status") == "included"
     }
     restore_preview = restore_package(
-        target_archive, comfy_root, False, allow_incomplete, progress
+        target_archive, comfy_root, False, allow_incomplete, progress, link_mode=link_mode
     )
     blockers = list(restore_preview.get("blockers", []))
     conflicts: list[dict[str, str]] = []
@@ -3309,7 +3433,7 @@ def switch_package(
     if issues:
         _stop_removal(result, unload_candidates, issues)
     restore_result = restore_package(
-        target_archive, comfy_root, True, allow_incomplete, progress
+        target_archive, comfy_root, True, allow_incomplete, progress, link_mode=link_mode
     )
     # Preserve the actual restore outcome if a subsequent removal fails.
     result["restore"] = restore_result
@@ -3411,6 +3535,12 @@ def build_parser() -> argparse.ArgumentParser:
     config_set.add_argument("--name", default="ComfyUI", help="Anzeigename")
     config_set.add_argument("--comfy-root", type=Path, required=True, help="ComfyUI-Hauptordner")
     config_set.add_argument("--archive-root", type=Path, required=True, help="Auslagerungsordner")
+    config_set.add_argument(
+        "--link-mode",
+        choices=["copy", "auto", "hardlink", "symlink"],
+        default="auto",
+        help="Standard-Lademethode für Modelle (copy, auto, hardlink, symlink)",
+    )
     config_show = config_commands.add_parser("show", help="Aktive Konfiguration anzeigen")
     config_show.add_argument("--json", action="store_true", help="JSON ausgeben")
     config_validate = config_commands.add_parser("validate", help="Aktive Pfade erneut prüfen")
@@ -3489,6 +3619,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Wiederherstellung trotz bewusst unvollständigem Paket erlauben",
     )
+    restore_parser.add_argument(
+        "--link-mode",
+        choices=["copy", "auto", "hardlink", "symlink"],
+        default="auto",
+        help="Lademethode für Modelle: auto (Hardlink/Symlink mit Fallback), copy, hardlink, symlink",
+    )
     restore_parser.add_argument("--json", action="store_true", help="JSON-Bericht ausgeben")
     return parser
 
@@ -3508,6 +3644,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.comfy_root,
                     args.archive_root,
                     config_path,
+                    link_mode=args.link_mode,
                 )
                 print(f"Konfiguration gespeichert: {saved_path.resolve()}")
                 print(f"Aktive Installation:       {args.name}")
@@ -3670,6 +3807,7 @@ def main(argv: list[str] | None = None) -> int:
                 comfy_root,
                 args.confirm,
                 args.allow_incomplete,
+                link_mode=args.link_mode,
             )
             if args.json:
                 print(json.dumps(result, ensure_ascii=False, indent=2))
