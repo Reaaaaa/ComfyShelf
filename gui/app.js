@@ -120,6 +120,37 @@ async function copyMissingFilename(event) {
   }
 }
 
+async function copyCustomNodePackage(event) {
+  const button = event.target.closest?.('[data-copy-custom-node]');
+  if (!button || button.disabled) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const pkgName = button.dataset.copyCustomNode;
+  button.disabled = true;
+  try {
+    await writeClipboardText(pkgName);
+    toast(t('toast.custom_node_copied', {name: pkgName}));
+  } catch (_) {
+    toast(t('missing.copy_failed'), true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function openExternalUrlAction(event) {
+  const button = event.target.closest?.('[data-open-url]');
+  if (!button) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const url = button.dataset.openUrl;
+  if (!url) return;
+  try {
+    await callApi('open_external_url', url);
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
 async function callApi(method, ...args) {
   if (!window.pywebview?.api?.[method]) throw new Error(app.messages['errors.unexpected'] || 'The native app interface is not ready yet.');
   const result = await window.pywebview.api[method](...args);
@@ -546,6 +577,39 @@ function renderLibrary() {
   loadVisibleThumbnails();
 }
 
+function customNodeChipHtml(node) {
+  const isInstalled = Boolean(node.installed);
+  const statusClass = isInstalled ? 'installed' : 'missing';
+  const statusLabel = t(isInstalled ? 'detail.custom_node_installed' : 'detail.custom_node_missing');
+  const statusTitle = t(isInstalled ? 'detail.custom_node_status_installed' : 'detail.custom_node_status_missing');
+  const targetUrl = node.repository_url || node.git_url || node.search_url;
+  const isDirectRepo = Boolean(node.repository_url || node.git_url);
+  const linkTitle = t(isDirectRepo ? 'detail.custom_node_open_github' : 'detail.custom_node_search_github');
+  const copyTitle = t('detail.custom_node_copy_manager');
+  const folderNote = (node.installed_folder && node.installed_folder.toLowerCase() !== String(node.package || '').toLowerCase())
+    ? `<small class="custom-node-folder" title="${escapeHtml(node.installed_folder)}">(${escapeHtml(node.installed_folder)})</small>`
+    : '';
+
+  return `
+    <div class="custom-node-chip ${statusClass}">
+      <span class="custom-node-status ${statusClass}" title="${escapeHtml(statusTitle)}">
+        ${icon(isInstalled ? 'check' : 'alert')}
+        <span>${escapeHtml(statusLabel)}</span>
+      </span>
+      <span class="custom-node-name" title="${escapeHtml(node.package)}">${escapeHtml(node.package)}</span>
+      ${folderNote}
+      <div class="custom-node-actions">
+        ${targetUrl ? `
+          <button type="button" class="custom-node-btn" data-open-url="${escapeHtml(targetUrl)}" title="${escapeHtml(linkTitle)}" aria-label="${escapeHtml(linkTitle)}">
+            ${icon('external')}
+          </button>` : ''}
+        <button type="button" class="custom-node-btn" data-copy-custom-node="${escapeHtml(node.package)}" title="${escapeHtml(copyTitle)}" aria-label="${escapeHtml(copyTitle)}">
+          ${icon('copy')}
+        </button>
+      </div>
+    </div>`;
+}
+
 function renderDetail(pkg) {
   if (!pkg) {
     $('detailView').classList.add('hidden');
@@ -570,7 +634,25 @@ function renderDetail(pkg) {
   $('heroMetric').title = t('detail.package_size_tooltip', {size: formatBytes(pkg.archive_size)});
   $('modelStorageMode').textContent = t(pkg.deduplicated ? 'detail.storage_pool' : 'detail.storage_package');
   $('modelStorageLabel').textContent = t(pkg.deduplicated ? 'detail.shared_pool' : 'detail.saved_in_package');
-  $('customNodeCount').textContent = String(pkg.custom_nodes?.length || 0);
+
+  const customNodes = pkg.custom_nodes || [];
+  const customNodeCount = customNodes.length;
+  const customNodesInstalled = customNodes.filter(n => n.installed).length;
+  const customNodesMissing = customNodeCount - customNodesInstalled;
+
+  if (customNodeCount > 0) {
+    $('customNodeCount').textContent = `${customNodesInstalled} / ${customNodeCount}`;
+    const subEl = $('customNodeSubtitle');
+    if (subEl) {
+      subEl.textContent = customNodesMissing === 0
+        ? t('detail.custom_nodes_all_installed')
+        : t('detail.custom_nodes_missing_count', {count: customNodesMissing});
+    }
+  } else {
+    $('customNodeCount').textContent = '0';
+    const subEl = $('customNodeSubtitle');
+    if (subEl) subEl.textContent = t('detail.documented_only');
+  }
 
   const pill = $('statusPill');
   pill.textContent = stateLabel(pkg.state);
@@ -602,18 +684,32 @@ function renderDetail(pkg) {
   notices.push({parser: true});
   notices.push({warning: false, text: t('parser.scope')});
   notices.push({warning: false, text: t('notice.custom_nodes')});
+  if (customNodeCount > 0) {
+    if (customNodesMissing > 0) {
+      notices.push({
+        warning: true,
+        text: customNodesMissing === 1
+          ? t('notice.custom_nodes_missing_one')
+          : t('notice.custom_nodes_missing_many', {count: customNodesMissing}),
+        subtext: t('notice.custom_nodes_missing_hint')
+      });
+    } else {
+      notices.push({warning: false, text: t('notice.custom_nodes_all_ready')});
+    }
+  }
   $('noticeList').innerHTML = notices.map(n => n.parser ? parserNoticesHtml(pkg.parser_warnings) : n.sharing ? sharedFilesHtml(pkg.models, {library: true}) : `
     <div class="notice ${n.warning ? 'warning' : ''}">
       ${icon(n.warning ? 'alert' : 'shield')}
       <div class="notice-body">
         <span>${escapeHtml(n.text)}</span>
+        ${n.subtext ? `<small class="notice-subtext">${escapeHtml(n.subtext)}</small>` : ''}
         ${n.missing?.length ? `<div class="notice-missing-list">
           ${n.missing.map(item => missingFileHtml(item, true)).join('')}
         </div>` : ''}
       </div>
     </div>`).join('');
-  $('customNodeList').innerHTML = pkg.custom_nodes?.length
-    ? pkg.custom_nodes.map(node => `<span class="tag">${escapeHtml(node.package)}</span>`).join('')
+  $('customNodeList').innerHTML = customNodes.length
+    ? customNodes.map(node => customNodeChipHtml(node)).join('')
     : `<span class="tag">${t('detail.no_custom_nodes')}</span>`;
 
   const primary = $('primaryActionButton');
@@ -723,10 +819,15 @@ async function addWorkflow() {
         <span class="missing-detail-label">${t('pack.missing_label')}</span>
         ${missing.map(item => missingFileHtml(item)).join('')}
       </div>` : '';
+    const detectedNodes = report.custom_nodes || [];
+    const missingNodesCount = detectedNodes.filter(n => !n.installed).length;
+    const nodeStat = detectedNodes.length ? `
+      <div class="confirm-stat"><span>${t('detail.custom_nodes_used')}</span><strong>${detectedNodes.length}${missingNodesCount ? ` (${missingNodesCount} ${t('detail.custom_node_missing')})` : ''}</strong></div>` : '';
     const copy = `
       <p>${t('pack.copy', {workflow: escapeHtml(report.workflow)})}</p>
       <div class="confirm-stat"><span>${t('pack.detected')}</span><strong>${report.assets.length}</strong></div>
       <div class="confirm-stat"><span>${t('pack.missing')}</span><strong>${missing.length}</strong></div>
+      ${nodeStat}
       ${missingDetails}
       ${parserWarningsHtml(report.parser_warnings)}
       <p>${t('parser.scope')}</p>
@@ -1415,6 +1516,13 @@ function installEvents() {
   $('confirmProceedButton').addEventListener('click', proceedConfirm);
   $('noticeList').addEventListener('click', copyMissingFilename);
   $('confirmCopy').addEventListener('click', copyMissingFilename);
+  $('customNodeList')?.addEventListener('click', event => {
+    if (event.target.closest?.('[data-copy-custom-node]')) {
+      copyCustomNodePackage(event);
+    } else if (event.target.closest?.('[data-open-url]')) {
+      openExternalUrlAction(event);
+    }
+  });
   $('openArchiveButton').addEventListener('click', async () => { try { await callApi('open_archive_folder'); } catch (e) { toast(e.message, true); } });
   $('copyLogsButton').addEventListener('click', async () => {
     const text = [...$('processLog').querySelectorAll('.process-log-line')].map(row => row.textContent.trim()).join('\n');

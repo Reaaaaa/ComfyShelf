@@ -1012,6 +1012,110 @@ class ParserTests(unittest.TestCase):
             self.assertIsNotNone(thumb_data)
             self.assertTrue(thumb_data.startswith("data:image/png;base64,"))
 
+    def test_git_remote_url_reading_and_normalization(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            node_dir = base / "custom_node"
+            node_dir.mkdir()
+            git_dir = node_dir / ".git"
+            git_dir.mkdir()
+
+            config = git_dir / "config"
+            config.write_text(
+                '[core]\n\trepositoryformatversion = 0\n'
+                '[remote "origin"]\n\turl = https://github.com/ltdrdata/ComfyUI-Impact-Pack.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n',
+                encoding="utf-8",
+            )
+            url = MODULE._read_git_remote_url(node_dir)
+            self.assertEqual(url, "https://github.com/ltdrdata/ComfyUI-Impact-Pack")
+
+            # SSH normalization
+            config.write_text(
+                '[remote "origin"]\n\turl = git@github.com:example/My-Node.git\n',
+                encoding="utf-8",
+            )
+            url = MODULE._read_git_remote_url(node_dir)
+            self.assertEqual(url, "https://github.com/example/My-Node")
+
+            # Missing git
+            other = base / "no_git"
+            other.mkdir()
+            self.assertIsNone(MODULE._read_git_remote_url(other))
+
+    def test_custom_node_resolution_flexible_matching(self):
+        with tempfile.TemporaryDirectory() as temp:
+            comfy_root = Path(temp)
+            custom_nodes = comfy_root / "custom_nodes"
+            custom_nodes.mkdir()
+
+            (custom_nodes / "ComfyUI-Impact-Pack").mkdir()
+            (custom_nodes / "WAS_Node_Suite").mkdir()
+            (custom_nodes / "efficiency-nodes-comfyui").mkdir()
+
+            # Exact / case-insensitive
+            self.assertEqual(
+                MODULE.resolve_custom_node("comfyui-impact-pack", comfy_root),
+                custom_nodes / "ComfyUI-Impact-Pack",
+            )
+            # Hyphen/underscore normalized & prefix stripped
+            self.assertEqual(
+                MODULE.resolve_custom_node("impact-pack", comfy_root),
+                custom_nodes / "ComfyUI-Impact-Pack",
+            )
+            # WAS suite
+            self.assertEqual(
+                MODULE.resolve_custom_node("was-node-suite-comfyui", comfy_root),
+                custom_nodes / "WAS_Node_Suite",
+            )
+            # Efficiency nodes
+            self.assertEqual(
+                MODULE.resolve_custom_node("efficiency-nodes", comfy_root),
+                custom_nodes / "efficiency-nodes-comfyui",
+            )
+            # Not found
+            self.assertIsNone(MODULE.resolve_custom_node("non-existent-node", comfy_root))
+
+    def test_scan_and_enrich_custom_nodes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            comfy_root = Path(temp)
+            custom_nodes = comfy_root / "custom_nodes"
+            custom_nodes.mkdir()
+
+            node_dir = custom_nodes / "ComfyUI-Impact-Pack"
+            node_dir.mkdir()
+            git_dir = node_dir / ".git"
+            git_dir.mkdir()
+            (git_dir / "config").write_text(
+                '[remote "origin"]\n\turl = https://github.com/ltdrdata/ComfyUI-Impact-Pack.git\n',
+                encoding="utf-8",
+            )
+
+            # scan_installed_custom_nodes
+            installed = MODULE.scan_installed_custom_nodes(comfy_root)
+            self.assertEqual(len(installed), 1)
+            self.assertEqual(installed[0]["folder"], "ComfyUI-Impact-Pack")
+            self.assertEqual(installed[0]["git_url"], "https://github.com/ltdrdata/ComfyUI-Impact-Pack")
+
+            # enrich_custom_nodes
+            raw_nodes = [
+                {"package": "impact-pack", "revision": "v1.0"},
+                {"package": "missing-pack", "revision": "v2.0"},
+            ]
+            enriched = MODULE.enrich_custom_nodes(raw_nodes, comfy_root)
+            self.assertEqual(len(enriched), 2)
+
+            self.assertTrue(enriched[0]["installed"])
+            self.assertEqual(enriched[0]["installed_folder"], "ComfyUI-Impact-Pack")
+            self.assertEqual(enriched[0]["git_url"], "https://github.com/ltdrdata/ComfyUI-Impact-Pack")
+            self.assertEqual(enriched[0]["repository_url"], "https://github.com/ltdrdata/ComfyUI-Impact-Pack")
+            self.assertIn("impact-pack", enriched[0]["search_url"])
+
+            self.assertFalse(enriched[1]["installed"])
+            self.assertIsNone(enriched[1]["installed_folder"])
+            self.assertIsNone(enriched[1]["git_url"])
+            self.assertIsNone(enriched[1]["repository_url"])
+            self.assertIn("missing-pack", enriched[1]["search_url"])
+
 
 if __name__ == "__main__":
     unittest.main()

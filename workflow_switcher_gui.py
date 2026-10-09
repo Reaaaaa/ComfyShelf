@@ -11,6 +11,8 @@ import sys
 import threading
 import time
 import traceback
+import urllib.parse
+import webbrowser
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -634,7 +636,9 @@ class WorkflowSwitcherApi:
                     "models": models,
                     "missing": manifest.get("missing", []),
                     "parser_warnings": engine.package_parser_warnings(archive_path, manifest),
-                    "custom_nodes": manifest.get("custom_nodes", []),
+                    "custom_nodes": engine.enrich_custom_nodes(
+                        manifest.get("custom_nodes", []), comfy_root
+                    ),
                     "workflow": manifest.get("workflow", {}),
                     "storage_mode": manifest.get("storage_mode", "embedded-portable"),
                     "deduplicated": manifest.get("storage_mode") == "shared-object-pool",
@@ -1164,6 +1168,17 @@ class WorkflowSwitcherApi:
                 os.startfile(LOG_PATH)  # type: ignore[attr-defined]
             else:
                 raise ValueError("The diagnostic log can currently only be opened on Windows.")
+            return True
+
+        return self._result(action)
+
+    def open_external_url(self, url: str) -> dict[str, Any]:
+        def action() -> bool:
+            safe_url = str(url).strip()
+            parsed = urllib.parse.urlparse(safe_url)
+            if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+                raise ValueError("Ungültige oder unsichere URL.")
+            webbrowser.open(safe_url)
             return True
 
         return self._result(action)

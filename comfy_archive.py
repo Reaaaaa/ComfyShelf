@@ -9,8 +9,10 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
+import urllib.parse
 import struct
 import sys
 import tempfile
@@ -903,22 +905,213 @@ def inspect_workflow(
         "format": fmt,
         "comfy_root": str(comfy_root.resolve()) if comfy_root else None,
         "assets": [asdict(asset) for asset in assets],
-        "custom_nodes": [asdict(node) for node in custom_nodes],
+        "custom_nodes": enrich_custom_nodes([asdict(node) for node in custom_nodes], comfy_root),
         "unused_environment_metadata": unused_environment,
         "ambiguous_matches": ambiguous,
         "parser_warnings": parser_warnings(data, assets),
     }
 
 
+def _normalize_git_url(url: str) -> str:
+    """Normalize git remote URLs (SSH, HTTPS, .git suffix) into a web URL."""
+    clean = url.strip()
+    if clean.endswith(".git"):
+        clean = clean[:-4]
+    ssh_match = re.match(r"^(?:ssh:\/\/)?git@([^:]+):(.+)$", clean)
+    if ssh_match:
+        host, repo = ssh_match.group(1), ssh_match.group(2).lstrip("/")
+        return f"https://{host}/{repo}"
+    return clean
+
+
+def _read_git_remote_url(node_dir: Path) -> str | None:
+    """Read the origin (or primary) remote URL from a directory's .git config."""
+    git_dir = node_dir / ".git"
+    git_config: Path | None = None
+    if git_dir.is_dir():
+        git_config = git_dir / "config"
+    elif git_dir.is_file():
+        try:
+            content = git_dir.read_text(encoding="utf-8", errors="replace").strip()
+            if content.startswith("gitdir:"):
+                target = content.split("gitdir:", 1)[1].strip()
+                target_path = Path(target)
+                if not target_path.is_absolute():
+                    target_path = (node_dir / target_path).resolve()
+                git_config = target_path / "config"
+        except Exception:
+            return None
+
+    if not git_config or not git_config.is_file():
+        return None
+
+    try:
+        lines = git_config.read_text(encoding="utf-8", errors="replace").splitlines()
+        in_origin_remote = False
+        in_any_remote = False
+        fallback_url: str | None = None
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("["):
+                in_origin_remote = bool(re.match(r'\[remote\s+"origin"\]', stripped, re.IGNORECASE))
+                in_any_remote = bool(re.match(r'\[remote\s+".+"\]', stripped, re.IGNORECASE))
+                continue
+            if "=" in stripped:
+                key, _, val = stripped.partition("=")
+                key = key.strip().lower()
+                val = val.strip()
+                if key == "url":
+                    if in_origin_remote:
+                        return _normalize_git_url(val)
+                    if in_any_remote and fallback_url is None:
+                        fallback_url = _normalize_git_url(val)
+        return fallback_url
+    except Exception:
+        return None
+
+
+def _clean_node_name(name: str) -> str:
+    return re.sub(r"[\s\-_\.]+", "", name).casefold()
+
+
+def _core_node_name(name: str) -> str:
+    clean = _clean_node_name(name)
+    if clean.startswith("comfyui"):
+        clean = clean[7:]
+    elif clean.startswith("comfy"):
+        clean = clean[5:]
+    if clean.endswith("comfyui"):
+        clean = clean[:-7]
+    elif clean.endswith("comfy"):
+        clean = clean[:-5]
+    return clean
+
+
 def resolve_custom_node(package: str, comfy_root: Path) -> Path | None:
     custom_root = comfy_root / "custom_nodes"
     if not custom_root.is_dir():
         return None
-    wanted = package.casefold()
-    for child in custom_root.iterdir():
-        if child.is_dir() and child.name.casefold() == wanted:
+    wanted = package.strip().casefold()
+    if not wanted:
+        return None
+
+    package_short = package.split("/")[-1].split("\\")[-1]
+    wanted_short = package_short.strip().casefold()
+
+    try:
+        children = [child for child in custom_root.iterdir() if child.is_dir() and not child.name.startswith(".")]
+    except OSError:
+        return None
+
+    # Pass 1: exact case-insensitive match
+    for child in children:
+        if child.name.casefold() == wanted or child.name.casefold() == wanted_short:
             return child
+
+    # Pass 2: normalized match (hyphens, underscores, dots, spaces stripped)
+    clean_wanted = _clean_node_name(wanted_short)
+    if clean_wanted:
+        for child in children:
+            if _clean_node_name(child.name) == clean_wanted:
+                return child
+
+    # Pass 3: core name match (stripping 'comfyui' / 'comfy' prefix and suffix)
+    core_wanted = _core_node_name(wanted_short)
+    if len(core_wanted) >= 3:
+        for child in children:
+            if _core_node_name(child.name) == core_wanted:
+                return child
+
+    # Pass 4: git remote repository name match
+    for child in children:
+        remote_url = _read_git_remote_url(child)
+        if remote_url:
+            repo_part = remote_url.rstrip("/").split("/")[-1]
+            if repo_part.casefold() == wanted or repo_part.casefold() == wanted_short:
+                return child
+            if clean_wanted and _clean_node_name(repo_part) == clean_wanted:
+                return child
+            if len(core_wanted) >= 3 and _core_node_name(repo_part) == core_wanted:
+                return child
+
     return None
+
+
+def scan_installed_custom_nodes(comfy_root: Path | None) -> list[dict[str, Any]]:
+    """Scan all installed custom node directories in comfy_root."""
+    if not comfy_root:
+        return []
+    custom_root = comfy_root / "custom_nodes"
+    if not custom_root.is_dir():
+        return []
+    results: list[dict[str, Any]] = []
+    try:
+        children = sorted(
+            [child for child in custom_root.iterdir() if child.is_dir() and not child.name.startswith(".")],
+            key=lambda p: p.name.casefold(),
+        )
+    except OSError:
+        return []
+    for child in children:
+        git_url = _read_git_remote_url(child)
+        results.append({
+            "folder": child.name,
+            "path": str(child.resolve()),
+            "git_url": git_url,
+        })
+    return results
+
+
+def enrich_custom_nodes(
+    custom_nodes: list[dict[str, Any]] | list[CustomNode],
+    comfy_root: Path | None,
+) -> list[dict[str, Any]]:
+    """Enrich custom node specifications with live installation status and repository/search links."""
+    enriched: list[dict[str, Any]] = []
+    for item in custom_nodes:
+        if isinstance(item, CustomNode):
+            base = asdict(item)
+        elif isinstance(item, dict):
+            base = dict(item)
+        else:
+            base = {"package": str(item)}
+
+        pkg_name = str(base.get("package", "")).strip()
+        if not pkg_name:
+            continue
+
+        installed = False
+        installed_folder: str | None = None
+        git_url: str | None = None
+
+        if comfy_root:
+            found_dir = resolve_custom_node(pkg_name, comfy_root)
+            if found_dir:
+                installed = True
+                installed_folder = found_dir.name
+                git_url = _read_git_remote_url(found_dir)
+
+        repository_url: str | None = None
+        if git_url:
+            repository_url = git_url
+        elif pkg_name.startswith("http://") or pkg_name.startswith("https://"):
+            repository_url = pkg_name
+        elif re.match(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", pkg_name):
+            repository_url = f"https://github.com/{pkg_name}"
+
+        search_query = pkg_name
+        if "/" in search_query:
+            search_query = search_query.rstrip("/").split("/")[-1]
+        search_url = f"https://github.com/search?q={urllib.parse.quote(search_query)}&type=repositories"
+
+        base["installed"] = installed
+        base["installed_folder"] = installed_folder
+        base["git_url"] = git_url
+        base["repository_url"] = repository_url
+        base["search_url"] = search_url
+        enriched.append(base)
+
+    return enriched
 
 
 def _zip_path(path: Path | str) -> str:

@@ -7,12 +7,12 @@ Snapshot date: **2026-09-04**. Environment: Windows, Python 3.11.9 and Node.js 2
 
 | Check | Result |
 | --- | --- |
-| Python unit and regression suite | 172 passed, no failures or skips |
+| Python unit and regression suite | 177 passed, no failures or skips |
 | JavaScript frontend tests | Passed for English and German |
 | Frontend JavaScript syntax | Passed |
 | Python module compilation | Passed |
 
-These suites cover workflow parsing (JSON and PNG embedded metadata), thumbnails, instant-load link modes (hardlinks and symlinks), package/pool operations, portable export,
+These suites cover workflow parsing (JSON and PNG embedded metadata), thumbnails, instant-load link modes (hardlinks and symlinks), custom nodes live status resolution (flexible matching, Git remote extraction, and ComfyUI-Manager clipboard copy), package/pool operations, portable export,
 archive deletion (Recycle Bin, permanent delete and orphaned pool cleanup),
 safety checks, the desktop API, setup helpers, source documentation, and frontend
 flows such as missing-file copying, export confirmation and shared-file warnings.

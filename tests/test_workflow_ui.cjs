@@ -450,6 +450,7 @@ async function run(language) {
     modelStorageMode: {textContent: ''},
     modelStorageLabel: {textContent: ''},
     customNodeCount: {textContent: ''},
+    customNodeSubtitle: {textContent: ''},
     statusPill: {className: ''},
     statusRail: {className: ''},
     modelList: {innerHTML: ''},
@@ -478,6 +479,10 @@ async function run(language) {
           model_bytes: 100,
           models: [
             {filename: 'model.safetensors', kind: 'checkpoint', size: 100, present: true, link_type: 'hardlink'}
+          ],
+          custom_nodes: [
+            {package: 'ComfyUI-Impact-Pack', installed: true, installed_folder: 'ComfyUI-Impact-Pack', git_url: 'https://github.com/ltdrdata/ComfyUI-Impact-Pack'},
+            {package: 'missing-pack', installed: false, search_url: 'https://github.com/search?q=missing-pack&type=repositories'}
           ]
         },
         {name: 'NoThumb', path: 'E:/Archive/NoThumb.zip', has_thumbnail: false, state: 'archived', model_bytes: 200, models: []}
@@ -487,6 +492,32 @@ async function run(language) {
     renderLibrary();
     renderDetail(app.state.packages[0]);
   `, context);
+  assert.equal(thumbElements.customNodeCount.textContent, '1 / 2');
+  assert.ok(thumbElements.customNodeSubtitle.textContent.includes('1'));
+  assert.ok(thumbElements.customNodeList.innerHTML.includes('custom-node-chip installed'));
+  assert.ok(thumbElements.customNodeList.innerHTML.includes('custom-node-chip missing'));
+  assert.ok(thumbElements.customNodeList.innerHTML.includes(context.messages['detail.custom_node_installed']));
+  assert.ok(thumbElements.customNodeList.innerHTML.includes(context.messages['detail.custom_node_missing']));
+  assert.ok(thumbElements.customNodeList.innerHTML.includes('data-open-url="https://github.com/ltdrdata/ComfyUI-Impact-Pack"'));
+  assert.ok(thumbElements.customNodeList.innerHTML.includes('data-copy-custom-node="ComfyUI-Impact-Pack"'));
+  assert.ok(thumbElements.noticeList.innerHTML.includes(context.messages['notice.custom_nodes_missing_one']));
+  assert.ok(thumbElements.noticeList.innerHTML.includes(context.messages['notice.custom_nodes_missing_hint']));
+
+  context.copiedText = '';
+  context.writeClipboardText = async text => { context.copiedText = text; };
+  context.toastText = '';
+  context.toast = msg => { context.toastText = msg; };
+  context.fakeCopyBtn = {dataset: {copyCustomNode: 'ComfyUI-Impact-Pack'}, disabled: false, closest() { return this; }};
+  await vm.runInContext("copyCustomNodePackage({target: fakeCopyBtn, preventDefault(){}, stopPropagation(){}})", context);
+  assert.equal(context.copiedText, 'ComfyUI-Impact-Pack');
+  assert.ok(context.toastText.includes('ComfyUI-Impact-Pack'));
+
+  const externalUrlCalls = [];
+  context.window.pywebview.api.open_external_url = async url => { externalUrlCalls.push(url); return {ok: true}; };
+  context.fakeOpenBtn = {dataset: {openUrl: 'https://github.com/ltdrdata/ComfyUI-Impact-Pack'}, closest() { return this; }};
+  await vm.runInContext("openExternalUrlAction({target: fakeOpenBtn, preventDefault(){}, stopPropagation(){}})", context);
+  assert.equal(externalUrlCalls.length, 1);
+  assert.equal(externalUrlCalls[0], 'https://github.com/ltdrdata/ComfyUI-Impact-Pack');
   await vm.runInContext('renderDetailThumbnail(app.state.packages[0])', context);
   assert.equal(heroCover.hidden, false);
   assert.equal(heroCoverImg.src, 'data:image/png;base64,samplethumb');
@@ -535,5 +566,5 @@ async function run(language) {
 (async () => {
   await run('en');
   await run('de');
-  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, and instant-load link modes with badges.');
+  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, and custom nodes live status.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -424,6 +424,65 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
             self.assertEqual(len(packages), 1)
             self.assertEqual(packages[0]["models"][0]["link_type"], "hardlink")
 
+    def test_open_external_url_valid_and_invalid(self):
+        api = GUI.WorkflowSwitcherApi()
+        with patch.object(GUI.webbrowser, "open") as mock_open:
+            res = api.open_external_url("https://github.com/ltdrdata/ComfyUI-Impact-Pack")
+            self.assertTrue(res["ok"])
+            mock_open.assert_called_once_with("https://github.com/ltdrdata/ComfyUI-Impact-Pack")
+
+        bad_schemes = ["file:///c:/passwords.txt", "javascript:alert(1)", "data:text/plain,foo", "not-a-url"]
+        for bad in bad_schemes:
+            res = api.open_external_url(bad)
+            self.assertFalse(res["ok"])
+
+    def test_scan_packages_enriches_custom_nodes_live(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy = base / "Comfy"
+            archive_dir = base / "Archive"
+            comfy.mkdir()
+            archive_dir.mkdir()
+
+            custom_nodes = comfy / "custom_nodes"
+            custom_nodes.mkdir()
+            impact_dir = custom_nodes / "ComfyUI-Impact-Pack"
+            impact_dir.mkdir()
+            git_dir = impact_dir / ".git"
+            git_dir.mkdir()
+            (git_dir / "config").write_text(
+                '[remote "origin"]\n\turl = https://github.com/ltdrdata/ComfyUI-Impact-Pack.git\n',
+                encoding="utf-8",
+            )
+
+            manifest = {
+                "manifest_version": 2,
+                "package_type": "comfyui-workflow-overlay",
+                "name": "CustomNodeFlow",
+                "files": [],
+                "custom_nodes": [
+                    {"package": "impact-pack", "revision": "1.0"},
+                    {"package": "missing-fancy-node", "revision": "2.0"},
+                ],
+            }
+
+            archive_zip = archive_dir / "CustomNodeFlow.zip"
+            with zipfile.ZipFile(archive_zip, "w") as zf:
+                zf.writestr("comfy-package.json", json.dumps(manifest))
+
+            packages = GUI.WorkflowSwitcherApi._scan_packages(comfy, archive_dir)
+            self.assertEqual(len(packages), 1)
+            nodes = packages[0]["custom_nodes"]
+            self.assertEqual(len(nodes), 2)
+
+            self.assertTrue(nodes[0]["installed"])
+            self.assertEqual(nodes[0]["installed_folder"], "ComfyUI-Impact-Pack")
+            self.assertEqual(nodes[0]["git_url"], "https://github.com/ltdrdata/ComfyUI-Impact-Pack")
+
+            self.assertFalse(nodes[1]["installed"])
+            self.assertIsNone(nodes[1]["installed_folder"])
+            self.assertIn("missing-fancy-node", nodes[1]["search_url"])
+
 
 if __name__ == "__main__":
     unittest.main()
