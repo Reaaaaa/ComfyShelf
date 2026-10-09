@@ -804,46 +804,129 @@ async function saveSettings() {
   }
 }
 
+async function inspectAndPackWorkflow(path) {
+  if (!path) return;
+  showBusy(t('pack.analyzing'), t('pack.analyzing_detail'));
+  const report = await callApi('inspect_for_pack', path);
+  hideBusy();
+  const missing = report.missing || [];
+  const exists = (app.state.packages || []).some(item => item.path.toLowerCase() === report.output_path.toLowerCase());
+  const missingDetails = missing.length ? `
+    <div class="missing-detail">
+      <span class="missing-detail-label">${t('pack.missing_label')}</span>
+      ${missing.map(item => missingFileHtml(item)).join('')}
+    </div>` : '';
+  const detectedNodes = report.custom_nodes || [];
+  const missingNodesCount = detectedNodes.filter(n => !n.installed).length;
+  const nodeStat = detectedNodes.length ? `
+    <div class="confirm-stat"><span>${t('detail.custom_nodes_used')}</span><strong>${detectedNodes.length}${missingNodesCount ? ` (${missingNodesCount} ${t('detail.custom_node_missing')})` : ''}</strong></div>` : '';
+  const copy = `
+    <p>${t('pack.copy', {workflow: escapeHtml(report.workflow)})}</p>
+    <div class="confirm-stat"><span>${t('pack.detected')}</span><strong>${report.assets.length}</strong></div>
+    <div class="confirm-stat"><span>${t('pack.missing')}</span><strong>${missing.length}</strong></div>
+    ${nodeStat}
+    ${missingDetails}
+    ${parserWarningsHtml(report.parser_warnings)}
+    <p>${t('parser.scope')}</p>
+    <div class="confirm-stat"><span>${t('common.target')}</span><strong>${escapeHtml(report.output_path)}</strong></div>
+    ${exists ? `<p>${t('pack.replace')}</p>` : ''}`;
+  openConfirm({
+    eyebrow: t('pack.eyebrow'), title: t(missing.length ? 'pack.title_incomplete' : 'pack.title'),
+    copy, danger: false, proceedLabel: t(missing.length ? 'pack.proceed_incomplete' : 'pack.proceed'),
+    showIncomplete: missing.length > 0,
+    action: async () => {
+      showBusy(t('pack.running'), t('pack.running_detail'));
+      const result = await callApi('pack_workflow', path, missing.length > 0, exists);
+      hideBusy(); toast(t('pack.done', {name: report.workflow})); await refreshState(result.output_path);
+    }
+  });
+}
+
 async function addWorkflow() {
   if (!app.state?.configured) { openSettings(true); return; }
   try {
     const path = await callApi('choose_workflow');
     if (!path) return;
-    showBusy(t('pack.analyzing'), t('pack.analyzing_detail'));
-    const report = await callApi('inspect_for_pack', path);
-    hideBusy();
-    const missing = report.missing || [];
-    const exists = (app.state.packages || []).some(item => item.path.toLowerCase() === report.output_path.toLowerCase());
-    const missingDetails = missing.length ? `
-      <div class="missing-detail">
-        <span class="missing-detail-label">${t('pack.missing_label')}</span>
-        ${missing.map(item => missingFileHtml(item)).join('')}
-      </div>` : '';
-    const detectedNodes = report.custom_nodes || [];
-    const missingNodesCount = detectedNodes.filter(n => !n.installed).length;
-    const nodeStat = detectedNodes.length ? `
-      <div class="confirm-stat"><span>${t('detail.custom_nodes_used')}</span><strong>${detectedNodes.length}${missingNodesCount ? ` (${missingNodesCount} ${t('detail.custom_node_missing')})` : ''}</strong></div>` : '';
-    const copy = `
-      <p>${t('pack.copy', {workflow: escapeHtml(report.workflow)})}</p>
-      <div class="confirm-stat"><span>${t('pack.detected')}</span><strong>${report.assets.length}</strong></div>
-      <div class="confirm-stat"><span>${t('pack.missing')}</span><strong>${missing.length}</strong></div>
-      ${nodeStat}
-      ${missingDetails}
-      ${parserWarningsHtml(report.parser_warnings)}
-      <p>${t('parser.scope')}</p>
-      <div class="confirm-stat"><span>${t('common.target')}</span><strong>${escapeHtml(report.output_path)}</strong></div>
-      ${exists ? `<p>${t('pack.replace')}</p>` : ''}`;
-    openConfirm({
-      eyebrow: t('pack.eyebrow'), title: t(missing.length ? 'pack.title_incomplete' : 'pack.title'),
-      copy, danger: false, proceedLabel: t(missing.length ? 'pack.proceed_incomplete' : 'pack.proceed'),
-      showIncomplete: missing.length > 0,
-      action: async () => {
-        showBusy(t('pack.running'), t('pack.running_detail'));
-        const result = await callApi('pack_workflow', path, missing.length > 0, exists);
-        hideBusy(); toast(t('pack.done', {name: report.workflow})); await refreshState(result.output_path);
-      }
-    });
+    await inspectAndPackWorkflow(path);
   } catch (error) { hideBusy(); operationError(error); }
+}
+
+async function inspectAndImportArchive(path) {
+  if (!path) return;
+  showBusy(t('import.inspecting'), t('import.inspecting_detail'));
+  const report = await callApi('inspect_archive_import', path);
+  hideBusy();
+  const missing = report.missing || [];
+  const extras = report.extra_models || [];
+  const direct = report.direct_load || {bytes_required:0, bytes_free:0, present_models:0, blockers:[]};
+  const directBlocked = (direct.blockers || []).length > 0;
+  const missingDetails = missing.length ? `
+    <div class="missing-detail">
+      <span class="missing-detail-label">${t('import.missing_label')}</span>
+      ${missing.map(item => missingFileHtml(item)).join('')}
+    </div>` : '';
+  const replacementText = report.source_is_target
+    ? t('import.replace_selected')
+    : report.target_exists
+      ? t('import.replace_existing')
+      : t('import.add_library');
+  const copy = `
+    <p>${t('import.copy', {package: escapeHtml(report.package)})}</p>
+    <div class="import-chain">
+      <div class="import-chain-row">${icon('check')}<span>${t('import.paths_ok')}<small>${t('import.paths_hint')}</small></span></div>
+      <div class="import-chain-row ${missing.length ? 'warning' : ''}">${icon(missing.length ? 'alert' : 'check')}<span>${t('import.models_matched', {matched: report.matched_count, total: report.assets.length})}<small>${t('import.models_hint')}</small></span></div>
+      <div class="import-chain-row">${icon('shield')}<span>${t('import.manifest')}<small>${t('import.manifest_hint')}</small></span></div>
+    </div>
+    <div class="confirm-stat"><span>${t('import.extras')}</span><strong>${extras.length}</strong></div>
+    <div class="confirm-stat"><span>${t('common.target')}</span><strong>${escapeHtml(report.target_path)}</strong></div>
+    ${missingDetails}
+    ${parserWarningsHtml(report.parser_warnings)}
+    <p>${t('parser.scope')}</p>
+    <p>${escapeHtml(replacementText)}</p>
+    <div class="destination-heading"><span>${t('import.after')}</span><small>${t('import.choose_state')}</small></div>
+    <div class="import-destinations" role="radiogroup" aria-label="${t('import.destination')}">
+      <label class="import-destination ${report.archive_space_sufficient ? '' : 'blocked'}">
+        <input type="radio" name="importDestination" value="archive" checked ${report.archive_space_sufficient ? '' : 'disabled'}>
+        <span class="destination-icon">${icon('shelf')}</span>
+        <span class="destination-copy"><strong>${t('import.seal_archive')}</strong><small>${t('import.seal_archive_hint')}</small><em>${t('import.temp_free', {needed: formatBytes(report.reseal_bytes_required), free: formatBytes(report.archive_bytes_free)})}</em></span>
+      </label>
+      <label class="import-destination ${directBlocked || !report.archive_space_sufficient ? 'blocked' : ''}">
+        <input type="radio" name="importDestination" value="load" ${directBlocked || !report.archive_space_sufficient ? 'disabled' : ''}>
+        <span class="destination-icon">${icon('drive')}</span>
+        <span class="destination-copy"><strong>${t('import.seal_load')}</strong><small>${directBlocked ? t('import.direct_blocked') : t('import.seal_load_hint')}</small><em>${t('import.required_present', {required: formatBytes(direct.bytes_required), present: direct.present_models})}</em></span>
+      </label>
+    </div>`;
+  openConfirm({
+    eyebrow: t('import.eyebrow'),
+    title: t(missing.length ? 'import.title_incomplete' : 'import.title'),
+    copy,
+    danger: false,
+    wide: true,
+    proceedLabel: t(missing.length ? 'import.proceed_incomplete' : 'import.proceed'),
+    showIncomplete: missing.length > 0,
+    disabled: !report.archive_space_sufficient,
+    action: async () => {
+      const destination = document.querySelector('input[name="importDestination"]:checked')?.value || 'archive';
+      const loadAfterImport = destination === 'load';
+      showBusy(
+        t(loadAfterImport ? 'import.running_load' : 'import.running'),
+        t(loadAfterImport ? 'import.running_load_detail' : 'import.running_detail')
+      );
+      const result = await callApi(
+        'import_archive', path, missing.length > 0, report.target_exists, loadAfterImport
+      );
+      hideBusy();
+      toast(t(loadAfterImport ? 'import.done_load' : 'import.done', {name: result.package}));
+      await refreshState(result.output_path);
+    }
+  });
+  document.querySelectorAll('input[name="importDestination"]').forEach(option => {
+    option.addEventListener('change', () => {
+      $('confirmProceedButton').textContent = option.value === 'load'
+        ? t('import.proceed_load')
+        : t(missing.length ? 'import.proceed_incomplete' : 'import.proceed');
+    });
+  });
 }
 
 async function importPackage() {
@@ -851,81 +934,57 @@ async function importPackage() {
   try {
     const path = await callApi('choose_archive');
     if (!path) return;
-    showBusy(t('import.inspecting'), t('import.inspecting_detail'));
-    const report = await callApi('inspect_archive_import', path);
-    hideBusy();
-    const missing = report.missing || [];
-    const extras = report.extra_models || [];
-    const direct = report.direct_load || {bytes_required:0, bytes_free:0, present_models:0, blockers:[]};
-    const directBlocked = (direct.blockers || []).length > 0;
-    const missingDetails = missing.length ? `
-      <div class="missing-detail">
-        <span class="missing-detail-label">${t('import.missing_label')}</span>
-        ${missing.map(item => missingFileHtml(item)).join('')}
-      </div>` : '';
-    const replacementText = report.source_is_target
-      ? t('import.replace_selected')
-      : report.target_exists
-        ? t('import.replace_existing')
-        : t('import.add_library');
-    const copy = `
-      <p>${t('import.copy', {package: escapeHtml(report.package)})}</p>
-      <div class="import-chain">
-        <div class="import-chain-row">${icon('check')}<span>${t('import.paths_ok')}<small>${t('import.paths_hint')}</small></span></div>
-        <div class="import-chain-row ${missing.length ? 'warning' : ''}">${icon(missing.length ? 'alert' : 'check')}<span>${t('import.models_matched', {matched: report.matched_count, total: report.assets.length})}<small>${t('import.models_hint')}</small></span></div>
-        <div class="import-chain-row">${icon('shield')}<span>${t('import.manifest')}<small>${t('import.manifest_hint')}</small></span></div>
-      </div>
-      <div class="confirm-stat"><span>${t('import.extras')}</span><strong>${extras.length}</strong></div>
-      <div class="confirm-stat"><span>${t('common.target')}</span><strong>${escapeHtml(report.target_path)}</strong></div>
-      ${missingDetails}
-      ${parserWarningsHtml(report.parser_warnings)}
-      <p>${t('parser.scope')}</p>
-      <p>${escapeHtml(replacementText)}</p>
-      <div class="destination-heading"><span>${t('import.after')}</span><small>${t('import.choose_state')}</small></div>
-      <div class="import-destinations" role="radiogroup" aria-label="${t('import.destination')}">
-        <label class="import-destination ${report.archive_space_sufficient ? '' : 'blocked'}">
-          <input type="radio" name="importDestination" value="archive" checked ${report.archive_space_sufficient ? '' : 'disabled'}>
-          <span class="destination-icon">${icon('shelf')}</span>
-          <span class="destination-copy"><strong>${t('import.seal_archive')}</strong><small>${t('import.seal_archive_hint')}</small><em>${t('import.temp_free', {needed: formatBytes(report.reseal_bytes_required), free: formatBytes(report.archive_bytes_free)})}</em></span>
-        </label>
-        <label class="import-destination ${directBlocked || !report.archive_space_sufficient ? 'blocked' : ''}">
-          <input type="radio" name="importDestination" value="load" ${directBlocked || !report.archive_space_sufficient ? 'disabled' : ''}>
-          <span class="destination-icon">${icon('drive')}</span>
-          <span class="destination-copy"><strong>${t('import.seal_load')}</strong><small>${directBlocked ? t('import.direct_blocked') : t('import.seal_load_hint')}</small><em>${t('import.required_present', {required: formatBytes(direct.bytes_required), present: direct.present_models})}</em></span>
-        </label>
-      </div>`;
-    openConfirm({
-      eyebrow: t('import.eyebrow'),
-      title: t(missing.length ? 'import.title_incomplete' : 'import.title'),
-      copy,
-      danger: false,
-      wide: true,
-      proceedLabel: t(missing.length ? 'import.proceed_incomplete' : 'import.proceed'),
-      showIncomplete: missing.length > 0,
-      disabled: !report.archive_space_sufficient,
-      action: async () => {
-        const destination = document.querySelector('input[name="importDestination"]:checked')?.value || 'archive';
-        const loadAfterImport = destination === 'load';
-        showBusy(
-          t(loadAfterImport ? 'import.running_load' : 'import.running'),
-          t(loadAfterImport ? 'import.running_load_detail' : 'import.running_detail')
-        );
-        const result = await callApi(
-          'import_archive', path, missing.length > 0, report.target_exists, loadAfterImport
-        );
-        hideBusy();
-        toast(t(loadAfterImport ? 'import.done_load' : 'import.done', {name: result.package}));
-        await refreshState(result.output_path);
-      }
-    });
-    document.querySelectorAll('input[name="importDestination"]').forEach(option => {
-      option.addEventListener('change', () => {
-        $('confirmProceedButton').textContent = option.value === 'load'
-          ? t('import.proceed_load')
-          : t(missing.length ? 'import.proceed_incomplete' : 'import.proceed');
-      });
-    });
+    await inspectAndImportArchive(path);
   } catch (error) { hideBusy(); operationError(error); }
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      const base64 = typeof result === 'string' && result.includes(',')
+        ? result.split(',')[1]
+        : result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error('Failed to read dropped file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleDroppedFile(file) {
+  if (!file) return;
+  const name = String(file.name || '').toLowerCase();
+  if (!name.endsWith('.png') && !name.endsWith('.json') && !name.endsWith('.zip')) {
+    toast(t('drop.unsupported_file'), true);
+    return;
+  }
+  if (!app.state?.configured) { openSettings(true); return; }
+
+  showBusy(t('drop.processing'), t('drop.processing_detail'));
+  let targetPath = file.pywebviewFullPath || file.path || null;
+  if (!targetPath) {
+    try {
+      const base64 = await readFileAsBase64(file);
+      targetPath = await callApi('stage_dropped_file', file.name, base64);
+    } catch (err) {
+      hideBusy();
+      operationError(err);
+      return;
+    }
+  }
+
+  try {
+    if (name.endsWith('.zip')) {
+      await inspectAndImportArchive(targetPath);
+    } else {
+      await inspectAndPackWorkflow(targetPath);
+    }
+  } catch (error) {
+    hideBusy();
+    operationError(error);
+  }
 }
 
 function renderIntegrity(pkg) {
@@ -1539,6 +1598,46 @@ function installEvents() {
     document.querySelectorAll('.filter-chip').forEach(item => item.classList.remove('active'));
     chip.classList.add('active'); app.filter = chip.dataset.filter; renderLibrary();
   }));
+
+  let dragCounter = 0;
+  const dropOverlay = $('dropOverlay');
+  window.addEventListener('dragenter', event => {
+    event.preventDefault();
+    dragCounter++;
+    if (dropOverlay) {
+      dropOverlay.classList.remove('hidden');
+      dropOverlay.classList.add('active');
+    }
+  });
+  window.addEventListener('dragover', event => {
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  });
+  window.addEventListener('dragleave', event => {
+    event.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      if (dropOverlay) {
+        dropOverlay.classList.add('hidden');
+        dropOverlay.classList.remove('active');
+      }
+    }
+  });
+  window.addEventListener('drop', async event => {
+    event.preventDefault();
+    dragCounter = 0;
+    if (dropOverlay) {
+      dropOverlay.classList.add('hidden');
+      dropOverlay.classList.remove('active');
+    }
+    const files = event.dataTransfer?.files;
+    if (files && files.length > 0) {
+      await handleDroppedFile(files[0]);
+    }
+  });
 }
 
 function installResizeHandles() {

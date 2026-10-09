@@ -64,11 +64,11 @@
           <button class="icon-button" id="refreshButton" title="Refresh library" data-i18n-title="library.refresh"><svg><use href="#i-refresh"/></svg></button>
         </div>
 
-        <button class="add-workflow-button" id="addWorkflowButton">
+        <button class="add-workflow-button" id="addWorkflowButton" data-i18n-title="library.archive_workflow_hint">
           <span class="button-icon"><svg><use href="#i-plus"/></svg></span>
           <span data-i18n="library.archive_workflow">Archive workflow</span>
         </button>
-        <button class="import-package-button" id="importPackageButton">
+        <button class="import-package-button" id="importPackageButton" data-i18n-title="library.import_package_hint">
           <span class="button-icon"><svg><use href="#i-import"/></svg></span>
           <span data-i18n="library.import_package">Import package</span>
         </button>
@@ -112,7 +112,7 @@
           <span class="eyebrow" data-i18n="empty.eyebrow">Your workflow rack</span>
           <h1 data-i18n-html="empty.title">Large workflows.<br>Local only when you need them.</h1>
           <p data-i18n="empty.copy">Archive the models a workflow uses as a verified package and bring them back with a safe switch.</p>
-          <button class="primary-button" id="emptyAddButton"><svg><use href="#i-plus"/></svg><span data-i18n="empty.action">Archive first workflow</span></button>
+          <button class="primary-button" id="emptyAddButton" data-i18n-title="library.archive_workflow_hint"><svg><use href="#i-plus"/></svg><span data-i18n="empty.action">Archive first workflow</span></button>
         </section>
 
         <section class="loading-state hidden" id="loadingState" aria-live="polite">
@@ -350,6 +350,13 @@
       <div class="process-log" id="processLog"></div>
       <div class="busy-actions"><button class="text-button cancel-operation-button" id="cancelOperationButton">Cancel operation</button></div>
     </section>
+  </div>
+  <div class="drop-overlay hidden" id="dropOverlay">
+    <div class="drop-card">
+      <svg><use href="#i-upload"/></svg>
+      <h3 data-i18n="drop.title">Workflow oder Paket hier ablegen</h3>
+      <p data-i18n="drop.subtitle">Generiertes .png, .json-Workflow oder .zip-Paket ablegen zum Archivieren oder Importieren</p>
+    </div>
   </div>
   <div class="toast hidden" id="toast"><svg><use href="#i-check"/></svg><span id="toastText"></span></div>
 

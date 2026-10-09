@@ -76,8 +76,8 @@ if warned, choose another suitable drive instead of formatting one blindly.
 
 ## 4. Archive your first workflow
 
-1. Choose **Archive workflow**.
-2. Select the workflow's `.json` file: the saved workflow from ComfyUI.
+1. Choose **Archive workflow** (or simply drag and drop your `.png`, `.json`, or `.zip` file anywhere into the ComfyShelf window).
+2. Select the workflow's `.json` file or a generated `.png` image: ComfyUI embeds workflow metadata directly into generated PNGs. ComfyShelf extracts the graph to detect models and automatically uses the image as a visual cover thumbnail on your shelf.
 3. Review the file list and any warnings. Here, “files” includes models, VAEs,
    LoRAs, text encoders and other supported model files.
 4. Confirm and wait until archiving has finished successfully.

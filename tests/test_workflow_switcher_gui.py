@@ -1,3 +1,4 @@
+import base64
 import sys
 import os
 import tempfile
@@ -33,7 +34,7 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         base = Path(temp.name)
-        for name, filename in (("HISTORY_PATH", "history.json"), ("PREFERENCES_PATH", "preferences.json")):
+        for name, filename in (("HISTORY_PATH", "history.json"), ("PREFERENCES_PATH", "preferences.json"), ("STAGING_DIR", "staging")):
             override = patch.object(GUI, name, base / filename)
             override.start()
             self.addCleanup(override.stop)
@@ -482,6 +483,40 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
             self.assertFalse(nodes[1]["installed"])
             self.assertIsNone(nodes[1]["installed_folder"])
             self.assertIn("missing-fancy-node", nodes[1]["search_url"])
+
+    def test_stage_dropped_file_valid_formats_and_sanitization(self):
+        api = GUI.WorkflowSwitcherApi()
+        raw_png = b"\x89PNG\r\n\x1a\nfake_png_data"
+        b64_png = base64.b64encode(raw_png).decode("ascii")
+        res = api.stage_dropped_file("my_workflow.png", b64_png)
+        self.assertTrue(res["ok"])
+        staged_path = Path(res["data"])
+        self.assertTrue(staged_path.is_file())
+        self.assertEqual(staged_path.read_bytes(), raw_png)
+
+        # Path traversal sanitized to basename
+        res_traversal = api.stage_dropped_file("../../traversal_test.json", base64.b64encode(b"{}").decode("ascii"))
+        self.assertTrue(res_traversal["ok"])
+        staged_traversal = Path(res_traversal["data"])
+        self.assertEqual(staged_traversal.name, "traversal_test.json")
+        self.assertEqual(staged_traversal.parent, GUI.STAGING_DIR)
+
+        # Zip staging
+        res_zip = api.stage_dropped_file("pack.zip", base64.b64encode(b"PK0304").decode("ascii"))
+        self.assertTrue(res_zip["ok"])
+        self.assertTrue(Path(res_zip["data"]).is_file())
+
+    def test_stage_dropped_file_rejects_invalid_extension(self):
+        api = GUI.WorkflowSwitcherApi()
+        for bad_name in ("malware.exe", "script.bat", "notes.txt", "archive.tar.gz"):
+            res = api.stage_dropped_file(bad_name, base64.b64encode(b"content").decode("ascii"))
+            self.assertFalse(res["ok"])
+
+    def test_stage_dropped_file_rejects_empty_filename(self):
+        api = GUI.WorkflowSwitcherApi()
+        for empty in ("", "   ", "\t"):
+            res = api.stage_dropped_file(empty, base64.b64encode(b"content").decode("ascii"))
+            self.assertFalse(res["ok"])
 
 
 if __name__ == "__main__":

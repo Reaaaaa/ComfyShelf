@@ -4,7 +4,7 @@
 
 # ComfyShelf
 
-[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 177 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows preview](docs/assets/windows-preview.svg)](#get-started-on-windows)
+[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 180 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows preview](docs/assets/windows-preview.svg)](#get-started-on-windows)
 
 <sub>Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.</sub>
 
@@ -24,13 +24,12 @@ archived copy instead of filling your archive drive with duplicates.
 ## What can I do with it?
 
 - Load and archive workflows directly from `.json` files or `.png` images with embedded metadata and visual thumbnails.
-
-- Archive the files detected in a workflow: models, VAEs, LoRAs, text encoders and
-  other supported model files.
+- Drag & drop `.png` workflows, `.json` files, or `.zip` packages straight into the window to archive or import them immediately.
+- Archive the files detected in a workflow: models, VAEs, LoRAs, text encoders and other supported model files.
 - Free up space, restore files later, or switch to another archived workflow.
 - See which files are missing and copy their names to search for them.
-- Scan an incomplete workflow again and add files found in ComfyUI or the shared
-  pool, with a preview, hash checks and a backup of the original ZIP.
+- Live-inspect custom nodes used in the workflow with direct GitHub links and ComfyUI-Manager search copy.
+- Scan an incomplete workflow again and add files found in ComfyUI or the shared pool, with a preview, hash checks and a backup of the original ZIP.
 - Check an archive and import supported workflow ZIPs, including edited packages.
 - Export a workflow with its available files in one ZIP to take elsewhere.
 - Use an English or German interface, with progress, logs and operation history.
@@ -66,7 +65,8 @@ For the complete first-run walkthrough and help with errors, choose your languag
 
 ## Your first workflow
 
-Choose **Archive workflow**, select its JSON file, and review the detected files.
+Choose **Archive workflow** (or simply drag and drop your workflow file into the window), select its `.json` or generated `.png` image, and review the detected files. If you use a `.png` created by ComfyUI, ComfyShelf extracts the embedded workflow graph and automatically uses the image as a cover thumbnail on your shelf.
+
 Archiving leaves your ComfyUI files in place. Once the archive is ready, use
 **Unload workflow** to free space. Use **Load workflow** when you need them again.
 

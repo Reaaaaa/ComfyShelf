@@ -673,3 +673,55 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outl
   color: #bfa4e8;
   border-color: rgba(191, 164, 232, 0.35);
 }
+
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 8, 10, 0.82);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.drop-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 38px 52px;
+  border: 2px dashed #45b27a;
+  border-radius: var(--radius-lg);
+  background: #171e23;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  text-align: center;
+  animation: dropPulse 1.6s infinite alternate ease-in-out;
+}
+@keyframes dropPulse {
+  from { transform: scale(0.98); border-color: #45b27a; }
+  to { transform: scale(1.02); border-color: #5ed696; }
+}
+.drop-card svg {
+  width: 48px;
+  height: 48px;
+  color: #45b27a;
+  margin-bottom: 14px;
+}
+.drop-card h3 {
+  font: 620 22px/1.2 var(--display);
+  color: var(--text-main);
+  letter-spacing: -.02em;
+  margin-bottom: 8px;
+}
+.drop-card p {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 380px;
+  line-height: 1.5;
+}

@@ -84,8 +84,8 @@ vorschnell eines zu formatieren.
 
 ## 4. Den ersten Workflow archivieren
 
-1. Wähle **Workflow archivieren**.
-2. Wähle die `.json`-Datei: deinen gespeicherten Workflow aus ComfyUI.
+1. Wähle **Workflow archivieren** (oder ziehe deine `.png`-, `.json`- oder `.zip`-Datei einfach per **Drag & Drop** in das App-Fenster).
+2. Wähle die `.json`-Datei oder ein generiertes `.png`-Bild: ComfyUI bettet Workflow-Metadaten direkt in generierte PNGs ein. ComfyShelf liest den Modell-Graphen daraus aus und nutzt das Bild gleichzeitig als Cover-Vorschaubild im Regal.
 3. Prüfe die Dateiliste und eventuelle Hinweise. Mit Dateien sind hier auch
    Modelle, VAEs, LoRAs, Text Encoder und weitere unterstützte Modelldateien gemeint.
 4. Bestätige und warte, bis das Archiv erfolgreich erstellt wurde.

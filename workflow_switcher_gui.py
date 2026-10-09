@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -23,6 +24,7 @@ WEB_DIR = APP_DIR / "gui"
 HISTORY_PATH = APP_DIR / ".gui-state" / "history.json"
 LOG_PATH = APP_DIR / ".gui-state" / "comfyshelf.log"
 PREFERENCES_PATH = APP_DIR / ".gui-state" / "preferences.json"
+STAGING_DIR = APP_DIR / ".gui-state" / "staging"
 LOCALES_DIR = WEB_DIR / "locales"
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
@@ -1180,6 +1182,22 @@ class WorkflowSwitcherApi:
                 raise ValueError("Ungültige oder unsichere URL.")
             webbrowser.open(safe_url)
             return True
+
+        return self._result(action)
+
+    def stage_dropped_file(self, filename: str, content_base64: str) -> dict[str, Any]:
+        def action() -> str:
+            safe_name = Path(filename).name.strip()
+            if not safe_name:
+                raise ValueError("Ungültiger Dateiname.")
+            ext = Path(safe_name).suffix.casefold()
+            if ext not in {".json", ".png", ".zip"}:
+                raise ValueError(f"Nicht unterstütztes Dateiformat: {ext}")
+            STAGING_DIR.mkdir(parents=True, exist_ok=True)
+            target = STAGING_DIR / safe_name
+            raw_bytes = base64.b64decode(content_base64)
+            target.write_bytes(raw_bytes)
+            return str(target.resolve())
 
         return self._result(action)
 

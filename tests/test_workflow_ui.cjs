@@ -561,10 +561,79 @@ async function run(language) {
     openSettings();
   `, context);
   assert.equal(linkModeSelect.value, 'symlink');
+
+  // Drag & drop tests
+  context.toastText = '';
+  await vm.runInContext("handleDroppedFile({name: 'unsupported.exe', path: 'C:/unsupported.exe'})", context);
+  assert.equal(context.toastText, context.messages['drop.unsupported_file']);
+
+  let stagedArgs = null;
+  context.window.pywebview.api.stage_dropped_file = async (name, b64) => {
+    stagedArgs = {name, b64};
+    return {ok: true, data: `C:/staging/${name}`};
+  };
+
+  let inspectPackPath = null;
+  context.window.pywebview.api.inspect_for_pack = async (path) => {
+    inspectPackPath = path;
+    return {ok: true, data: {workflow: 'dropped', assets: [], missing: [], custom_nodes: [], output_path: 'C:/out.zip'}};
+  };
+
+  let inspectImportPath = null;
+  context.window.pywebview.api.inspect_archive_import = async (path) => {
+    inspectImportPath = path;
+    return {ok: true, data: {package: 'dropped', assets: [], missing: [], target_path: 'C:/target.zip', archive_space_sufficient: true}};
+  };
+
+  // Dropping .png with path directly inspects for pack
+  await vm.runInContext("handleDroppedFile({name: 'flux_dev.png', path: 'D:/flux_dev.png'})", context);
+  assert.equal(inspectPackPath, 'D:/flux_dev.png');
+  assert.ok(context.confirmation.proceedLabel.includes(context.messages['pack.proceed']));
+
+  // Dropping .zip with path directly inspects for import
+  await vm.runInContext("handleDroppedFile({name: 'bundle.zip', path: 'D:/bundle.zip'})", context);
+  assert.equal(inspectImportPath, 'D:/bundle.zip');
+
+  // Dropping .json without direct path uses FileReader mock and stage_dropped_file
+  context.FileReader = class {
+    readAsDataURL(file) {
+      this.result = 'data:application/json;base64,eyJub2RlcyI6W119';
+      this.onload();
+    }
+  };
+  await vm.runInContext("handleDroppedFile({name: 'browser_dropped.json'})", context);
+  assert.equal(stagedArgs.name, 'browser_dropped.json');
+  assert.equal(stagedArgs.b64, 'eyJub2RlcyI6W119');
+  assert.equal(inspectPackPath, 'C:/staging/browser_dropped.json');
 }
 
 (async () => {
   await run('en');
   await run('de');
-  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, and custom nodes live status.');
+
+  // Verify HTML markup and button tooltip attributes
+  const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.ok(indexHtml.includes('id="addWorkflowButton" data-i18n-title="library.archive_workflow_hint"'));
+  assert.ok(indexHtml.includes('id="importPackageButton" data-i18n-title="library.import_package_hint"'));
+  assert.ok(indexHtml.includes('id="emptyAddButton" data-i18n-title="library.archive_workflow_hint"'));
+  assert.ok(indexHtml.includes('id="dropOverlay"'));
+  assert.ok(indexHtml.includes('data-i18n="drop.title"'));
+  assert.ok(indexHtml.includes('data-i18n="drop.subtitle"'));
+
+  for (const lang of ['de', 'en']) {
+    const loc = JSON.parse(fs.readFileSync(path.join(root, 'locales', `${lang}.json`), 'utf8'));
+    for (const key of [
+      'library.archive_workflow_hint',
+      'library.import_package_hint',
+      'drop.title',
+      'drop.subtitle',
+      'drop.processing',
+      'drop.processing_detail',
+      'drop.unsupported_file',
+    ]) {
+      assert.ok(loc[key], `Missing key ${key} in ${lang}.json`);
+    }
+  }
+
+  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, custom nodes live status, and Drag & Drop file staging.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
