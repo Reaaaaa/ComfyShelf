@@ -10,88 +10,87 @@
 
 </div>
 
-More room for creating. Less time moving model files around.
+**More room for creating. Less time juggling gigabytes.**
 
-ComfyShelf helps you put ComfyUI workflows away and bring their files back when
-you need them. Select a workflow, archive the files it needs, and remove the
-verified copies from your ComfyUI drive when you want to free up space.
+ComfyUI workflows and modern generative models (SDXL, Flux, Pony, SD1.5, etc.) quickly consume hundreds of gigabytes on fast SSDs. ComfyShelf is a lightweight, visual shelf and disk space manager designed specifically for ComfyUI.
 
-If several workflows use the same model file, ComfyShelf stores one shared
-archived copy instead of filling your archive drive with duplicates.
+Park unused workflows on secondary storage, free up precious SSD space with absolute confidence, and bring full setups back with a single click.
 
 [User guide (English)](docs/guide.en.md) · [Deutsche Anleitung](docs/guide.de.md)
 
-## What can I do with it?
+---
 
-- Load and archive workflows directly from `.json` files or `.png` images with embedded metadata and visual thumbnails.
-- Drag & drop `.png` workflows, `.json` files, or `.zip` packages straight into the window to archive or import them immediately.
-- Search and filter workflows in real time by name, models used, or custom nodes (`Ctrl + F`).
-- Archive the files detected in a workflow: models, VAEs, LoRAs, text encoders and other supported model files.
-- Free up space, restore files later, or switch to another archived workflow.
-- See which files are missing and copy their names to search for them.
-- Live-inspect custom nodes used in the workflow with direct GitHub links and ComfyUI-Manager search copy.
-- Scan an incomplete workflow again and add files found in ComfyUI or the shared pool, with a preview, hash checks and a backup of the original ZIP.
-- Check an archive and import supported workflow ZIPs, including edited packages.
-- Export a workflow with its available files in one ZIP to take elsewhere.
-- Use an English or German interface, with progress, logs and operation history.
+## Key Highlights & USPs
 
-Custom nodes are listed for reference, but their code is not included or installed.
+- **Smart Deduplication & Shared Model Pool**  
+  When multiple workflows rely on the same 12 GB checkpoint, LoRA, or VAE, ComfyShelf stores that file **only once** in a shared model archive. Individual workflow packages remain featherlight (just the node graph, metadata, and cover art), preventing your backup drive from filling up with redundant duplicates.
+
+- **Zero Data Loss via SHA-256 Cryptographic Verification**  
+  Freeing up space by unloading a workflow removes local model copies from ComfyUI — but **only after** an automated SHA-256 checksum comparison confirms that an identical, uncorrupted copy is safely preserved in your archive. If a file is damaged, incomplete, or modified, ComfyShelf never touches the original. A smart verification cache keeps subsequent checks virtually instantaneous without re-reading gigabytes from disk.
+
+- **Shared Model Collision Protection**  
+  No broken workflows: before unloading or removing files, ComfyShelf checks whether other active workflows depend on those same models. Shared files are safeguarded so you never accidentally break another project.
+
+- **Visual Workflow Shelf with PNG Metadata Extraction**  
+  Drag & drop a generated `.png` image directly onto ComfyShelf. It automatically extracts the embedded ComfyUI workflow graph, detects all required models, and uses the image as a high-res cover thumbnail with a built-in zoom lightbox. Standard `.json` workflow files and `.zip` archives work just as seamlessly.
+
+- **Real-Time Instant Search & Scope Filtering (`Ctrl + F`)**  
+  Find any workflow in your library in milliseconds. Filter across custom scopes (`[All]`, `[Name]`, `[Model]`, `[Node]`). Smart match badges highlight exact hits directly in the workflow list (e.g. `🔍 Model: qwen_image_edit_fp8.safetensors`), so you instantly see why a workflow matched without digging through complex node graphs.
+
+- **Custom Node Live Diagnostics & 1-Click Search**  
+  Live-inspects all custom nodes used in a workflow against your active ComfyUI installation (Installed vs. Missing). Provides direct links to original GitHub repositories and 1-click clipboard copy to locate and install missing nodes quickly via ComfyUI-Manager.
+
+- **Self-Healing Archives & 1-Click Portable Export**  
+  Archived a workflow while a model was still downloading? The **Rescan Incomplete Workflow** feature scans for newly acquired files, verifies their hashes, creates a timestamped safety backup of the archive, and completes the package. Need to take a workflow to another PC or share it with a friend? **Export Portable ZIP** bundles the workflow and its required models into a self-contained, standalone package.
+
+- **Safe & Non-Destructive by Design**  
+  Supports the Windows Recycle Bin for safe deletion. ComfyShelf never alters ComfyUI's core code, settings, or Python environment. Runs 100% locally with zero telemetry, full offline capability, and a clean bilingual interface (English and German).
+
+---
+
+## How It Works in 3 Simple Steps
+
+1. **Archive:** Select or drag & drop a `.png` or `.json` workflow. ComfyShelf analyzes the graph, lists all required models, and copies them to your archive storage. Your local ComfyUI files remain completely untouched.
+2. **Unload:** When you need disk space on your fast drive, click **Unload workflow**. ComfyShelf verifies SHA-256 hashes against the archive and safely removes local copies (or moves them to the Recycle Bin).
+3. **Load:** Ready to generate again? Click **Load workflow**, and ComfyShelf restores the exact models back to their proper ComfyUI folders.
+
+---
 
 ## Get started on Windows
 
-**This is an early version. There is no ready-to-run EXE yet.** Setup and native
-window startup still need testing on a clean Windows computer.
+**This is an early version. There is no ready-to-run EXE yet.** Setup and native window startup still need testing on a clean Windows computer.
 
-You need an existing ComfyUI installation, installed **64-bit Python 3.10 or newer**,
-internet access for the initial setup, and enough space for the archived files.
-Windows components needed to display the app are explained in each user guide.
+You need an existing ComfyUI installation, installed **64-bit Python 3.10 or newer**, internet access for the initial setup, and enough storage space for your archived files.
 
-1. Save the **whole ComfyShelf folder** somewhere you can write to. If you received
-   a ZIP, extract it first; do not run setup from inside the ZIP.
-2. Double-click **Setup_ComfyShelf.cmd**. Choose English or German and confirm
-   the installation. It prepares the app's own Python environment, without
-   changing ComfyUI or its models.
-3. When setup finishes, double-click **Start_ComfyShelf.cmd** (or the **ComfyShelf** shortcut).
-4. Choose your ComfyUI folder and a separate archive folder, preferably on the
-   drive with more free space.
+1. Save the **whole ComfyShelf folder** in a writable location (e.g. Documents). If you received a ZIP, extract it first; do not run setup from inside the ZIP.
+2. Double-click **Setup_ComfyShelf.cmd**. Choose English or German and confirm the installation. It prepares an isolated Python environment for the app without altering ComfyUI or your models.
+3. When setup finishes, double-click **Start_ComfyShelf.cmd** (or the **ComfyShelf** desktop shortcut).
+4. Select your ComfyUI directory and a separate archive directory (preferably on a secondary drive with ample free space).
 
-You do not need to type commands or edit configuration files for this setup.
-If Python is missing, setup tells you how to install it; it does not install
-Python or Windows components automatically. A text window during setup is normal.
+You do not need to type commands or edit configuration files. If Python is missing, setup guides you on how to install it.
 
-For the complete first-run walkthrough and help with errors, choose your language:
-
+For the complete first-run walkthrough and troubleshooting:
 - [English instructions](docs/guide.en.md)
 - [Deutsche Anleitung](docs/guide.de.md)
 
-## Your first workflow
-
-Choose **Archive workflow** (or simply drag and drop your workflow file into the window), select its `.json` or generated `.png` image, and review the detected files. If you use a `.png` created by ComfyUI, ComfyShelf extracts the embedded workflow graph and automatically uses the image as a cover thumbnail on your shelf.
-
-Archiving leaves your ComfyUI files in place. Once the archive is ready, use
-**Unload workflow** to free space. Use **Load workflow** when you need them again.
+---
 
 ## Important before you start
 
-- **Unloading deletes verified local model copies from ComfyUI.** Their archived
-  copies remain. Stop running generations first and review the preview.
-- **Detection is not perfect.** Unusual custom loaders or filenames determined
-  only while a workflow runs can be missed. Review warnings and keep a separate
-  backup of anything you cannot replace.
-- **A successful file check does not guarantee a complete or working workflow.**
-  Custom nodes, software versions and hardware still matter.
-- **The small ZIPs in the archive folder are not portable by themselves.** They
-  rely on the shared model storage beside them. Use **Export portable ZIP…** to
-  choose a destination and take one workflow with its archived models elsewhere.
-  Custom-node code and Python dependencies are not included. Keep the entire
-  archive folder together when backing up your library.
+- **Unloading deletes verified local model copies from ComfyUI.** Their archived copies remain safe in the shared pool. Always finish running generations before unloading, and review the confirmation preview.
+- **Detection is not perfect.** Unusual custom loaders or dynamically generated filenames might not be detected automatically. Review warnings and keep a separate backup of anything irreplaceable.
+- **A successful file check does not guarantee a complete generation.** Custom nodes, compatible software versions, and sufficient GPU hardware still matter.
+- **Standard workflow ZIPs in the archive rely on the shared model folder.** Use **Export portable ZIP…** if you want a standalone archive to transfer to another machine. Keep the entire archive directory together when backing up your collection.
 
-Both user guides explain these limits and the everyday actions in more detail,
-including unsupported external model folders.
+Both user guides explain these details and everyday operations in depth:
+- [User guide (English)](docs/guide.en.md)
+- [Deutsche Anleitung](docs/guide.de.md)
+
+---
 
 ## For advanced users and contributors
 
-Normal use does not require the command line. Optional documentation:
+Normal use does not require the command line. Additional documentation:
 
 - [English CLI reference](docs/reference.en.md#command-line-reference)
 - [Technische Referenz (Deutsch)](docs/reference.de.md)
@@ -99,15 +98,16 @@ Normal use does not require the command line. Optional documentation:
 - [Development and tests](CONTRIBUTING.md)
 - [Release checklist](docs/release-checklist.md)
 
+---
+
 ## Support
 
 If ComfyShelf saves you disk space or makes managing your workflows easier, consider supporting the project:
 
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Support_means_a_lot-2d856b?style=for-the-badge&logo=kofi&logoColor=white)](https://ko-fi.com/rezziii)
 
+---
+
 ## License
 
-ComfyShelf's original code and documentation are licensed under the
-[GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`).
-Third-party components retain their own licenses. This license does not change
-the rights or licenses of the models and workflows you archive.
+ComfyShelf's original code and documentation are licensed under the [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). Third-party components retain their own licenses. This license does not change the rights or licenses of the models and workflows you archive.
