@@ -343,6 +343,55 @@
     </section>
   </div>
 
+  <div class="modal-backdrop hidden" id="downloadModal">
+    <section class="modal download-modal" role="dialog" aria-modal="true" aria-labelledby="downloadTitle">
+      <div class="modal-heading">
+        <div><span class="eyebrow" data-i18n="download.eyebrow">Hugging Face Resolver</span><h2 id="downloadTitle" data-i18n="download.title">Download model</h2></div>
+        <button class="icon-button modal-close" id="downloadCloseButton" aria-label="Close dialog" data-i18n-aria="common.close_dialog"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <p class="modal-intro" data-i18n="download.intro">Download missing models directly from Hugging Face into ComfyUI or your shared pool.</p>
+
+      <div class="download-info-card">
+        <div class="download-info-row">
+          <span class="download-info-label" data-i18n="download.model_label">Model</span>
+          <strong id="downloadModelName" class="download-info-value"></strong>
+        </div>
+        <div class="download-info-row">
+          <span class="download-info-label" data-i18n="download.target_label">Destination</span>
+          <span id="downloadTargetPath" class="download-info-value code-path"></span>
+        </div>
+      </div>
+
+      <div class="download-source-section">
+        <label class="path-field" for="downloadSourceInput">
+          <span data-i18n="download.source_label">Hugging Face URL or Repo-ID</span>
+          <div class="download-input-row">
+            <input id="downloadSourceInput" type="text" autocomplete="off" spellcheck="false" placeholder="https://huggingface.co/... oder owner/repo" data-i18n-placeholder="download.source_placeholder">
+          </div>
+          <small data-i18n="download.source_hint">Paste a Hugging Face URL, repo ID (e.g. owner/repo) or direct download link.</small>
+        </label>
+
+        <div class="download-candidates-box hidden" id="downloadCandidatesBox">
+          <span class="download-candidates-header" id="downloadCandidatesHeader" data-i18n="download.hf_candidates_header">Suggestions from Hugging Face:</span>
+          <div class="download-candidates-list" id="downloadCandidatesList"></div>
+        </div>
+      </div>
+
+      <label class="safety-option" id="downloadStoreInPoolOption">
+        <input type="checkbox" id="downloadStoreInPoolCheckbox" checked>
+        <span>
+          <strong data-i18n="download.store_in_pool">Record in package &amp; shared pool</strong>
+          <small data-i18n="download.store_in_pool_hint">Removes model from missing list and updates workflow status to complete.</small>
+        </span>
+      </label>
+
+      <div class="modal-actions">
+        <button class="text-button" id="downloadCancelButton" data-i18n="common.cancel">Cancel</button>
+        <button class="primary-button" id="downloadStartButton"><svg><use href="#i-download"/></svg><span data-i18n="download.start_button">Start Download</span></button>
+      </div>
+    </section>
+  </div>
+
   <div class="modal-backdrop hidden" id="lightboxModal">
     <div class="lightbox-dialog" role="dialog" aria-modal="true" aria-label="Workflow preview">
       <button class="icon-button lightbox-close" id="lightboxCloseButton" aria-label="Close dialog" data-i18n-aria="common.close_dialog"><svg><use href="#i-close"/></svg></button>

@@ -49,6 +49,7 @@ import comfy_archive as engine
 import verification_cache
 import dependency_scan
 import workflow_file
+import model_downloader
 
 
 def _reveal_workflow_file(path: Path) -> None:
@@ -886,6 +887,59 @@ class WorkflowSwitcherApi:
             self._record_history("dependencies", Path(archive_path).stem,
                                  f"Added {result['added']} dependencies; backup: {result['backup']}",
                                  result["new_object_bytes"])
+            return result
+        return self._operation(action)
+
+    def search_hf_model(self, filename: str) -> dict[str, Any]:
+        return self._result(lambda: model_downloader.search_huggingface_model(filename))
+
+    def get_model_target_path(self, filename: str, kind: str = "") -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            installation = engine.active_installation()
+            if not installation:
+                raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
+            comfy_root = Path(installation["comfy_root"])
+            target = model_downloader.resolve_model_target_path(comfy_root, filename, kind)
+            category = model_downloader.default_category_for_kind(kind)
+            return {
+                "target_path": str(target),
+                "category": category,
+                "relative_path": f"models/{category}/{Path(filename).name}",
+            }
+        return self._result(action)
+
+    def download_model(
+        self,
+        url_or_repo: str,
+        filename: str,
+        kind: str = "",
+        archive_path: str = "",
+        expected_hash: str = "",
+        store_in_pool: bool = False,
+    ) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            installation = engine.active_installation()
+            if not installation:
+                raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
+            comfy_root = Path(installation["comfy_root"])
+            archive = Path(archive_path) if archive_path else None
+            result = model_downloader.download_model_file(
+                url_or_repo=url_or_repo,
+                filename=filename,
+                comfy_root=comfy_root,
+                kind=kind,
+                expected_hash=expected_hash,
+                archive_path=archive,
+                store_in_pool=store_in_pool,
+                progress=self._progress,
+                cancel_event=self._cancel_event,
+            )
+            self._record_history(
+                "download",
+                filename,
+                f"Model downloaded: {filename} ({model_downloader.format_bytes(result.get('size', 0))})",
+                int(result.get("size", 0)),
+            )
             return result
         return self._operation(action)
 

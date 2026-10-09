@@ -441,8 +441,43 @@ def workflow_format(data: dict[str, Any]) -> str:
     return "unknown"
 
 
+PLACEHOLDER_REGEX = re.compile(
+    r"^(?:"
+    r"\[?none\]?|"
+    r"\(none\)|"
+    r"placeholder(?:[_\-.\s].*)?|"
+    r"dummy(?:[_\-.\s].*)?|"
+    r"(?:put|insert|choose|select)[_-]your(?:[_\-.\s].*)?|"
+    r"your[_-].*[_-]disabled(?:[_\-.\s].*)?|"
+    r"your[_-](?:lora|checkpoint|model|unet|diffusion|vae|clip|controlnet)(?:[_\-.\s].*)?"
+    r")$",
+    re.IGNORECASE,
+)
+
+
+def is_placeholder_model_filename(value: Any) -> bool:
+    """Return True if a string represents a template placeholder or dummy model filename."""
+    if not isinstance(value, str):
+        return False
+    clean = value.strip().replace("\\", "/")
+    if not clean:
+        return False
+    name = PurePosixPath(clean).name
+    lower_name = name.lower()
+    lower_stem = (
+        PurePosixPath(name).stem.lower()
+        if PurePosixPath(name).suffix.lower() in MODEL_EXTENSIONS
+        else lower_name
+    )
+    return bool(PLACEHOLDER_REGEX.match(lower_name) or PLACEHOLDER_REGEX.match(lower_stem))
+
+
 def _is_model_filename(value: Any) -> bool:
-    return isinstance(value, str) and Path(value).suffix.lower() in MODEL_EXTENSIONS
+    return (
+        isinstance(value, str)
+        and not is_placeholder_model_filename(value)
+        and Path(value).suffix.lower() in MODEL_EXTENSIONS
+    )
 
 
 def _generic_kind(node_type: str, field: str = "") -> tuple[str, tuple[str, ...]]:
@@ -740,6 +775,8 @@ def parser_warnings(data: dict[str, Any], assets: list[Asset]) -> list[dict[str,
         if "loader" in node_type.casefold() and node_id not in detected:
             if _is_empty_bypassed_lora(node):
                 continue
+            if any(is_placeholder_model_filename(value) for _, value in _walk_strings(values)):
+                continue
             if not any(_is_model_filename(value) for _, value in _walk_strings(values)):
                 warnings.append({"code": "unresolved-loader", "node_id": str(node_id), "node_type": node_type,
                                  "field": "", "filename": "", "resolved_path": ""})
@@ -818,23 +855,28 @@ def _emit_progress(
     current: int | None = None,
     total: int | None = None,
     file: str | None = None,
+    rate: str | None = None,
+    eta: str | None = None,
     level: str = "info",
     log: bool = False,
     cancellable: bool = True,
 ) -> None:
     if callback:
-        callback(
-            {
-                "phase": phase,
-                "message": message,
-                "current": current,
-                "total": total,
-                "file": file,
-                "level": level,
-                "log": log,
-                "cancellable": cancellable,
-            }
-        )
+        payload: dict[str, Any] = {
+            "phase": phase,
+            "message": message,
+            "current": current,
+            "total": total,
+            "file": file,
+            "level": level,
+            "log": log,
+            "cancellable": cancellable,
+        }
+        if rate is not None:
+            payload["rate"] = rate
+        if eta is not None:
+            payload["eta"] = eta
+        callback(payload)
 
 
 def sha256_file(

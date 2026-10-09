@@ -76,11 +76,15 @@ function missingFileHtml(item, compact = false) {
   const name = String(item.name || item.filename || '');
   const filename = searchableFilename(name);
   const label = t('missing.copy_name', {name: filename});
+  const downloadLabel = t('missing.download_model', {name: filename});
   return `<div class="${compact ? 'notice-missing-item' : 'missing-item'} missing-file-row">
     ${compact ? '' : icon('alert')}
     <span class="missing-file-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
       <small>${escapeHtml(String(item.kind || item.type || t('notice.dependency')).replaceAll('_', ' '))}</small></span>
-    ${filename ? `<button type="button" class="filename-copy-button" data-copy-filename="${escapeHtml(filename)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${icon('copy')}</button>` : ''}
+    <span class="missing-file-actions">
+      ${filename ? `<button type="button" class="filename-copy-button" data-copy-filename="${escapeHtml(filename)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${icon('copy')}</button>` : ''}
+      ${filename ? `<button type="button" class="filename-download-button" data-download-filename="${escapeHtml(name)}" data-download-kind="${escapeHtml(item.kind || '')}" title="${escapeHtml(downloadLabel)}" aria-label="${escapeHtml(downloadLabel)}">${icon('download')}</button>` : ''}
+    </span>
   </div>`;
 }
 
@@ -149,6 +153,107 @@ async function openExternalUrlAction(event) {
     await callApi('open_external_url', url);
   } catch (error) {
     toast(error.message, true);
+  }
+}
+
+let activeDownloadContext = null;
+
+function handleDownloadModelClick(event) {
+  const button = event.target.closest?.('[data-download-filename]');
+  if (!button) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const filename = button.dataset.downloadFilename;
+  const kind = button.dataset.downloadKind || '';
+  const archivePath = app.selectedPath || '';
+  openDownloadModal(filename, kind, archivePath);
+}
+
+function defaultModelFolder(kind) {
+  const map = {
+    checkpoint: 'checkpoints',
+    lora: 'loras',
+    vae: 'vae',
+    diffusion_model: 'diffusion_models',
+    text_encoder: 'text_encoders',
+    controlnet: 'controlnet',
+    clip_vision: 'clip_vision',
+    upscale_model: 'upscale_models',
+    style_model: 'style_models',
+  };
+  return map[String(kind || '').toLowerCase()] || 'checkpoints';
+}
+
+async function openDownloadModal(filename, kind = '', archivePath = '') {
+  activeDownloadContext = {
+    filename,
+    kind,
+    archivePath: archivePath || app.selectedPath || '',
+    expectedHash: '',
+  };
+  $('downloadModelName').textContent = filename;
+  $('downloadTargetPath').textContent = `models/${defaultModelFolder(kind)}/${searchableFilename(filename)}`;
+  $('downloadSourceInput').value = '';
+  $('downloadStartButton').disabled = true;
+  $('downloadCandidatesBox').classList.add('hidden');
+  $('downloadCandidatesList').innerHTML = '';
+  $('downloadModal').classList.remove('hidden');
+
+  try {
+    const targetInfo = await callApi('get_model_target_path', filename, kind);
+    if (targetInfo?.relative_path) {
+      $('downloadTargetPath').textContent = targetInfo.relative_path;
+    }
+  } catch (_) {}
+
+  $('downloadCandidatesHeader').textContent = t('download.searching_hf');
+  $('downloadCandidatesBox').classList.remove('hidden');
+  try {
+    const candidates = await callApi('search_hf_model', filename);
+    if (activeDownloadContext?.filename !== filename) return;
+    if (Array.isArray(candidates) && candidates.length > 0) {
+      $('downloadCandidatesHeader').textContent = t('download.hf_candidates_header');
+      $('downloadCandidatesList').innerHTML = candidates.map((cand, idx) => `
+        <button type="button" class="download-candidate-pill ${idx === 0 ? 'selected' : ''}" data-candidate-url="${escapeHtml(cand.download_url)}" data-candidate-hash="${escapeHtml(cand.sha256 || '')}">
+          <strong>${escapeHtml(cand.repo_id)}</strong>
+          <span>${formatBytes(cand.size)}${cand.sha256 ? ' · SHA-256' : ''}</span>
+        </button>
+      `).join('');
+      const top = candidates[0];
+      $('downloadSourceInput').value = top.download_url || top.repo_id;
+      activeDownloadContext.expectedHash = top.sha256 || '';
+      $('downloadStartButton').disabled = false;
+    } else {
+      $('downloadCandidatesHeader').textContent = t('download.no_hf_candidates');
+      $('downloadCandidatesList').innerHTML = '';
+    }
+  } catch (_) {
+    $('downloadCandidatesHeader').textContent = t('download.no_hf_candidates');
+  }
+}
+
+function closeDownloadModal() {
+  $('downloadModal').classList.add('hidden');
+  activeDownloadContext = null;
+}
+
+async function startModelDownload() {
+  if (!activeDownloadContext) return;
+  const source = $('downloadSourceInput').value.trim();
+  if (!source) return;
+  const { filename, kind, archivePath, expectedHash } = activeDownloadContext;
+  const storeInPool = $('downloadStoreInPoolCheckbox').checked;
+  closeDownloadModal();
+
+  showBusy(t('download.busy_title'), t('download.busy_detail', {file: filename}));
+  try {
+    const result = await callApi('download_model', source, filename, kind, archivePath, expectedHash, storeInPool);
+    hideBusy();
+    toast(t('download.success', {name: filename}));
+    await refreshState();
+  } catch (error) {
+    hideBusy();
+    operationError(error);
   }
 }
 
@@ -1644,7 +1749,31 @@ function installEvents() {
   $('confirmCancelButton').addEventListener('click', closeConfirm);
   $('confirmProceedButton').addEventListener('click', proceedConfirm);
   $('noticeList').addEventListener('click', copyMissingFilename);
+  $('noticeList').addEventListener('click', handleDownloadModelClick);
   $('confirmCopy').addEventListener('click', copyMissingFilename);
+  $('confirmCopy').addEventListener('click', handleDownloadModelClick);
+  $('downloadCloseButton')?.addEventListener('click', closeDownloadModal);
+  $('downloadCancelButton')?.addEventListener('click', closeDownloadModal);
+  $('downloadStartButton')?.addEventListener('click', startModelDownload);
+  $('downloadSourceInput')?.addEventListener('input', () => {
+    $('downloadStartButton').disabled = !$('downloadSourceInput').value.trim();
+  });
+  $('downloadCandidatesList')?.addEventListener('click', event => {
+    const pill = event.target.closest?.('.download-candidate-pill');
+    if (!pill) return;
+    document.querySelectorAll('.download-candidate-pill').forEach(p => p.classList.remove('selected'));
+    pill.classList.add('selected');
+    $('downloadSourceInput').value = pill.dataset.candidateUrl || '';
+    if (activeDownloadContext) {
+      activeDownloadContext.expectedHash = pill.dataset.candidateHash || '';
+    }
+    $('downloadStartButton').disabled = false;
+  });
+  window.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !$('downloadModal')?.classList.contains('hidden')) {
+      closeDownloadModal();
+    }
+  });
   $('customNodeList')?.addEventListener('click', event => {
     if (event.target.closest?.('[data-copy-custom-node]')) {
       copyCustomNodePackage(event);

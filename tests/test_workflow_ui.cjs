@@ -140,11 +140,17 @@ async function run(language) {
   for (const compact of [true, false]) {
     const row = vm.runInContext(`missingFileHtml(missingFile, ${compact})`, context);
     assert.ok(row.includes('data-copy-filename="&lt;model&gt;&quot;&amp;.safetensors"'));
+    assert.ok(row.includes('data-download-filename="folder/&lt;model&gt;&quot;&amp;.safetensors"'));
+    assert.ok(row.includes('filename-download-button'));
     assert.ok(row.includes('type="button"'));
     assert.ok(row.includes('aria-label="'));
     assert.ok(!row.includes('<model>'));
   }
   assert.ok(!vm.runInContext('missingFileHtml({})', context).includes('data-copy-filename'));
+  assert.ok(!vm.runInContext('missingFileHtml({})', context).includes('data-download-filename'));
+  assert.equal(vm.runInContext("defaultModelFolder('checkpoint')", context), 'checkpoints');
+  assert.equal(vm.runInContext("defaultModelFolder('lora')", context), 'loras');
+  assert.equal(vm.runInContext("defaultModelFolder('vae')", context), 'vae');
 
   context.clipboardWrites = [];
   context.navigator = {clipboard: {writeText: async text => { context.clipboardWrites.push(text); }}};
@@ -698,6 +704,13 @@ async function run(language) {
   assert.ok(indexHtml.includes('data-scope="name"'));
   assert.ok(indexHtml.includes('data-scope="model"'));
   assert.ok(indexHtml.includes('data-scope="node"'));
+  assert.ok(indexHtml.includes('id="downloadModal"'));
+  assert.ok(indexHtml.includes('id="downloadModelName"'));
+  assert.ok(indexHtml.includes('id="downloadTargetPath"'));
+  assert.ok(indexHtml.includes('id="downloadSourceInput"'));
+  assert.ok(indexHtml.includes('id="downloadCandidatesBox"'));
+  assert.ok(indexHtml.includes('id="downloadStoreInPoolOption"'));
+  assert.ok(indexHtml.includes('id="downloadStartButton"'));
 
   for (const lang of ['de', 'en']) {
     const loc = JSON.parse(fs.readFileSync(path.join(root, 'locales', `${lang}.json`), 'utf8'));
@@ -721,6 +734,24 @@ async function run(language) {
       'library.match_model',
       'library.match_node',
       'library.match_missing',
+      'missing.download_model',
+      'download.eyebrow',
+      'download.title',
+      'download.intro',
+      'download.model_label',
+      'download.target_label',
+      'download.source_label',
+      'download.source_placeholder',
+      'download.searching_hf',
+      'download.no_hf_candidates',
+      'download.hf_candidates_header',
+      'download.store_in_pool',
+      'download.store_in_pool_hint',
+      'download.start_button',
+      'download.busy_title',
+      'download.busy_detail',
+      'download.success',
+      'phase.download',
     ]) {
       assert.ok(loc[key], `Missing key ${key} in ${lang}.json`);
     }
