@@ -100,7 +100,7 @@ Normal use does not require the command line. Optional documentation:
 
 ## Support
 
-If ComfyShelf saves you disk space or makes managing your workflows easier, you can support its development on Ko-fi:
+If ComfyShelf saves you disk space or makes managing your workflows easier, consider supporting the project:
 
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Support_means_a_lot-2d856b?style=for-the-badge&logo=kofi&logoColor=white)](https://ko-fi.com/rezziii)
 
