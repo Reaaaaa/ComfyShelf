@@ -33,6 +33,7 @@ function applyTranslations() {
   document.querySelectorAll('[data-i18n-html]').forEach(node => { node.innerHTML = t(node.dataset.i18nHtml); });
   document.querySelectorAll('[data-i18n-title]').forEach(node => { node.title = t(node.dataset.i18nTitle); });
   document.querySelectorAll('[data-i18n-aria]').forEach(node => { node.setAttribute('aria-label', t(node.dataset.i18nAria)); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(node => { node.placeholder = t(node.dataset.i18nPlaceholder); });
   document.querySelectorAll('.language-toggle button').forEach(button => button.classList.toggle('active', button.dataset.language === app.language));
   setMaximizedButton($('maximizeButton').getAttribute('aria-pressed') === 'true');
   if (app.state) applyState(app.state, app.selectedPath);
@@ -548,15 +549,29 @@ function stateLabel(state) {
 function renderLibrary() {
   const list = $('workflowList');
   if (!app.state?.configured) return;
+  const query = (app.searchQuery || '').trim().toLowerCase();
   const packages = (app.state.packages || []).filter(item => {
-    if (app.filter === 'all') return true;
-    if (app.filter === 'archived') return item.state === 'archived' || item.state === 'partial';
-    return item.state === app.filter;
+    if (app.filter !== 'all') {
+      if (app.filter === 'archived') {
+        if (item.state !== 'archived' && item.state !== 'partial') return false;
+      } else if (item.state !== app.filter) {
+        return false;
+      }
+    }
+    if (!query) return true;
+    if (item.name && item.name.toLowerCase().includes(query)) return true;
+    if (item.models && item.models.some(m => m.filename && m.filename.toLowerCase().includes(query))) return true;
+    if (item.missing && item.missing.some(m => m.name && m.name.toLowerCase().includes(query))) return true;
+    if (item.custom_nodes && item.custom_nodes.some(cn => (cn.package && cn.package.toLowerCase().includes(query)) || (cn.installed_folder && cn.installed_folder.toLowerCase().includes(query)))) return true;
+    return false;
   });
   const rows = [];
   if (app.state.loading) rows.push(`<div class="library-scan-status"><span class="loading-pulse"></span><span>${t('library.scanning')}</span></div>`);
   if (!packages.length && !app.state.loading && !(app.state.scan_warnings || []).length) {
-    rows.push(`<div class="workflow-list-empty">${app.state.packages?.length ? t('library.filter_empty') : t('library.empty')}</div>`);
+    const emptyMsg = query
+      ? t('library.search_empty', {query: escapeHtml((app.searchQuery || '').trim())})
+      : (app.state.packages?.length ? t('library.filter_empty') : t('library.empty'));
+    rows.push(`<div class="workflow-list-empty">${emptyMsg}</div>`);
   }
   rows.push(...packages.map(item => `
     <button class="workflow-item ${item.path === app.selectedPath ? 'active' : ''}" data-path="${escapeHtml(item.path)}" data-state="${item.state}">
@@ -566,7 +581,7 @@ function renderLibrary() {
         <span class="workflow-meta"><span class="workflow-state">${stateLabel(item.state)}</span><span title="${t('detail.model_size')}">${formatBytes(item.model_bytes)}</span></span>
       </div>
     </button>`));
-  if (app.filter === 'all' || app.filter === 'archived') rows.push(...(app.state.scan_warnings || []).map(item => `
+  if (!query && (app.filter === 'all' || app.filter === 'archived')) rows.push(...(app.state.scan_warnings || []).map(item => `
     <div class="invalid-package" title="${t('errors.invalid_package')}"><strong>${escapeHtml(item.name)}</strong><span>${t('library.invalid')}</span></div>`));
   list.innerHTML = rows.join('');
   list.querySelectorAll('.workflow-item').forEach(button => button.addEventListener('click', () => {
@@ -1598,6 +1613,46 @@ function installEvents() {
     document.querySelectorAll('.filter-chip').forEach(item => item.classList.remove('active'));
     chip.classList.add('active'); app.filter = chip.dataset.filter; renderLibrary();
   }));
+
+  const searchInput = $('workflowSearchInput');
+  const searchClear = $('searchClearButton');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      app.searchQuery = searchInput.value;
+      if (searchClear) searchClear.classList.toggle('hidden', !searchInput.value);
+      renderLibrary();
+    });
+    searchInput.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        searchInput.value = '';
+        app.searchQuery = '';
+        if (searchClear) searchClear.classList.add('hidden');
+        renderLibrary();
+        searchInput.blur();
+      }
+    });
+  }
+  if (searchClear) {
+    searchClear.addEventListener('click', () => {
+      if (searchInput) {
+        searchInput.value = '';
+        searchInput.focus();
+      }
+      app.searchQuery = '';
+      searchClear.classList.add('hidden');
+      renderLibrary();
+    });
+  }
+  window.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+      const activeTag = document.activeElement?.tagName;
+      if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+        event.preventDefault();
+        searchInput?.focus();
+        searchInput?.select();
+      }
+    }
+  });
 
   let dragCounter = 0;
   const dropOverlay = $('dropOverlay');

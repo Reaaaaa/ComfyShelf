@@ -25,6 +25,7 @@ archived copy instead of filling your archive drive with duplicates.
 
 - Load and archive workflows directly from `.json` files or `.png` images with embedded metadata and visual thumbnails.
 - Drag & drop `.png` workflows, `.json` files, or `.zip` packages straight into the window to archive or import them immediately.
+- Search and filter workflows in real time by name, models used, or custom nodes (`Ctrl + F`).
 - Archive the files detected in a workflow: models, VAEs, LoRAs, text encoders and other supported model files.
 - Free up space, restore files later, or switch to another archived workflow.
 - See which files are missing and copy their names to search for them.

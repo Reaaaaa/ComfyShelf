@@ -36,6 +36,7 @@
     <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
     <symbol id="i-workflow" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="6" rx="1"/><rect x="14" y="14" width="7" height="6" rx="1"/><path d="M10 7h4v10"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -72,6 +73,12 @@
           <span class="button-icon"><svg><use href="#i-import"/></svg></span>
           <span data-i18n="library.import_package">Import package</span>
         </button>
+
+        <div class="search-box">
+          <span class="search-icon"><svg><use href="#i-search"/></svg></span>
+          <input type="text" id="workflowSearchInput" placeholder="Workflows, Modelle, Nodes suchen…" data-i18n-placeholder="library.search_placeholder" aria-label="Search workflows" data-i18n-aria="library.search_aria" autocomplete="off" spellcheck="false">
+          <button class="search-clear hidden" id="searchClearButton" title="Clear search" data-i18n-title="library.search_clear" aria-label="Clear search"><svg><use href="#i-close"/></svg></button>
+        </div>
 
         <div class="filter-row" role="tablist" aria-label="Workflow filters" data-i18n-aria="library.filters">
           <button class="filter-chip active" data-filter="all" data-i18n="filter.all">All</button>

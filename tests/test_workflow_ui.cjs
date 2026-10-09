@@ -605,6 +605,55 @@ async function run(language) {
   assert.equal(stagedArgs.name, 'browser_dropped.json');
   assert.equal(stagedArgs.b64, 'eyJub2RlcyI6W119');
   assert.equal(inspectPackPath, 'C:/staging/browser_dropped.json');
+
+  // Search filtering tests
+  context.workflowList = {innerHTML: '', querySelectorAll(){ return []; }};
+  context.document.getElementById = id => (id === 'workflowList' ? context.workflowList : {classList: {add(){}, remove(){}, toggle(){}, contains(){ return false; }}, addEventListener(){}, setAttribute(){}});
+
+  vm.runInContext(`
+    app.state = {
+      configured: true,
+      packages: [
+        {name: 'Flux Dev Inpainting', path: 'E:/Archive/Flux.zip', state: 'archived', models: [{filename: 'flux1-dev.safetensors'}], missing: [], custom_nodes: []},
+        {name: 'SDXL Fast Anime', path: 'E:/Archive/SDXL.zip', state: 'archived', models: [{filename: 'sdxl_lightning.safetensors'}], missing: [], custom_nodes: [{package: 'ComfyUI-Impact-Pack'}]},
+        {name: 'Music Generator', path: 'E:/Archive/Music.zip', state: 'archived', models: [{filename: 'minimax_music.safetensors'}], missing: [], custom_nodes: []}
+      ]
+    };
+    app.filter = 'all';
+    app.searchQuery = '';
+    renderLibrary();
+  `, context);
+  assert.ok(context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
+  assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
+  assert.ok(context.workflowList.innerHTML.includes('Music Generator'));
+
+  // Filter by workflow name
+  vm.runInContext("app.searchQuery = 'Flux'; renderLibrary();", context);
+  assert.ok(context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
+  assert.ok(!context.workflowList.innerHTML.includes('SDXL Fast Anime'));
+  assert.ok(!context.workflowList.innerHTML.includes('Music Generator'));
+
+  // Filter by model filename
+  vm.runInContext("app.searchQuery = 'lightning'; renderLibrary();", context);
+  assert.ok(!context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
+  assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
+  assert.ok(!context.workflowList.innerHTML.includes('Music Generator'));
+
+  // Filter by custom node package name
+  vm.runInContext("app.searchQuery = 'impact'; renderLibrary();", context);
+  assert.ok(!context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
+  assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
+  assert.ok(!context.workflowList.innerHTML.includes('Music Generator'));
+
+  // No results shows search empty message with query
+  vm.runInContext("app.searchQuery = 'nonexistent'; renderLibrary();", context);
+  assert.ok(context.workflowList.innerHTML.includes(context.messages['library.search_empty'].replace('{query}', 'nonexistent')));
+
+  // Resetting search restores all
+  vm.runInContext("app.searchQuery = ''; renderLibrary();", context);
+  assert.ok(context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
+  assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
+  assert.ok(context.workflowList.innerHTML.includes('Music Generator'));
 }
 
 (async () => {
@@ -619,6 +668,10 @@ async function run(language) {
   assert.ok(indexHtml.includes('id="dropOverlay"'));
   assert.ok(indexHtml.includes('data-i18n="drop.title"'));
   assert.ok(indexHtml.includes('data-i18n="drop.subtitle"'));
+  assert.ok(indexHtml.includes('id="workflowSearchInput"'));
+  assert.ok(indexHtml.includes('data-i18n-placeholder="library.search_placeholder"'));
+  assert.ok(indexHtml.includes('id="searchClearButton"'));
+  assert.ok(indexHtml.includes('id="i-search"'));
 
   for (const lang of ['de', 'en']) {
     const loc = JSON.parse(fs.readFileSync(path.join(root, 'locales', `${lang}.json`), 'utf8'));
@@ -630,10 +683,14 @@ async function run(language) {
       'drop.processing',
       'drop.processing_detail',
       'drop.unsupported_file',
+      'library.search_placeholder',
+      'library.search_aria',
+      'library.search_clear',
+      'library.search_empty',
     ]) {
       assert.ok(loc[key], `Missing key ${key} in ${lang}.json`);
     }
   }
 
-  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, custom nodes live status, and Drag & Drop file staging.');
+  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, custom nodes live status, Drag & Drop file staging, and library instant search.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
