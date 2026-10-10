@@ -11,7 +11,7 @@ edit configuration files or type PowerShell commands.
 
 ## 1. What you need
 
-- A Windows computer with a working ComfyUI installation.
+- A Windows computer with a working ComfyUI installation (standard git, official portable, or one-click installers like [ComfyUI-Easy-Install](https://github.com/Tavris1/ComfyUI-Easy-Install)).
 - Installed **64-bit Python 3.10 or newer**: the software that runs this version
   of ComfyShelf. Having ComfyUI installed does not necessarily make its bundled
   Python available to other apps.

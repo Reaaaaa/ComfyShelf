@@ -24,6 +24,19 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 
 ---
 
+## What ComfyShelf lets you do (in plain English)
+
+Instead of manually moving dozens of gigabytes back and forth, ComfyShelf treats your workflows like a clean, visual rack:
+
+- ⚡ **Swap massive 50 GB setups with zero waiting:** Uses Windows symlinks and NTFS hardlinks so models appear inside ComfyUI in milliseconds — consuming 0 duplicate SSD space.
+- 🖼️ **Just drag & drop your images:** Drop any generated `.png` into the app. It automatically extracts the embedded ComfyUI graph, detects all required models, and sets the image as a high-res cover thumbnail.
+- 🎒 **1-Click „Take to a friend“ portable export:** Need to share a workflow with a buddy or take it to another PC? One click bundles the workflow and its required models into a self-contained portable ZIP that works out of the box.
+- 🛡️ **Free up SSD space with zero anxiety:** Unload workflows safely. It verifies your archive copy is 100% uncorrupted before removing anything, and protects models that other active workflows still depend on.
+- 🔍 **Find missing models without the headache:** Downloaded a workflow that won’t run? It flags missing checkpoints, LoRAs, and VAEs and gives you 1-click links to the exact Hugging Face model cards or Civitai searches.
+- 📦 **No duplicate storage:** If 5 workflows use the same 12 GB checkpoint, it’s stored only once on your secondary drive.
+
+---
+
 ## Core Features
 
 - **Instant Loading via Symlinks & Hardlinks (No Duplicate Disk Space)**  
@@ -73,7 +86,7 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 
 **ComfyShelf v0.1.0** runs locally on Windows using Python and a native, modern webview interface. Setup is fully automated via a single double-click batch script (`Setup_ComfyShelf.cmd`) — no manual command-line typing or environment configuration required.
 
-You need an existing ComfyUI installation, installed **64-bit Python 3.10 or newer**, internet access for the initial setup, and enough storage space for your archived files.
+You need an existing ComfyUI installation (standard git, official portable standalone, or one-click setups like the fantastic **[ComfyUI-Easy-Install](https://github.com/Tavris1/ComfyUI-Easy-Install)**), installed **64-bit Python 3.10 or newer**, internet access for the initial setup, and enough storage space for your archived files.
 
 1. Save the **whole ComfyShelf folder** in a writable location (e.g. Documents). If you received a ZIP, extract it first; do not run setup from inside the ZIP.
 2. Double-click **Setup_ComfyShelf.cmd**. Choose English or German and confirm the installation. It prepares an isolated Python environment for the app without altering ComfyUI or your models.

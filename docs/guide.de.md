@@ -12,7 +12,7 @@ noch Konfigurationsdateien bearbeiten oder PowerShell-Befehle eingeben.
 
 ## 1. Das brauchst du
 
-- Einen Windows-Rechner mit einer funktionierenden ComfyUI-Installation.
+- Einen Windows-Rechner mit einer funktionierenden ComfyUI-Installation (Standard-Installation, offizielle Portable-Version oder All-in-One-Pakete wie [ComfyUI-Easy-Install](https://github.com/Tavris1/ComfyUI-Easy-Install)).
 - Installiertes **64-Bit-Python ab Version 3.10**: die Software, mit der diese
   ComfyShelf-Version läuft. Dass ComfyUI bereits funktioniert, bedeutet nicht
   automatisch, dass dessen mitgeliefertes Python für andere Apps verfügbar ist.
