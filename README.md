@@ -24,57 +24,45 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 
 ---
 
-## What ComfyShelf lets you do (in plain English)
-
-Instead of manually moving dozens of gigabytes around or re-downloading checkpoints, ComfyShelf treats your setups like a clean, visual rack:
-
-- **Zero red outlines in ComfyUI:** No missing-model crashes or red-boxed node graphs when opening a workflow. Every checkpoint, LoRA, VAE, and text encoder is linked exactly where ComfyUI expects it before you hit generate.
-- **Keep multiple massive setups ready at once:** Use *Load in addition* to keep Flux, SDXL, and video pipelines active simultaneously in your ComfyUI tabs. Jump between them without waiting for file copies and with zero duplicate disk usage.
-- **The shared model pool:** All models live once in a deduplicated archive on your secondary drive. If 5 workflows use the same 12 GB checkpoint, it takes 12 GB, not 60 GB.
-- **Instant loading via symlinks/hardlinks:** Bringing a 50 GB setup back into ComfyUI takes milliseconds instead of a 15-minute file transfer.
-- **Anxiety-free SSD cleanup:** Unloading verifies SHA-256 hashes against your archive first. It never touches local files if the backup is corrupted, and it protects files that another active workflow is still using.
-- **1-click Hugging Face & Civitai lookup:** Downloaded an awesome workflow from Reddit that refuses to run? Flags missing files and opens their exact Model Card or Civitai search with one click, plus a background streaming downloader.
-- **Custom node diagnostics:** Shows missing vs. installed nodes, with 1-click clipboard copy to grab them in ComfyUI-Manager.
-- **Drop any generated PNG:** Extracts the embedded workflow graph, lists required models, and sets the image as the cover preview automatically.
-- **Portable ZIP export:** Bundles a workflow and all its required models into a single standalone ZIP to hand to a friend or drop onto a laptop.
-- **Smart template filter:** Automatically ignores placeholder names like `PUT_YOUR_LORA_HERE` so template workflows don't trigger fake missing-file panics.
-- **100% local:** No telemetry, no accounts, and it doesn't touch ComfyUI's core code or Python environment.
-
----
-
 ## Core Features
 
-- **Instant Loading via Symlinks & Hardlinks (No Duplicate Disk Space)**  
+- **Zero Red Outlines in ComfyUI (All Dependencies Linked in Place)**  
+  No missing-model crashes or red-boxed node graphs when opening a workflow. ComfyShelf verifies that every checkpoint, LoRA, VAE, and text encoder is linked exactly where ComfyUI expects it before you hit generate.
+
+- **Keep Multiple Massive Workflows Active at Once (0 Extra SSD Space)**  
+  You don't have to choose just one active project. Use **Load in addition** to keep 3, 5, or 10 heavy workflows (Flux, SDXL, Video pipelines) active simultaneously in your ComfyUI tabs. Switch between setups with zero wait time and zero duplicate disk consumption.
+
+- **Instant Loading via Symlinks & Hardlinks (No File Copy Delay)**  
   Restoring a 50 GB workflow back into ComfyUI shouldn't keep you waiting for huge files to copy. With **Instant Link** mode, ComfyShelf uses NTFS Hardlinks (on the same drive) or Windows Symlinks to make models available in ComfyUI in milliseconds — consuming 0 additional bytes of disk space. Visual status badges (`🔗 Hardlink`, `⚡ Symlink`) show the link type in the detail view, with automatic fallback to physical copies if needed. Keep as many massive workflows ready to roll as you want without filling your drive (though your GPU can still only melt through one generation at a time!).
 
-- **Deduplicated Shared Model Storage**  
-  When multiple workflows rely on the same 12 GB checkpoint, LoRA, or VAE, ComfyShelf stores that file **only once** in a shared model archive. Individual workflow packages remain lightweight (just the node graph, metadata, and cover thumbnail), preventing your backup drive from filling up with redundant duplicates.
+- **Deduplicated Shared Model Pool (Store Every File Only Once)**  
+  All your models live in a single, deduplicated archive on your secondary drive. When multiple workflows rely on the same 12 GB checkpoint, LoRA, or VAE, ComfyShelf stores that file **only once**. Individual workflow packages remain lightweight (just the node graph, metadata, and cover thumbnail), preventing your backup drive from filling up with redundant duplicates.
 
-- **Safe Unloading with SHA-256 Checksums**  
+- **Safe Unloading with SHA-256 Checksums (Anxiety-Free SSD Cleanup)**  
   Freeing up space by unloading a workflow removes local model copies from ComfyUI — but **only after** an automated SHA-256 checksum comparison confirms that an identical, uncorrupted copy is safely preserved in your archive. If a file is damaged, incomplete, or modified, ComfyShelf never touches the original. A verification cache keeps subsequent checks fast without re-reading gigabytes from disk.
 
-- **Shared Model Collision Protection**  
-  No broken workflows: before unloading or removing files, ComfyShelf checks whether other active workflows depend on those same models. Shared files are protected so you don't accidentally break another project.
+- **Shared Model Collision Protection (Never Breaks Other Active Projects)**  
+  No broken workflows: before unloading or removing files, ComfyShelf checks whether other active workflows depend on those same models. Shared files are protected automatically so you don't accidentally break another project.
 
 - **Visual Workflow Shelf with PNG Metadata Extraction**  
   Drag & drop a generated `.png` image directly onto ComfyShelf. It automatically extracts the embedded ComfyUI workflow graph, detects all required models, and uses the image as a high-res cover thumbnail with a built-in zoom lightbox. Standard `.json` workflow files and `.zip` archives work just as well.
 
-- **Real-Time Search & Scope Filtering (`Ctrl + F`)**  
-  Find any workflow in your library quickly. Filter across custom scopes (`[All]`, `[Name]`, `[Model]`, `[Node]`). Match badges highlight exact hits directly in the workflow list (e.g. `🔍 Model: qwen_image_edit_fp8.safetensors`), so you immediately see why a workflow matched without digging through complex node graphs.
+- **Hugging Face & Civitai Model Resolution & Downloader (1-Click Lookup)**  
+  Missing a checkpoint, LoRA, VAE, or text encoder? Don't blindly search for unknown files. ComfyShelf offers direct 1-click access to the official Hugging Face Model Card or Civitai search mask directly in your browser. Download missing models directly from Hugging Face into ComfyUI or your shared pool with live background streaming (speed in MB/s, ETA, percentage), on-the-fly SHA-256 integrity verification, and instant status updates from *Missing* to *Ready*.
 
 - **Custom Node Live Diagnostics & 1-Click Search**  
   Inspects all custom nodes used in a workflow against your active ComfyUI installation (Installed vs. Missing). Provides direct links to original GitHub repositories and 1-click clipboard copy to locate and install missing nodes quickly via ComfyUI-Manager.
 
-- **Hugging Face & Civitai Model Resolution & Downloader (Trust & Transparency First)**
-  Missing a checkpoint, LoRA, VAE, or text encoder? Don't blindly download unknown files. ComfyShelf offers direct 1-click access to the official Hugging Face Model Card or Civitai search mask directly in your browser. Download missing models directly from Hugging Face into ComfyUI or your shared pool with live background streaming (speed in MB/s, ETA, percentage), on-the-fly SHA-256 integrity verification, and instant status updates from *Missing* to *Ready*.
-
-- **Smart Template & Dummy Model Filter**
+- **Smart Template & Dummy Model Filter (No False Alarms)**  
   Template workflows shared online frequently contain placeholder model names (`YOUR_LORA_2_DISABLED.safetensors`, `PUT_YOUR_LORA_HERE`, `PLACEHOLDER`, `[none]`, etc.). ComfyShelf recognizes and excludes these dummy entries automatically, ensuring your template workflows stay valid and green without falsely warning about missing files.
 
-- **Self-Healing Archives & Portable Export**  
+- **Self-Healing Archives & 1-Click Portable ZIP Export**  
   Archived a workflow while a model was still downloading? The **Rescan Incomplete Workflow** feature scans for newly acquired files, verifies their hashes, creates a timestamped backup of the archive, and completes the package. Need to take a workflow to another PC or share it with a friend? **Export Portable ZIP** bundles the workflow and its required models into a self-contained, standalone package.
 
-- **Safe & Non-Destructive by Design**  
+- **Real-Time Search & Scope Filtering (`Ctrl + F`)**  
+  Find any workflow in your library quickly. Filter across custom scopes (`[All]`, `[Name]`, `[Model]`, `[Node]`). Match badges highlight exact hits directly in the workflow list (e.g. `🔍 Model: qwen_image_edit_fp8.safetensors`), so you immediately see why a workflow matched without digging through complex node graphs.
+
+- **100% Local, Offline & Safe by Design**  
   Supports the Windows Recycle Bin for safe deletion. ComfyShelf never alters ComfyUI's core code, settings, or Python environment. Runs 100% locally with zero telemetry, full offline capability, and a clean bilingual interface (English and German).
 
 ---
