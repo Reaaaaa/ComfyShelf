@@ -26,14 +26,19 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 
 ## What ComfyShelf lets you do (in plain English)
 
-Instead of manually moving dozens of gigabytes back and forth, ComfyShelf treats your workflows like a clean, visual rack:
+Instead of manually moving dozens of gigabytes around or re-downloading checkpoints, ComfyShelf treats your setups like a clean, visual rack:
 
-- ⚡ **Swap massive 50 GB setups with zero waiting:** Uses Windows symlinks and NTFS hardlinks so models appear inside ComfyUI in milliseconds — consuming 0 duplicate SSD space.
-- 🖼️ **Just drag & drop your images:** Drop any generated `.png` into the app. It automatically extracts the embedded ComfyUI graph, detects all required models, and sets the image as a high-res cover thumbnail.
-- 🎒 **1-Click „Take to a friend“ portable export:** Need to share a workflow with a buddy or take it to another PC? One click bundles the workflow and its required models into a self-contained portable ZIP that works out of the box.
-- 🛡️ **Free up SSD space with zero anxiety:** Unload workflows safely. It verifies your archive copy is 100% uncorrupted before removing anything, and protects models that other active workflows still depend on.
-- 🔍 **Find missing models without the headache:** Downloaded a workflow that won’t run? It flags missing checkpoints, LoRAs, and VAEs and gives you 1-click links to the exact Hugging Face model cards or Civitai searches.
-- 📦 **No duplicate storage:** If 5 workflows use the same 12 GB checkpoint, it’s stored only once on your secondary drive.
+- **Zero red outlines in ComfyUI:** No missing-model crashes or red-boxed node graphs when opening a workflow. Every checkpoint, LoRA, VAE, and text encoder is linked exactly where ComfyUI expects it before you hit generate.
+- **Keep multiple massive setups ready at once:** Use *Load in addition* to keep Flux, SDXL, and video pipelines active simultaneously in your ComfyUI tabs. Jump between them without waiting for file copies and with zero duplicate disk usage.
+- **The shared model pool:** All models live once in a deduplicated archive on your secondary drive. If 5 workflows use the same 12 GB checkpoint, it takes 12 GB, not 60 GB.
+- **Instant loading via symlinks/hardlinks:** Bringing a 50 GB setup back into ComfyUI takes milliseconds instead of a 15-minute file transfer.
+- **Anxiety-free SSD cleanup:** Unloading verifies SHA-256 hashes against your archive first. It never touches local files if the backup is corrupted, and it protects files that another active workflow is still using.
+- **1-click Hugging Face & Civitai lookup:** Downloaded an awesome workflow from Reddit that refuses to run? Flags missing files and opens their exact Model Card or Civitai search with one click, plus a background streaming downloader.
+- **Custom node diagnostics:** Shows missing vs. installed nodes, with 1-click clipboard copy to grab them in ComfyUI-Manager.
+- **Drop any generated PNG:** Extracts the embedded workflow graph, lists required models, and sets the image as the cover preview automatically.
+- **Portable ZIP export:** Bundles a workflow and all its required models into a single standalone ZIP to hand to a friend or drop onto a laptop.
+- **Smart template filter:** Automatically ignores placeholder names like `PUT_YOUR_LORA_HERE` so template workflows don't trigger fake missing-file panics.
+- **100% local:** No telemetry, no accounts, and it doesn't touch ComfyUI's core code or Python environment.
 
 ---
 
