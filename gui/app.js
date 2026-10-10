@@ -72,6 +72,10 @@ function searchableFilename(value) {
   return String(value ?? '').split(/[\\/]/).pop();
 }
 
+function cleanCivitaiQuery(value) {
+  return searchableFilename(value).replace(/\.(safetensors|ckpt|pt|pth|bin|onnx)$/i, '').trim();
+}
+
 function missingFileHtml(item, compact = false) {
   const name = String(item.name || item.filename || '');
   const filename = searchableFilename(name);
@@ -79,12 +83,16 @@ function missingFileHtml(item, compact = false) {
   const downloadLabel = t('missing.download_model', {name: filename});
   const searchUrl = item.model_card_url || item.url || `https://huggingface.co/models?search=${encodeURIComponent(filename)}`;
   const searchLabel = t('missing.open_hf_search', {name: filename});
+  const civitaiQuery = cleanCivitaiQuery(filename);
+  const civitaiUrl = `https://civitai.com/models?query=${encodeURIComponent(civitaiQuery)}`;
+  const civitaiLabel = t('missing.open_civitai_search', {name: civitaiQuery});
   return `<div class="${compact ? 'notice-missing-item' : 'missing-item'} missing-file-row">
     ${compact ? '' : icon('alert')}
     <span class="missing-file-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
       <small>${escapeHtml(String(item.kind || item.type || t('notice.dependency')).replaceAll('_', ' '))}</small></span>
     <span class="missing-file-actions">
       ${filename ? `<button type="button" class="filename-web-button" data-open-url="${escapeHtml(searchUrl)}" title="${escapeHtml(searchLabel)}" aria-label="${escapeHtml(searchLabel)}">${icon('external')}</button>` : ''}
+      ${filename ? `<button type="button" class="filename-civitai-button" data-open-url="${escapeHtml(civitaiUrl)}" title="${escapeHtml(civitaiLabel)}" aria-label="${escapeHtml(civitaiLabel)}"><span class="civitai-icon">C</span></button>` : ''}
       ${filename ? `<button type="button" class="filename-download-button" data-download-filename="${escapeHtml(name)}" data-download-kind="${escapeHtml(item.kind || '')}" title="${escapeHtml(downloadLabel)}" aria-label="${escapeHtml(downloadLabel)}">${icon('download')}</button>` : ''}
       ${filename ? `<button type="button" class="filename-copy-button" data-copy-filename="${escapeHtml(filename)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${icon('copy')}</button>` : ''}
     </span>
@@ -195,6 +203,7 @@ async function openDownloadModal(filename, kind = '', archivePath = '') {
     expectedHash: '',
   };
   const searchUrl = `https://huggingface.co/models?search=${encodeURIComponent(searchableFilename(filename))}`;
+  const civitaiUrl = `https://civitai.com/models?query=${encodeURIComponent(cleanCivitaiQuery(filename))}`;
   $('downloadModelName').textContent = filename;
   $('downloadTargetPath').textContent = `models/${defaultModelFolder(kind)}/${searchableFilename(filename)}`;
   $('downloadSourceInput').value = '';
@@ -208,6 +217,12 @@ async function openDownloadModal(filename, kind = '', archivePath = '') {
   }
   if ($('downloadSearchHfBtn')) {
     $('downloadSearchHfBtn').dataset.openUrl = searchUrl;
+  }
+  if ($('downloadCivitaiBtn')) {
+    $('downloadCivitaiBtn').dataset.openUrl = civitaiUrl;
+  }
+  if ($('downloadFallbackCivitaiBtn')) {
+    $('downloadFallbackCivitaiBtn').dataset.openUrl = civitaiUrl;
   }
   $('downloadModal').classList.remove('hidden');
 

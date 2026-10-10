@@ -142,7 +142,9 @@ async function run(language) {
     assert.ok(row.includes('data-copy-filename="&lt;model&gt;&quot;&amp;.safetensors"'));
     assert.ok(row.includes('data-download-filename="folder/&lt;model&gt;&quot;&amp;.safetensors"'));
     assert.ok(row.includes('data-open-url="https://huggingface.co/models?search='));
+    assert.ok(row.includes('data-open-url="https://civitai.com/models?query='));
     assert.ok(row.includes('filename-web-button'));
+    assert.ok(row.includes('filename-civitai-button'));
     assert.ok(row.includes('filename-download-button'));
     assert.ok(row.includes('type="button"'));
     assert.ok(row.includes('aria-label="'));
@@ -151,6 +153,7 @@ async function run(language) {
   assert.ok(!vm.runInContext('missingFileHtml({})', context).includes('data-copy-filename'));
   assert.ok(!vm.runInContext('missingFileHtml({})', context).includes('data-download-filename'));
   assert.ok(!vm.runInContext('missingFileHtml({})', context).includes('filename-web-button'));
+  assert.ok(!vm.runInContext('missingFileHtml({})', context).includes('filename-civitai-button'));
   assert.equal(vm.runInContext("defaultModelFolder('checkpoint')", context), 'checkpoints');
   assert.equal(vm.runInContext("defaultModelFolder('lora')", context), 'loras');
   assert.equal(vm.runInContext("defaultModelFolder('vae')", context), 'vae');
@@ -712,8 +715,10 @@ async function run(language) {
   assert.ok(indexHtml.includes('id="downloadTargetPath"'));
   assert.ok(indexHtml.includes('id="downloadWebLinkRow"'));
   assert.ok(indexHtml.includes('id="downloadOpenWebBtn"'));
+  assert.ok(indexHtml.includes('id="downloadCivitaiBtn"'));
   assert.ok(indexHtml.includes('id="downloadCandidatesFallback"'));
   assert.ok(indexHtml.includes('id="downloadSearchHfBtn"'));
+  assert.ok(indexHtml.includes('id="downloadFallbackCivitaiBtn"'));
   assert.ok(indexHtml.includes('id="downloadSourceInput"'));
   assert.ok(indexHtml.includes('id="downloadCandidatesBox"'));
   assert.ok(indexHtml.includes('id="downloadStoreInPoolOption"'));
@@ -744,6 +749,7 @@ async function run(language) {
       'missing.copy_name',
       'missing.download_model',
       'missing.open_hf_search',
+      'missing.open_civitai_search',
       'download.eyebrow',
       'download.title',
       'download.intro',
@@ -752,6 +758,7 @@ async function run(language) {
       'download.web_label',
       'download.view_model_card',
       'download.open_hf_search',
+      'download.open_civitai_search',
       'download.source_label',
       'download.source_placeholder',
       'download.source_hint',
