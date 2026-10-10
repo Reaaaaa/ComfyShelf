@@ -317,8 +317,37 @@ class WorkflowSwitcherApi:
             return {}
 
     @staticmethod
-    def _locale_payload(language: str | None = None) -> dict[str, Any]:
-        selected = language or str(WorkflowSwitcherApi._read_preferences().get("language", "en"))
+    def _detect_system_language() -> str:
+        try:
+            if sys.platform == "win32":
+                import ctypes
+
+                lang_id = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+                if (lang_id & 0x3FF) == 0x07:  # LANG_GERMAN
+                    return "de"
+        except Exception:
+            pass
+        try:
+            import locale
+
+            loc = locale.getlocale()[0] or ""
+            if loc.lower().startswith("de"):
+                return "de"
+        except Exception:
+            pass
+        return "en"
+
+    @classmethod
+    def _locale_payload(cls, language: str | None = None) -> dict[str, Any]:
+        preferences = cls._read_preferences()
+        saved = preferences.get("language")
+        if language:
+            selected = language
+        elif saved:
+            selected = str(saved)
+        else:
+            selected = cls._detect_system_language()
+
         if selected not in {"en", "de"}:
             selected = "en"
         fallback = json.loads((LOCALES_DIR / "en.json").read_text(encoding="utf-8"))

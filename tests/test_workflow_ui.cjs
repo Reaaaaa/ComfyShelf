@@ -648,6 +648,35 @@ async function run(language) {
   await vm.runInContext('nextTourStep()', context);
   assert.equal(tourModal.hidden, true);
 
+  // Live language toggle while tour is open
+  await vm.runInContext('openTour(true)', context);
+  assert.equal(tourModal.hidden, false);
+  const otherLang = language === 'en' ? 'de' : 'en';
+  const otherMessages = JSON.parse(fs.readFileSync(path.join(root, 'locales', `${otherLang}.json`), 'utf8'));
+  context.window.pywebview.api.set_language = async (l) => ({
+    ok: true,
+    data: {
+      language: l,
+      messages: otherMessages,
+    },
+  });
+  await vm.runInContext(`changeLanguage(${JSON.stringify(otherLang)})`, context);
+  assert.equal(vm.runInContext('app.language', context), otherLang);
+  assert.equal(tourTitle.textContent, otherMessages['tour.step1_title']);
+  await vm.runInContext('closeTour()', context);
+  assert.equal(tourModal.hidden, true);
+
+  // Restore initial test language
+  context.window.pywebview.api.set_language = async (l) => ({
+    ok: true,
+    data: {
+      language: l,
+      messages: context.messages,
+    },
+  });
+  await vm.runInContext(`changeLanguage(${JSON.stringify(language)})`, context);
+  assert.equal(vm.runInContext('app.language', context), language);
+
   context.document.getElementById = origGetElementById;
 
   // Drag & drop tests

@@ -445,7 +445,12 @@
     <section class="modal tour-modal" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
       <div class="tour-header">
         <span class="tour-step-badge" id="tourStepBadge">Step 1 of 4</span>
-        <button class="tour-close-btn" id="tourCloseButton" aria-label="Close tour"><svg><use href="#i-close"/></svg></button>
+        <div class="tour-header-controls">
+          <div class="language-toggle tour-lang-toggle" role="group" aria-label="Interface language" data-i18n-aria="settings.language">
+            <button data-language="en" class="active">EN</button><button data-language="de">DE</button>
+          </div>
+          <button class="tour-close-btn" id="tourCloseButton" aria-label="Close tour" data-i18n-aria="common.close_dialog"><svg><use href="#i-close"/></svg></button>
+        </div>
       </div>
 
       <div class="tour-body">

@@ -187,7 +187,7 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
 
     def test_english_is_default_and_language_preference_persists(self):
         api = GUI.WorkflowSwitcherApi()
-        with tempfile.TemporaryDirectory() as temp, patch.object(GUI, "PREFERENCES_PATH", Path(temp) / "preferences.json"):
+        with tempfile.TemporaryDirectory() as temp, patch.object(GUI, "PREFERENCES_PATH", Path(temp) / "preferences.json"), patch.object(GUI.WorkflowSwitcherApi, "_detect_system_language", return_value="en"):
             initial = api.get_locale()
             self.assertTrue(initial["ok"])
             self.assertEqual(initial["data"]["language"], "en")
@@ -198,6 +198,14 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
             self.assertEqual(changed["data"]["messages"]["settings.button"], "Einstellungen")
             self.assertEqual(json.loads(GUI.PREFERENCES_PATH.read_text(encoding="utf-8"))["language"], "de")
             self.assertEqual(api.get_locale()["data"]["language"], "de")
+
+    def test_system_language_detection_selects_german_when_os_is_german(self):
+        api = GUI.WorkflowSwitcherApi()
+        with tempfile.TemporaryDirectory() as temp, patch.object(GUI, "PREFERENCES_PATH", Path(temp) / "preferences.json"), patch.object(GUI.WorkflowSwitcherApi, "_detect_system_language", return_value="de"):
+            initial = api.get_locale()
+            self.assertTrue(initial["ok"])
+            self.assertEqual(initial["data"]["language"], "de")
+            self.assertEqual(initial["data"]["messages"]["settings.button"], "Einstellungen")
 
     def test_api_errors_expose_stable_localization_codes(self):
         api = GUI.WorkflowSwitcherApi()

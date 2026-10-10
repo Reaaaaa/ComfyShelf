@@ -18,6 +18,8 @@ const app = {
   bootstrapRetryAfter: 0,
 };
 
+let currentTourStep = 0;
+
 const $ = (id) => document.getElementById(id);
 const icon = (name) => `<svg><use href="#i-${name}"/></svg>`;
 
@@ -41,16 +43,29 @@ function setStorage(key, value) {
 }
 
 function applyTranslations() {
-  document.documentElement.lang = app.language;
-  document.querySelectorAll('[data-i18n]').forEach(node => { node.textContent = t(node.dataset.i18n); });
-  document.querySelectorAll('[data-i18n-html]').forEach(node => { node.innerHTML = t(node.dataset.i18nHtml); });
-  document.querySelectorAll('[data-i18n-title]').forEach(node => { node.title = t(node.dataset.i18nTitle); });
-  document.querySelectorAll('[data-i18n-aria]').forEach(node => { node.setAttribute('aria-label', t(node.dataset.i18nAria)); });
-  document.querySelectorAll('[data-i18n-placeholder]').forEach(node => { node.placeholder = t(node.dataset.i18nPlaceholder); });
-  document.querySelectorAll('.language-toggle button').forEach(button => button.classList.toggle('active', button.dataset.language === app.language));
-  setMaximizedButton($('maximizeButton').getAttribute('aria-pressed') === 'true');
-  if (app.state) applyState(app.state, app.selectedPath);
-  if (app.historyEntries) renderHistoryEntries(app.historyEntries);
+  if (document.documentElement) document.documentElement.lang = app.language;
+  document.querySelectorAll?.('[data-i18n]')?.forEach(node => { node.textContent = t(node.dataset.i18n); });
+  document.querySelectorAll?.('[data-i18n-html]')?.forEach(node => { node.innerHTML = t(node.dataset.i18nHtml); });
+  document.querySelectorAll?.('[data-i18n-title]')?.forEach(node => { node.title = t(node.dataset.i18nTitle); });
+  document.querySelectorAll?.('[data-i18n-aria]')?.forEach(node => { node.setAttribute('aria-label', t(node.dataset.i18nAria)); });
+  document.querySelectorAll?.('[data-i18n-placeholder]')?.forEach(node => { node.placeholder = t(node.dataset.i18nPlaceholder); });
+  document.querySelectorAll?.('.language-toggle button')?.forEach(button => button.classList.toggle('active', button.dataset.language === app.language));
+  try {
+    const maxBtn = typeof $ === 'function' ? $('maximizeButton') : null;
+    if (maxBtn && typeof setMaximizedButton === 'function') setMaximizedButton(maxBtn.getAttribute('aria-pressed') === 'true');
+  } catch (_) {}
+  try {
+    if (app.state && typeof applyState === 'function') applyState(app.state, app.selectedPath);
+  } catch (_) {}
+  try {
+    if (app.historyEntries && typeof renderHistoryEntries === 'function') renderHistoryEntries(app.historyEntries);
+  } catch (_) {}
+  try {
+    const tourModal = typeof $ === 'function' ? $('tourModal') : null;
+    if (tourModal && !tourModal.classList.contains('hidden') && typeof renderTourStep === 'function') {
+      renderTourStep(currentTourStep);
+    }
+  } catch (_) {}
 }
 
 function installLocale(payload) {
@@ -1382,8 +1397,6 @@ const TOUR_STEPS = [
     highlightIcon: '#i-shield',
   },
 ];
-
-let currentTourStep = 0;
 
 function renderTourStep(index) {
   currentTourStep = Math.max(0, Math.min(index, TOUR_STEPS.length - 1));
