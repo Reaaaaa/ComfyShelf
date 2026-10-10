@@ -1,50 +1,100 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ComfyShelf — Showcase & Video Capture Demo</title>
+  <title>ComfyShelf — Showcase Demo (Window Mode)</title>
   <link rel="icon" href="assets/comfyshelf-mark-small.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
   <style>
-    /* Demo-specific enhancements */
-    body {
+    /* Full Body Viewport Centering */
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
       background: #090c0e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--body);
+      -webkit-font-smoothing: antialiased;
     }
-    
+
+    /* Outer Window Container (1024 x 624 px matching user app screenshot 1:1) */
+    .github-window-mockup {
+      width: 1024px;
+      height: 624px;
+      min-width: 1024px;
+      min-height: 624px;
+      max-width: 1024px;
+      max-height: 624px;
+      background: var(--ink-950);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      box-shadow: 0 25px 65px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Scaled App Shell (Virtual 1440x878 layout scaled by 0.711 to 1024x624) */
+    .github-window-mockup .app-shell {
+      width: 1440px;
+      height: 878px;
+      transform: scale(calc(1024 / 1440));
+      transform-origin: 0 0;
+      border: none;
+      position: relative;
+    }
+
+    .github-window-mockup .workspace {
+      height: calc(100% - 48px);
+      min-height: 0;
+    }
+
+    /* Modal & Overlay within scaled coordinate space */
+    .github-window-mockup .modal-backdrop,
+    .github-window-mockup .busy-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 500;
+    }
+
+    /* Director Control Bar */
     .demo-director-bar {
       position: fixed;
-      bottom: 24px;
+      bottom: 22px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 20000;
       display: flex;
       align-items: center;
-      gap: 12px;
-      background: rgba(16, 23, 27, 0.92);
+      gap: 10px;
+      background: rgba(16, 23, 27, 0.94);
       border: 1px solid rgba(121, 175, 167, 0.3);
-      padding: 8px 18px;
+      padding: 7px 16px;
       border-radius: 30px;
-      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.06);
       backdrop-filter: blur(12px);
       transition: opacity 0.3s ease, transform 0.3s ease;
     }
     .demo-director-bar.hidden-recording {
       opacity: 0;
-      transform: translateX(-50%) translateY(30px);
+      transform: translateX(-50%) translateY(40px);
       pointer-events: none;
     }
     .demo-btn {
       display: inline-flex;
       align-items: center;
       gap: 7px;
-      height: 34px;
-      padding: 0 14px;
-      border-radius: 17px;
+      height: 32px;
+      padding: 0 13px;
+      border-radius: 16px;
       border: 1px solid var(--line);
       background: #141d22;
       color: var(--text-main);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.14s ease;
@@ -64,7 +114,7 @@
       box-shadow: 0 0 12px rgba(121, 175, 167, 0.4);
     }
 
-    /* Virtual Cinema Cursor */
+    /* Virtual Cursor */
     .virtual-cursor {
       position: fixed;
       top: 0;
@@ -73,9 +123,9 @@
       height: 24px;
       pointer-events: none;
       z-index: 30000;
-      transform: translate(450px, 280px);
+      transform: translate(500px, 300px);
       transition: none;
-      filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+      filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.6));
     }
     .cursor-ripple {
       position: absolute;
@@ -97,7 +147,7 @@
       100% { transform: scale(3.4); opacity: 0; }
     }
 
-    /* Giant Countdown Overlay for OBS Timing */
+    /* Countdown Overlay */
     .countdown-overlay {
       position: fixed;
       inset: 0;
@@ -112,7 +162,7 @@
       text-align: center;
     }
     .countdown-num {
-      font-size: 96px;
+      font-size: 88px;
       font-weight: 800;
       font-family: var(--display);
       color: var(--teal);
@@ -120,23 +170,49 @@
       text-shadow: 0 0 30px rgba(121, 175, 167, 0.5);
     }
     .countdown-hint {
-      margin-top: 14px;
+      margin-top: 12px;
       color: var(--text-soft);
-      font-size: 15px;
+      font-size: 14px;
       font-family: var(--mono);
     }
 
-    /* Standalone Cover Artwork */
-    .demo-artwork {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 8px;
+    /* Download Dialog Extras */
+    .download-web-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
     }
-
-    /* Status badge animations */
-    .status-pill, .status-link-badge {
-      transition: all 0.3s ease;
+    .link-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: #192227;
+      color: var(--text-soft);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .link-action-btn:hover {
+      background: #222e35;
+      border-color: #3b4e57;
+      color: var(--text);
+    }
+    .civitai-link-btn {
+      border-color: #274b6a;
+      background: #142433;
+      color: #7abaff;
+    }
+    .civitai-link-btn:hover {
+      background: #1a3247;
+      border-color: #386794;
+      color: #a3d0ff;
     }
   </style>
 </head>
@@ -164,8 +240,6 @@
     <symbol id="i-history" viewBox="0 0 24 24"><path d="M4 7V3M4 3h4"/><path d="M4.8 5.2A8.5 8.5 0 1 1 3.7 15"/><path d="M12 7v5l3 2"/></symbol>
     <symbol id="i-switch" viewBox="0 0 24 24"><path d="M4 7h13M14 4l3 3-3 3"/><path d="M20 17H7M10 14l-3 3 3 3"/></symbol>
     <symbol id="i-edit" viewBox="0 0 24 24"><path d="m14.5 5.5 4 4M4 20l1.2-5.2L15.8 4.2a1.4 1.4 0 0 1 2 0l2 2a1.4 1.4 0 0 1 0 2L9.2 18.8z"/><path d="m5.2 14.8 4 4"/></symbol>
-    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
-    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
     <symbol id="i-workflow" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="6" rx="1"/><rect x="14" y="14" width="7" height="6" rx="1"/><path d="M10 7h4v10"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></symbol>
@@ -183,404 +257,485 @@
   <div class="countdown-overlay hidden" id="countdownOverlay">
     <div class="countdown-box">
       <div class="countdown-num" id="countdownNum">3</div>
-      <div class="countdown-hint">OBS Aufnahme starten… Video-Choreografie beginnt gleich</div>
+      <div class="countdown-hint">OBS Aufnahme starten… Choreografie beginnt gleich</div>
     </div>
   </div>
 
   <!-- Bottom Director Control Bar -->
   <div class="demo-director-bar" id="directorBar">
-    <span style="font-size: 11px; font-weight: 700; color: var(--teal); letter-spacing: 0.05em; text-transform: uppercase;">Choreografie</span>
+    <span style="font-size: 11px; font-weight: 700; color: var(--teal); letter-spacing: 0.05em; text-transform: uppercase;">GitHub Showcase</span>
     <button class="demo-btn primary" id="btnCountdownStart">
       <svg style="width:14px;height:14px;"><use href="#i-history"/></svg> 3s Vorlauf &amp; Start (für OBS)
     </button>
     <button class="demo-btn" id="btnDirectStart">
-      <svg style="width:14px;height:14px;"><use href="#i-check"/></svg> Sofort abspielen
+      <svg style="width:14px;height:14px;"><use href="#i-check"/></svg> Direkt abspielen
     </button>
     <button class="demo-btn" id="btnReset">
       <svg style="width:14px;height:14px;"><use href="#i-refresh"/></svg> Reset
     </button>
   </div>
 
-  <!-- MAIN APP INTERFACE -->
-  <div class="app-shell">
-    <header class="titlebar">
-      <div class="titlebar-drag">
-        <div class="brand-mark"><img src="assets/comfyshelf-mark-small.svg" alt=""></div>
-        <div class="app-title">
-          <span>ComfyShelf</span>
-          <span class="app-subtitle">Workflow &amp; Model Shelf</span>
-        </div>
-      </div>
-      <div class="window-controls">
-        <button class="window-button"><svg><use href="#i-minus"/></svg></button>
-        <button class="window-button"><svg><use href="#i-max"/></svg></button>
-        <button class="window-button window-close"><svg><use href="#i-close"/></svg></button>
-      </div>
-    </header>
-
-    <div class="workspace">
-      <aside class="sidebar">
-        <div class="library-heading">
-          <div>
-            <span class="eyebrow">Bibliothek</span>
-            <h2>Workflows</h2>
-          </div>
-          <button class="icon-button"><svg><use href="#i-refresh"/></svg></button>
-        </div>
-
-        <button class="add-workflow-button">
-          <span class="button-icon"><svg><use href="#i-plus"/></svg></span>
-          <span>Workflow archivieren</span>
-        </button>
-        <button class="import-package-button">
-          <span class="button-icon"><svg><use href="#i-import"/></svg></span>
-          <span>Paket importieren</span>
-        </button>
-
-        <div class="search-box">
-          <span class="search-icon"><svg><use href="#i-search"/></svg></span>
-          <input type="text" id="demoSearchInput" placeholder="Workflows, Modelle, Nodes suchen…" autocomplete="off" spellcheck="false">
-          <button class="search-clear hidden" id="demoSearchClear"><svg><use href="#i-close"/></svg></button>
-        </div>
-
-        <div class="search-scope-row" role="tablist">
-          <button class="search-scope-chip active" id="chipAll">Alle</button>
-          <button class="search-scope-chip" id="chipName">Name</button>
-          <button class="search-scope-chip" id="chipModel">Modell</button>
-          <button class="search-scope-chip" id="chipNode">Node</button>
-        </div>
-
-        <div class="filter-row" role="tablist">
-          <button class="filter-chip active">Alle</button>
-          <button class="filter-chip">Geladen</button>
-          <button class="filter-chip">Archiviert</button>
-        </div>
-
-        <div class="workflow-list" id="demoWorkflowList">
-          <!-- Item 1: Flux -->
-          <div class="workflow-card active" id="cardFlux">
-            <div class="card-thumb">
-              <svg viewBox="0 0 100 100" class="demo-artwork">
-                <defs><linearGradient id="gFlux" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e3a5f"/><stop offset="100%" stop-color="#0f172a"/></linearGradient></defs>
-                <rect width="100" height="100" fill="url(#gFlux)"/>
-                <circle cx="50" cy="50" r="30" fill="#38bdf8" opacity="0.3"/>
-                <text x="50" y="55" font-family="sans-serif" font-size="12" fill="#bae6fd" text-anchor="middle" font-weight="bold">FLUX</text>
-              </svg>
-            </div>
-            <div class="card-info">
-              <div class="card-title-row">
-                <strong>Flux Dev Photorealism</strong>
-                <span class="status-indicator loaded" title="Geladen"></span>
-              </div>
-              <div class="card-meta">
-                <span>18.4 GB</span> · <span class="status-link-badge symlink" title="Windows Symlink">⚡ Symlink</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Item 2: SDXL Anime Masterpiece (Missing Model) -->
-          <div class="workflow-card" id="cardAnime">
-            <div class="card-thumb">
-              <svg viewBox="0 0 100 100" class="demo-artwork">
-                <defs><linearGradient id="gAnime" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#831843"/><stop offset="100%" stop-color="#3b0764"/></linearGradient></defs>
-                <rect width="100" height="100" fill="url(#gAnime)"/>
-                <circle cx="50" cy="50" r="28" fill="#f43f5e" opacity="0.4"/>
-                <text x="50" y="55" font-family="sans-serif" font-size="11" fill="#fbcfe8" text-anchor="middle" font-weight="bold">SDXL</text>
-              </svg>
-            </div>
-            <div class="card-info">
-              <div class="card-title-row">
-                <strong>SDXL Anime Masterpiece</strong>
-                <span class="status-indicator missing" id="indicatorAnime" title="Fehlt lokal"></span>
-              </div>
-              <div class="card-meta">
-                <span>7.2 GB</span> · <span id="metaAnimeStatus" class="meta-missing-text" style="color:#eab308;font-size:11px;">1 Modell fehlt</span>
-              </div>
-              <div class="card-match-badge hidden" id="cardAnimeBadge" style="margin-top:4px; font-size:10px; color:var(--amber); background:rgba(198,160,100,0.15); padding:2px 6px; border-radius:4px; display:inline-block;">
-                🔍 Modell: Illustrious-XL-v2.0.safetensors
-              </div>
-            </div>
-          </div>
-
-          <!-- Item 3: Pony V6 Cinematic -->
-          <div class="workflow-card" id="cardPony">
-            <div class="card-thumb">
-              <svg viewBox="0 0 100 100" class="demo-artwork">
-                <defs><linearGradient id="gPony" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#14532d"/><stop offset="100%" stop-color="#064e3b"/></linearGradient></defs>
-                <rect width="100" height="100" fill="url(#gPony)"/>
-                <circle cx="50" cy="50" r="28" fill="#10b981" opacity="0.3"/>
-                <text x="50" y="55" font-family="sans-serif" font-size="11" fill="#a7f3d0" text-anchor="middle" font-weight="bold">PONY</text>
-              </svg>
-            </div>
-            <div class="card-info">
-              <div class="card-title-row">
-                <strong>Pony V6 Cinematic</strong>
-                <span class="status-indicator ready" title="Vollständig"></span>
-              </div>
-              <div class="card-meta">
-                <span>8.6 GB</span> · <span style="color:var(--text-soft);font-size:11px;">Archiviert</span>
-              </div>
-            </div>
+  <!-- RECTANGULAR WINDOW CONTAINER (1024 x 624 px matching user app screenshot 1:1) -->
+  <div class="github-window-mockup" id="windowFrame">
+    <div class="app-shell">
+      <!-- Titlebar exactly matching screenshot -->
+      <header class="titlebar">
+        <div class="titlebar-drag">
+          <div class="brand-mark"><img src="assets/comfyshelf-mark-small.svg" alt=""></div>
+          <div class="brand-copy">
+            <span class="brand-name">ComfyShelf</span>
+            <span class="brand-subtitle">WORKFLOW &amp; MODEL SHELF</span>
           </div>
         </div>
-
-        <div class="sidebar-footer">
-          <button class="footer-action"><svg><use href="#i-folder"/></svg><span>Archivordner öffnen</span></button>
-          <button class="footer-action"><svg><use href="#i-settings"/></svg><span>Einstellungen</span></button>
+        <div class="window-controls">
+          <button class="window-button"><svg><use href="#i-minus"/></svg></button>
+          <button class="window-button"><svg><use href="#i-max"/></svg></button>
+          <button class="window-button window-close"><svg><use href="#i-close"/></svg></button>
         </div>
-      </aside>
+      </header>
 
-      <!-- MAIN DETAIL CONTENT -->
-      <main class="main-content">
-        <section class="summary-card">
-          <div class="summary-slot"><span class="summary-label">ComfyUI Installation</span><strong>C:\ComfyUI_windows_portable</strong></div>
-          <div class="summary-slot"><span class="summary-label">Freier Speicher (SSD)</span><strong style="color:var(--teal)">418.2 GB frei</strong></div>
-          <div class="summary-slot"><span class="summary-label">Shared Model Pool</span><strong>.comfyshelf (Dedupliziert)</strong></div>
-        </section>
-
-        <!-- Detail View -->
-        <section class="detail-view" id="demoDetailView">
-          <div class="detail-hero">
-            <div class="status-rail" id="demoStatusRail"><span style="background:#eab308;"></span><span style="background:#eab308;"></span><span></span><span></span></div>
-            <div class="detail-title-wrap">
-              <div class="detail-kicker">
-                <span class="status-pill" id="demoStatusPill" style="background:rgba(234,179,8,0.15); color:#facc15; border:1px solid rgba(234,179,8,0.3);">Archiviert (Unvollständig)</span>
-                <span class="integrity-label"><svg><use href="#i-shield"/></svg>Integrität geprüft</span>
-              </div>
-              <div class="package-name-row">
-                <h1 id="demoPackageName">SDXL Anime Masterpiece</h1>
-                <button class="rename-button"><svg><use href="#i-edit"/></svg></button>
-              </div>
-              <p id="demoPackagePath">E:\ComfyShelf_Archive\SDXL Anime Masterpiece.zip</p>
-              <button class="secondary-button workflow-file-button"><svg><use href="#i-folder"/></svg><span>Workflow-Datei anzeigen</span></button>
+      <div class="workspace">
+        <!-- Sidebar exactly matching screenshot -->
+        <aside class="sidebar">
+          <div class="library-heading">
+            <div>
+              <span class="eyebrow">LIBRARY</span>
+              <h2>Workflows</h2>
             </div>
-
-            <div class="hero-cover" id="demoHeroCover">
-              <svg viewBox="0 0 120 120" style="width:120px;height:120px;border-radius:10px;">
-                <defs><linearGradient id="gCover" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#831843"/><stop offset="100%" stop-color="#3b0764"/></linearGradient></defs>
-                <rect width="120" height="120" fill="url(#gCover)"/>
-                <circle cx="60" cy="60" r="38" fill="#f43f5e" opacity="0.4"/>
-                <text x="60" y="65" font-family="sans-serif" font-size="14" fill="#fbcfe8" text-anchor="middle" font-weight="bold">SDXL ANIME</text>
-              </svg>
-              <div class="hero-cover-overlay"><svg><use href="#i-expand"/></svg></div>
-            </div>
-
-            <div class="hero-metric">
-              <span>Speicherbedarf</span>
-              <strong id="demoModelSize">7.18 GB</strong>
-              <small id="demoStorageImpact">1 Modell fehlt noch lokal</small>
-            </div>
+            <button class="icon-button"><svg><use href="#i-refresh"/></svg></button>
           </div>
 
-          <!-- Action Bar -->
-          <div class="action-bar" style="margin: 18px 0;">
-            <button class="primary-button" id="demoActionBtn" style="background:#2563eb; color:#fff; border-color:#3b82f6;">
-              <svg><use href="#i-download"/></svg><span>Fehlende Modelle laden…</span>
+          <button class="add-workflow-button">
+            <span class="button-icon"><svg><use href="#i-plus"/></svg></span>
+            <span>Archive workflow</span>
+          </button>
+          <button class="import-package-button">
+            <span class="button-icon"><svg><use href="#i-import"/></svg></span>
+            <span>Import package</span>
+          </button>
+
+          <div class="search-box">
+            <span class="search-icon"><svg><use href="#i-search"/></svg></span>
+            <input type="text" id="demoSearchInput" placeholder="Search workflows, models, nodes..." autocomplete="off" spellcheck="false">
+            <button class="search-clear hidden" id="demoSearchClear"><svg><use href="#i-close"/></svg></button>
+          </div>
+
+          <div class="search-scope-row" role="tablist">
+            <button class="search-scope-chip active">All</button>
+            <button class="search-scope-chip">Name</button>
+            <button class="search-scope-chip">Model</button>
+            <button class="search-scope-chip">Node</button>
+          </div>
+
+          <div class="filter-row" role="tablist">
+            <button class="filter-chip active">All</button>
+            <button class="filter-chip">Loaded</button>
+            <button class="filter-chip">Archived</button>
+          </div>
+
+          <!-- Workflow List exactly matching user's screenshot -->
+          <div class="workflow-list" id="demoWorkflowList">
+            <!-- Item 1: MiniMax-H3_Ref2VA_2-Portraets_16GB (Active in screenshot) -->
+            <button type="button" class="workflow-item active" id="itemMinimax" data-state="archived">
+              <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
+              <span class="workflow-item-info">
+                <span class="workflow-name">MiniMax-H3_Ref2VA_2-P...</span>
+                <span class="workflow-meta">
+                  <span class="workflow-state">ARCHIVED</span>
+                  <span>41.4 GiB</span>
+                </span>
+              </span>
             </button>
-            <button class="secondary-button"><svg><use href="#i-folder"/></svg><span>Portable ZIP exportieren…</span></button>
+
+            <!-- Item 2: MiniMax-H3_4070TiS_16GB -->
+            <button type="button" class="workflow-item" id="itemMinimax4070" data-state="archived">
+              <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
+              <span class="workflow-item-info">
+                <span class="workflow-name">MiniMax-H3_4070TiS_16...</span>
+                <span class="workflow-meta">
+                  <span class="workflow-state">ARCHIVED</span>
+                  <span>41.4 GiB</span>
+                </span>
+              </span>
+            </button>
+
+            <!-- Item 3: Qwen_Image_2512_3xLoRA -->
+            <button type="button" class="workflow-item" id="itemQwenLora" data-state="archived">
+              <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
+              <span class="workflow-item-info">
+                <span class="workflow-name">Qwen_Image_2512_3xLoRA</span>
+                <span class="workflow-match-hint hidden" id="hintQwenLora">
+                  <svg><use href="#i-search"/></svg><span class="match-type">Name:</span><span class="match-text">qwen</span>
+                </span>
+                <span class="workflow-meta">
+                  <span class="workflow-state">ARCHIVED</span>
+                  <span>29.6 GiB</span>
+                </span>
+              </span>
+            </button>
+
+            <!-- Item 4: Qwen_Image_Edit_2511_Illustrious (The one with missing model!) -->
+            <button type="button" class="workflow-item" id="itemQwenEdit" data-state="partial">
+              <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
+              <span class="workflow-item-info">
+                <span class="workflow-name">Qwen_Image_Edit_2511_I...</span>
+                <span class="workflow-match-hint hidden" id="hintQwenEdit">
+                  <svg><use href="#i-search"/></svg><span class="match-type">Model:</span><span class="match-text">Illustrious-XL-v2.0</span>
+                </span>
+                <span class="workflow-meta">
+                  <span class="workflow-state" id="stateQwenEdit">ARCHIVED</span>
+                  <span>30.5 GiB</span>
+                </span>
+              </span>
+            </button>
+
+            <!-- Item 5: Minimax Music 3 (Loaded in screenshot) -->
+            <button type="button" class="workflow-item" id="itemMusic" data-state="loaded">
+              <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
+              <span class="workflow-item-info">
+                <span class="workflow-name">Minimax Music 3</span>
+                <span class="workflow-meta">
+                  <span class="workflow-state">LOADED</span>
+                  <span>13.3 GiB</span>
+                </span>
+              </span>
+            </button>
+
+            <!-- Item 6: RVC_Vocal_Training_Template -->
+            <button type="button" class="workflow-item" id="itemRvc" data-state="archived">
+              <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
+              <span class="workflow-item-info">
+                <span class="workflow-name">RVC_Vocal_Training_Tem...</span>
+                <span class="workflow-meta">
+                  <span class="workflow-state">ARCHIVED</span>
+                  <span>53.7 MiB</span>
+                </span>
+              </span>
+            </button>
           </div>
 
-          <!-- Missing notice panel -->
-          <div class="notice-panel" id="demoNoticePanel" style="margin-bottom: 20px; background: rgba(234, 179, 8, 0.06); border: 1px solid rgba(234, 179, 8, 0.25); border-radius: 10px; padding: 14px 16px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; color:#facc15; font-size:13px; font-weight:600;">
-              <svg style="width:16px;height:16px;"><use href="#i-alert"/></svg>
-              <span id="demoNoticeTitle">1 bekannte Abhängigkeit fehlt im Paket</span>
+          <div class="sidebar-footer">
+            <button class="footer-action"><svg><use href="#i-folder"/></svg><span>Open archive</span></button>
+            <button class="footer-action"><svg><use href="#i-settings"/></svg><span>Settings</span></button>
+          </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="content">
+          <!-- Top Summary Bar exactly matching screenshot -->
+          <section class="top-summary">
+            <div class="summary-path">
+              <span class="summary-dot"></span>
+              <span>ComfyUI</span>
+              <span class="path-divider">/</span>
+              <span class="muted">J:\ComfyUI-Easy-Install\ComfyUI</span>
             </div>
-            <div id="demoMissingList">
-              <div class="missing-item missing-file-row" style="background:rgba(0,0,0,0.25); border:1px solid rgba(234,179,8,0.2); border-radius:8px; padding:8px 12px;">
-                <span class="missing-file-copy">
-                  <strong style="color:#fde047; font-size:12px;">Illustrious-XL-v2.0.safetensors</strong>
-                  <small style="color:var(--muted); display:block; font-size:11px;">checkpoint</small>
-                </span>
-                <span class="missing-file-actions">
-                  <button type="button" class="filename-web-button" id="btnDemoHf" title="Model Card / Suche auf Hugging Face öffnen">
-                    <svg><use href="#i-external"/></svg>
-                  </button>
-                  <button type="button" class="filename-civitai-button" id="btnDemoCivitai" title="Auf Civitai suchen: Illustrious-XL-v2.0">
-                    <span class="civitai-icon">C</span>
-                  </button>
-                  <button type="button" class="filename-download-button" id="btnDemoDownload" title="Modell herunterladen: Illustrious-XL-v2.0.safetensors">
-                    <svg><use href="#i-download"/></svg>
-                  </button>
-                  <button type="button" class="filename-copy-button" title="Dateinamen kopieren">
-                    <svg><use href="#i-copy"/></svg>
-                  </button>
-                </span>
+            <div class="storage-tools">
+              <div class="storage-readout">
+                <span class="muted">Available space on your ComfyUI drive</span>
+                <strong>73.6 GiB</strong>
+              </div>
+              <button class="summary-button"><svg><use href="#i-refresh"/></svg></button>
+              <button class="summary-button"><svg><use href="#i-history"/></svg></button>
+            </div>
+          </section>
+
+          <!-- Detail View -->
+          <section class="detail-view">
+            <!-- Hero Header -->
+            <div class="detail-hero">
+              <div class="status-rail" id="demoStatusRail">
+                <span></span><span></span><span></span><span></span>
+              </div>
+              <div class="detail-title-wrap">
+                <div class="detail-kicker">
+                  <span class="status-pill" id="demoStatusPill">ARCHIVED</span>
+                  <span class="integrity-label valid"><svg><use href="#i-shield"/></svg>Integrity verified</span>
+                </div>
+                <div class="package-name-row">
+                  <h1 id="demoPackageName">MiniMax-H3_Ref2VA_2-Portraets_16GB</h1>
+                  <button class="rename-button"><svg><use href="#i-edit"/></svg></button>
+                </div>
+                <p id="demoPackagePath">D:\LLM-Zwischenlager\MiniMax-H3_Ref2VA_2-Portraets_16GB.zip</p>
+                <button class="secondary-button workflow-file-button"><svg><use href="#i-folder"/></svg><span>Show workflow file</span></button>
+              </div>
+
+              <div class="hero-metric">
+                <span>MODEL FOOTPRINT</span>
+                <strong id="demoModelSize">41.4 GiB</strong>
+                <small id="demoStorageImpact">41.4 GiB needed to load</small>
+              </div>
+            </div>
+
+            <!-- Metrics Grid (3 cards matching screenshot) -->
+            <div class="metrics-grid">
+              <article class="metric-card">
+                <span>MODEL FILES</span>
+                <small class="metric-subtitle">(Models, VAEs, LoRAs...)</small>
+                <strong id="demoModelCount">5</strong>
+                <small id="demoModelPresence">0 currently local</small>
+              </article>
+              <article class="metric-card">
+                <span>MODEL STORAGE</span>
+                <strong id="demoStorageMode">Shared pool</strong>
+                <small id="demoStorageLabel">deduplicated in shared pool</small>
+              </article>
+              <article class="metric-card">
+                <span>CUSTOM NODES</span>
+                <strong id="demoNodeCount">0</strong>
+                <small id="demoNodeSubtitle">documented only</small>
+              </article>
+            </div>
+
+            <!-- Missing Model Notice Bar (appears when selecting Qwen!) -->
+            <div class="notice warning hidden" id="demoMissingBanner" style="margin: 14px 0 4px; padding: 12px 14px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <svg style="width:16px;height:16px;color:var(--amber);flex-shrink:0;"><use href="#i-alert"/></svg>
+                  <strong style="color:var(--amber);font-size:12px;">1 known dependency missing from package</strong>
+                </div>
+              </div>
+              <div style="margin-top:8px;" id="demoMissingRow">
+                <div class="missing-item missing-file-row">
+                  <span class="missing-file-copy">
+                    <strong>Illustrious-XL-v2.0.safetensors</strong>
+                    <small>checkpoint</small>
+                  </span>
+                  <span class="missing-file-actions">
+                    <button type="button" class="filename-web-button" id="btnDemoHf" title="Open Model Card / search on Hugging Face">
+                      <svg><use href="#i-external"/></svg>
+                    </button>
+                    <button type="button" class="filename-civitai-button" id="btnDemoCivitai" title="Search on Civitai: Illustrious-XL-v2.0">
+                      <span class="civitai-icon">C</span>
+                    </button>
+                    <button type="button" class="filename-download-button" id="btnDemoDownload" title="Download model: Illustrious-XL-v2.0.safetensors">
+                      <svg><use href="#i-download"/></svg>
+                    </button>
+                    <button type="button" class="filename-copy-button" title="Copy filename">
+                      <svg><use href="#i-copy"/></svg>
+                    </button>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Detail Columns (Models & Notes) -->
+            <div class="detail-columns">
+              <section class="panel dependency-panel">
+                <div class="panel-heading">
+                  <div>
+                    <span class="eyebrow">PACKAGE CONTENTS</span>
+                    <h3 id="demoPanelHeading">Models</h3>
+                  </div>
+                  <button class="secondary-button dependency-scan-button"><svg><use href="#i-refresh"/></svg><span>Scan dependencies</span></button>
+                </div>
+                <div class="dependency-list" id="demoDependencyList">
+                  <div class="dependency-row">
+                    <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+                    <span class="dep-copy">
+                      <strong>minimax_h3_ref2va_pruned_int8_convrot.safetensors</strong>
+                      <span>DIFFUSION MODEL · ARCHIVE ONLY</span>
+                    </span>
+                    <span class="dep-size">19.5 GiB</span>
+                  </div>
+                  <div class="dependency-row">
+                    <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+                    <span class="dep-copy">
+                      <strong>minimax_h3_video_vae_fp16.safetensors</strong>
+                      <span>VAE · ARCHIVE ONLY</span>
+                    </span>
+                    <span class="dep-size">4.85 GiB</span>
+                  </div>
+                  <div class="dependency-row">
+                    <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+                    <span class="dep-copy">
+                      <strong>minimax_h3_audio_vae_fp32.safetensors</strong>
+                      <span>VAE · ARCHIVE ONLY</span>
+                    </span>
+                    <span class="dep-size">577.2 MiB</span>
+                  </div>
+                  <div class="dependency-row">
+                    <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+                    <span class="dep-copy">
+                      <strong>qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors</strong>
+                      <span>TEXT ENCODER · ARCHIVE ONLY</span>
+                    </span>
+                    <span class="dep-size">14.6 GiB</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel notes-panel">
+                <div class="panel-heading">
+                  <div>
+                    <span class="eyebrow">ENVIRONMENT</span>
+                    <h3>Notes</h3>
+                  </div>
+                </div>
+                <div class="notice-list">
+                  <div class="notice">
+                    <svg><use href="#i-shield"/></svg>
+                    <div class="notice-body">
+                      <span>The package manifest contains every model detected when it was created.</span>
+                    </div>
+                  </div>
+                  <section class="sharing-box sharing-library">
+                    <div class="sharing-heading">
+                      <svg><use href="#i-shelf"/></svg>
+                      <strong>Files used by other archived workflows</strong>
+                    </div>
+                    <p class="sharing-impact">These files have matching recorded hashes in other packages in this library.</p>
+                    <p class="sharing-counts">Shared files: 3 · Other workflows: 1</p>
+                    <div class="sharing-details" style="margin-top:6px; padding-top:6px;">
+                      <span style="cursor:pointer; color:var(--amber); font-size:11px; font-weight:600;">▶ Show files and workflows</span>
+                    </div>
+                  </section>
+                </div>
+              </section>
+            </div>
+
+            <!-- Action Dock matching screenshot -->
+            <footer class="action-dock">
+              <button class="secondary-button"><svg><use href="#i-shield"/></svg><span>Verify package</span></button>
+              <button class="secondary-button"><svg><use href="#i-upload"/></svg><span>Export portable ZIP…</span></button>
+              <button class="secondary-button danger-action-button"><svg><use href="#i-trash"/></svg><span>Delete archive…</span></button>
+              <div class="dock-spacer"></div>
+              <button class="secondary-button" id="btnSecondary"><svg><use href="#i-download"/></svg><span>Load in addition</span></button>
+              <button class="primary-button" id="btnPrimary"><svg><use href="#i-switch"/></svg><span>Switch to this workflow</span></button>
+            </footer>
+          </section>
+        </main>
+      </div>
+
+      <!-- RESOLVER MODAL (Centered inside scaled app window) -->
+      <div class="modal-backdrop hidden" id="demoDownloadModal">
+        <section class="modal download-modal" style="width: 540px; padding: 22px;">
+          <div class="modal-heading">
+            <div>
+              <span class="eyebrow" style="color:var(--amber);">Hugging Face Resolver</span>
+              <h2 style="font-size: 20px;">Download model</h2>
+            </div>
+            <button class="icon-button modal-close" id="btnModalClose"><svg><use href="#i-close"/></svg></button>
+          </div>
+
+          <p class="modal-intro" style="margin: 8px 0 14px; font-size: 13px;">Download missing models directly from Hugging Face into ComfyUI or your shared pool.</p>
+
+          <div class="download-info-card" style="margin: 8px 0 12px; padding: 10px 12px; gap: 6px;">
+            <div class="download-info-row">
+              <span class="download-info-label">Model</span>
+              <span class="download-info-value" style="color:var(--amber); font-weight:700;">Illustrious-XL-v2.0.safetensors</span>
+            </div>
+            <div class="download-info-row">
+              <span class="download-info-label">Destination</span>
+              <span class="download-info-value code-path">models/checkpoints/Illustrious-XL-v2.0.safetensors</span>
+            </div>
+            <div class="download-info-row">
+              <span class="download-info-label">Web</span>
+              <div class="download-web-links">
+                <button type="button" class="link-action-btn" id="modalHfBtn">
+                  <svg><use href="#i-external"/></svg>
+                  <span>Open Model Card on Hugging Face</span>
+                </button>
+                <button type="button" class="link-action-btn civitai-link-btn" id="modalCivitaiBtn">
+                  <svg><use href="#i-external"/></svg>
+                  <span>Search on Civitai</span>
+                </button>
               </div>
             </div>
           </div>
 
-          <!-- Models & Details -->
-          <div class="detail-columns">
-            <section class="panel dependency-panel">
-              <div class="panel-heading">
-                <div><span class="eyebrow">Paketinhalt</span><h3>Modelle (3)</h3></div>
+          <div class="download-source-section">
+            <label class="path-field" style="margin-top: 10px;">
+              <span style="font-size:11px;">Hugging Face URL or Repo-ID</span>
+              <div class="download-input-row">
+                <input type="text" id="demoModalInput" value="OnomaAIResearch/Illustrious-xl-early-release-v2.0">
               </div>
-              <div class="file-list" id="demoFileList">
-                <div class="file-item">
-                  <svg style="width:16px;height:16px;color:#facc15;"><use href="#i-alert"/></svg>
-                  <div class="file-info"><strong style="color:#fde047;">Illustrious-XL-v2.0.safetensors</strong><span>models/checkpoints · 6.94 GB</span></div>
-                  <span class="status-tag missing">Fehlt</span>
-                </div>
-                <div class="file-item">
-                  <svg style="width:16px;height:16px;color:var(--teal);"><use href="#i-check"/></svg>
-                  <div class="file-info"><strong>sdxl_vae.safetensors</strong><span>models/vae · 335 MB</span></div>
-                  <span class="status-tag present">Lokal vorhanden</span>
-                </div>
-                <div class="file-item">
-                  <svg style="width:16px;height:16px;color:var(--teal);"><use href="#i-check"/></svg>
-                  <div class="file-info"><strong>anime_detailer_v1.safetensors</strong><span>models/loras · 144 MB</span></div>
-                  <span class="status-tag present">Lokal vorhanden</span>
-                </div>
-              </div>
-            </section>
+            </label>
 
-            <section class="panel side-panel">
-              <div class="panel-heading">
-                <div><span class="eyebrow">Umgebung</span><h3>Custom Nodes</h3></div>
-              </div>
-              <div style="font-size:12px; color:var(--text-soft); line-height:1.6;">
-                <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line-soft);">
-                  <span>ComfyUI-Impact-Pack</span><span style="color:#45b27a; font-weight:600;">✓ Installiert</span>
+            <div class="download-candidates-box" style="margin-top:8px; padding:8px 10px;">
+              <span class="download-candidates-header" style="font-size:10px; margin-bottom:6px;">Suggestions from Hugging Face:</span>
+              <div class="download-candidates-list">
+                <div class="download-candidate-pill selected" id="candPill1">
+                  <div class="candidate-info">
+                    <strong>OnomaAIResearch/Illustrious-xl-early-release-v2.0</strong>
+                    <span>6.94 GB · SHA-256</span>
+                  </div>
+                  <div class="candidate-actions">
+                    <button type="button" class="candidate-ext-btn"><svg><use href="#i-external"/></svg></button>
+                  </div>
                 </div>
-                <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line-soft);">
-                  <span>rgthree-comfy</span><span style="color:#45b27a; font-weight:600;">✓ Installiert</span>
+                <div class="download-candidate-pill" id="candPill2">
+                  <div class="candidate-info">
+                    <strong>animagine/sdxl-illustrious-v2</strong>
+                    <span>6.94 GB · SHA-256</span>
+                  </div>
+                  <div class="candidate-actions">
+                    <button type="button" class="candidate-ext-btn"><svg><use href="#i-external"/></svg></button>
+                  </div>
                 </div>
               </div>
-            </section>
+            </div>
+          </div>
+
+          <label class="safety-option" style="margin-top:12px;">
+            <input type="checkbox" checked>
+            <span>
+              <strong>Record in package &amp; shared pool</strong>
+              <small>Removes model from missing list and updates workflow status to complete.</small>
+            </span>
+          </label>
+
+          <div class="modal-actions" style="margin-top:16px;">
+            <button class="text-button" id="btnModalCancel">Cancel</button>
+            <button class="primary-button" id="btnModalStartDownload">
+              <svg><use href="#i-download"/></svg><span>Start Download</span>
+            </button>
           </div>
         </section>
-      </main>
+      </div>
+
+      <!-- BUSY STREAMING OVERLAY (Centered inside scaled app window) -->
+      <div class="busy-overlay hidden" id="demoBusyOverlay">
+        <section class="busy-card" style="max-width: 440px; padding: 20px;">
+          <div class="busy-shelf" style="margin-bottom:14px;"><span></span><span></span><span></span><span></span><span></span></div>
+          <h2 id="demoBusyTitle" style="font-size:20px; margin:0 0 4px;">Downloading model…</h2>
+          <p id="demoBusyMessage" style="font-size:13px; color:var(--text-soft); margin:0 0 12px;">Illustrious-XL-v2.0.safetensors (52 MB/s)</p>
+
+          <!-- Progress Bar -->
+          <div style="background:#1b252b; border-radius:6px; height:8px; overflow:hidden; border:1px solid #2b3b44; margin:10px 0 6px;">
+            <div id="demoBusyBar" style="background:var(--teal); height:100%; width:0%; transition:width 0.25s ease;"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:11px; font-family:var(--mono); color:var(--muted);">
+            <span id="demoBusyPercent">0%</span>
+            <span id="demoBusySpeed">52.4 MB/s</span>
+          </div>
+
+          <div class="busy-detail" style="margin-top:12px; font-size:11px;">
+            <span class="loading-pulse"></span>
+            <span id="demoBusyDetail">Connecting to Hugging Face CDN…</span>
+          </div>
+        </section>
+      </div>
+
+      <!-- SUCCESS TOAST (Bottom-right inside scaled app window) -->
+      <div id="demoToast" class="hidden" style="position:absolute; bottom:20px; right:25px; z-index:600; background:#142321; border:1px solid #365a54; color:#a2cfc8; padding:12px 18px; border-radius:10px; font-size:13px; font-weight:600; display:flex; align-items:center; gap:10px; box-shadow:0 12px 30px rgba(0,0,0,0.5);">
+        <svg style="width:18px;height:18px;color:var(--teal);"><use href="#i-check"/></svg>
+        <span id="demoToastText">Model downloaded and registered in shared pool!</span>
+      </div>
     </div>
   </div>
 
-  <!-- DOWNLOAD RESOLVER MODAL -->
-  <div class="modal-backdrop hidden" id="demoDownloadModal">
-    <section class="modal-card download-modal" style="max-width: 580px;">
-      <div class="modal-header">
-        <div>
-          <span class="eyebrow" style="color:var(--amber);">Hugging Face Resolver</span>
-          <h2>Modell herunterladen</h2>
-        </div>
-        <button class="icon-button modal-close" id="btnModalClose"><svg><use href="#i-close"/></svg></button>
-      </div>
-
-      <p class="modal-intro">Fehlende Modelle direkt von Hugging Face in ComfyUI oder den Shared Pool herunterladen.</p>
-
-      <div class="download-info-card">
-        <div class="download-info-row">
-          <span class="download-info-label">Modell</span>
-          <span class="download-info-value" id="modalModelTitle" style="color:var(--amber); font-weight:700;">Illustrious-XL-v2.0.safetensors</span>
-        </div>
-        <div class="download-info-row">
-          <span class="download-info-label">Zielordner</span>
-          <span class="download-info-value code-path">models/checkpoints/Illustrious-XL-v2.0.safetensors</span>
-        </div>
-        <div class="download-info-row">
-          <span class="download-info-label">Web</span>
-          <div class="download-web-links">
-            <button type="button" class="link-action-btn" id="modalHfBtn">
-              <svg><use href="#i-external"/></svg>
-              <span>Model Card auf Hugging Face öffnen</span>
-            </button>
-            <button type="button" class="link-action-btn civitai-link-btn" id="modalCivitaiBtn">
-              <svg><use href="#i-external"/></svg>
-              <span>Auf Civitai suchen</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="download-source-section">
-        <label class="path-field">
-          <span>Hugging Face URL oder Repo-ID</span>
-          <div class="download-input-row">
-            <input type="text" id="demoModalInput" value="OnomaAIResearch/Illustrious-xl-early-release-v2.0">
-          </div>
-          <small>Hugging Face URL, Repo-ID (z. B. owner/repo) oder direkten Download-Link einfügen.</small>
-        </label>
-
-        <div class="download-candidates-box" style="margin-top:10px;">
-          <span class="download-candidates-header">Vorschläge von Hugging Face:</span>
-          <div class="download-candidates-list">
-            <div class="download-candidate-pill selected" id="candPill1">
-              <div class="candidate-info">
-                <strong>OnomaAIResearch/Illustrious-xl-early-release-v2.0</strong>
-                <span>6.94 GB · SHA-256</span>
-              </div>
-              <div class="candidate-actions">
-                <button type="button" class="candidate-ext-btn"><svg><use href="#i-external"/></svg></button>
-              </div>
-            </div>
-            <div class="download-candidate-pill" id="candPill2">
-              <div class="candidate-info">
-                <strong>animagine/sdxl-illustrious-v2</strong>
-                <span>6.94 GB · SHA-256</span>
-              </div>
-              <div class="candidate-actions">
-                <button type="button" class="candidate-ext-btn"><svg><use href="#i-external"/></svg></button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <label class="safety-option" style="margin-top:14px;">
-        <input type="checkbox" checked>
-        <span>
-          <strong>Im Paket &amp; Shared Pool erfassen</strong>
-          <small>Entfernt das Modell aus der Liste fehlender Dateien und aktualisiert den Workflow auf vollständig.</small>
-        </span>
-      </label>
-
-      <div class="modal-actions" style="margin-top:18px;">
-        <button class="text-button" id="btnModalCancel">Abbrechen</button>
-        <button class="primary-button" id="btnModalStartDownload">
-          <svg><use href="#i-download"/></svg><span>Download starten</span>
-        </button>
-      </div>
-    </section>
-  </div>
-
-  <!-- BUSY STREAMING OVERLAY -->
-  <div class="busy-overlay hidden" id="demoBusyOverlay">
-    <section class="busy-card" style="max-width: 480px;">
-      <div class="busy-heading">
-        <div class="spinner"></div>
-        <div>
-          <strong id="busyTitle">Modell wird heruntergeladen</strong>
-          <span id="busyDetail">Streaming von Hugging Face für Illustrious-XL-v2.0.safetensors…</span>
-        </div>
-      </div>
-      <div class="progress-meta">
-        <span id="busyPhase">Download läuft</span>
-        <strong id="busyPercent">0 %</strong>
-      </div>
-      <div class="progress-track" style="margin-top:8px;">
-        <span id="busyProgressFill" style="display:block;height:100%;background:var(--teal);width:0%;transition:width 0.2s linear;"></span>
-      </div>
-      <div class="progress-file" style="margin-top:8px; display:flex; justify-content:space-between; font-size:11px; font-family:var(--mono);">
-        <span id="busyRate">44.8 MB/s</span>
-        <span id="busyAmount">1.8 GB / 6.94 GB · Noch 1m 52s</span>
-      </div>
-    </section>
-  </div>
-
-  <!-- TOAST NOTIFICATION -->
-  <div class="toast hidden" id="demoToast">
-    <svg style="width:18px;height:18px;color:#45b27a;"><use href="#i-check"/></svg>
-    <span id="toastText">Modell erfolgreich heruntergeladen: Illustrious-XL-v2.0.safetensors</span>
-  </div>
-
   <script>
-    // --- ANIMATION & DIRECTOR SCRIPT ---
-    const wait = ms => new Promise(res => setTimeout(res, ms));
-
+    // Cinema Orchestration Engine
     const cursor = document.getElementById('virtualCursor');
     const ripple = document.getElementById('cursorRipple');
     const directorBar = document.getElementById('directorBar');
     const countdownOverlay = document.getElementById('countdownOverlay');
     const countdownNum = document.getElementById('countdownNum');
+
+    function wait(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
 
     async function moveCursorTo(selectorOrCoords, duration = 650) {
       let targetX, targetY;
@@ -607,227 +762,351 @@
       await wait(180);
     }
 
-    async function typeText(inputEl, text, charSpeed = 65) {
+    async function typeText(inputEl, text, charSpeed = 60) {
       inputEl.focus();
       inputEl.value = '';
       for (const char of text) {
         inputEl.value += char;
         inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-        await wait(charSpeed + (Math.random() * 25));
+        await wait(charSpeed + (Math.random() * 20));
       }
     }
 
-    // Reset back to initial state
     function resetDemo() {
+      // 1. Search Box
       document.getElementById('demoSearchInput').value = '';
       document.getElementById('demoSearchClear').classList.add('hidden');
-      document.getElementById('cardAnimeBadge').classList.add('hidden');
-      document.getElementById('cardFlux').style.display = 'flex';
-      document.getElementById('cardPony').style.display = 'flex';
-      document.getElementById('cardAnime').style.display = 'flex';
+      document.getElementById('hintQwenLora').classList.add('hidden');
+      document.getElementById('hintQwenEdit').classList.add('hidden');
 
-      // Restore missing state for Anime
-      document.getElementById('demoStatusPill').textContent = 'Archiviert (Unvollständig)';
-      document.getElementById('demoStatusPill').style.background = 'rgba(234,179,8,0.15)';
-      document.getElementById('demoStatusPill').style.color = '#facc15';
-      document.getElementById('demoStatusPill').style.borderColor = 'rgba(234,179,8,0.3)';
+      // 2. Sidebar items visibility
+      ['itemMinimax', 'itemMinimax4070', 'itemQwenLora', 'itemQwenEdit', 'itemMusic', 'itemRvc'].forEach(id => {
+        document.getElementById(id).style.display = 'flex';
+        document.getElementById(id).classList.remove('active');
+      });
+      document.getElementById('itemMinimax').classList.add('active');
 
-      document.getElementById('demoStatusRail').innerHTML = '<span style="background:#eab308;"></span><span style="background:#eab308;"></span><span></span><span></span>';
-      document.getElementById('demoNoticePanel').classList.remove('hidden');
-      document.getElementById('demoActionBtn').innerHTML = '<svg><use href="#i-download"/></svg><span>Fehlende Modelle laden…</span>';
-      document.getElementById('demoActionBtn').style.background = '#2563eb';
-      document.getElementById('demoActionBtn').style.borderColor = '#3b82f6';
-      document.getElementById('demoActionBtn').style.color = '#fff';
+      // 3. Reset Qwen edit state
+      document.getElementById('stateQwenEdit').textContent = 'ARCHIVED';
+      document.getElementById('stateQwenEdit').style.background = 'transparent';
+      document.getElementById('stateQwenEdit').style.color = 'inherit';
+      document.getElementById('stateQwenEdit').style.borderColor = 'transparent';
 
-      document.getElementById('metaAnimeStatus').innerHTML = '1 Modell fehlt';
-      document.getElementById('metaAnimeStatus').style.color = '#eab308';
-      document.getElementById('indicatorAnime').className = 'status-indicator missing';
+      // 4. Detail Hero
+      document.getElementById('demoPackageName').textContent = 'MiniMax-H3_Ref2VA_2-Portraets_16GB';
+      document.getElementById('demoPackagePath').textContent = 'D:\\LLM-Zwischenlager\\MiniMax-H3_Ref2VA_2-Portraets_16GB.zip';
+      document.getElementById('demoModelSize').textContent = '41.4 GiB';
+      document.getElementById('demoStorageImpact').textContent = '41.4 GiB needed to load';
+      document.getElementById('demoModelCount').textContent = '5';
+      document.getElementById('demoModelPresence').textContent = '0 currently local';
+      document.getElementById('demoStatusPill').textContent = 'ARCHIVED';
+      document.getElementById('demoStatusPill').style.background = '#253039';
+      document.getElementById('demoStatusPill').style.color = 'var(--text-soft)';
+      document.getElementById('demoStatusPill').style.borderColor = 'transparent';
 
-      document.getElementById('demoFileList').innerHTML = `
-        <div class="file-item">
-          <svg style="width:16px;height:16px;color:#facc15;"><use href="#i-alert"/></svg>
-          <div class="file-info"><strong style="color:#fde047;">Illustrious-XL-v2.0.safetensors</strong><span>models/checkpoints · 6.94 GB</span></div>
-          <span class="status-tag missing">Fehlt</span>
+      document.getElementById('demoStatusRail').innerHTML = '<span></span><span></span><span></span><span></span>';
+
+      // 5. Hide missing banner
+      document.getElementById('demoMissingBanner').classList.add('hidden');
+
+      // 6. Reset dependency list to MiniMax models
+      document.getElementById('demoDependencyList').innerHTML = `
+        <div class="dependency-row">
+          <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+          <span class="dep-copy">
+            <strong>minimax_h3_ref2va_pruned_int8_convrot.safetensors</strong>
+            <span>DIFFUSION MODEL · ARCHIVE ONLY</span>
+          </span>
+          <span class="dep-size">19.5 GiB</span>
         </div>
-        <div class="file-item">
-          <svg style="width:16px;height:16px;color:var(--teal);"><use href="#i-check"/></svg>
-          <div class="file-info"><strong>sdxl_vae.safetensors</strong><span>models/vae · 335 MB</span></div>
-          <span class="status-tag present">Lokal vorhanden</span>
+        <div class="dependency-row">
+          <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+          <span class="dep-copy">
+            <strong>minimax_h3_video_vae_fp16.safetensors</strong>
+            <span>VAE · ARCHIVE ONLY</span>
+          </span>
+          <span class="dep-size">4.85 GiB</span>
         </div>
-        <div class="file-item">
-          <svg style="width:16px;height:16px;color:var(--teal);"><use href="#i-check"/></svg>
-          <div class="file-info"><strong>anime_detailer_v1.safetensors</strong><span>models/loras · 144 MB</span></div>
-          <span class="status-tag present">Lokal vorhanden</span>
+        <div class="dependency-row">
+          <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+          <span class="dep-copy">
+            <strong>minimax_h3_audio_vae_fp32.safetensors</strong>
+            <span>VAE · ARCHIVE ONLY</span>
+          </span>
+          <span class="dep-size">577.2 MiB</span>
+        </div>
+        <div class="dependency-row">
+          <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+          <span class="dep-copy">
+            <strong>qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors</strong>
+            <span>TEXT ENCODER · ARCHIVE ONLY</span>
+          </span>
+          <span class="dep-size">14.6 GiB</span>
         </div>
       `;
 
+      // 7. Modals & Overlays
       document.getElementById('demoDownloadModal').classList.add('hidden');
       document.getElementById('demoBusyOverlay').classList.add('hidden');
       document.getElementById('demoToast').classList.add('hidden');
 
+      // 8. Buttons
+      document.getElementById('btnPrimary').innerHTML = '<svg><use href="#i-switch"/></svg><span>Switch to this workflow</span>';
+      document.getElementById('btnPrimary').className = 'primary-button';
+      document.getElementById('btnSecondary').classList.remove('hidden');
+
+      // 9. Initial neutral cursor position
+      const frame = document.getElementById('windowFrame').getBoundingClientRect();
       cursor.style.transition = 'none';
-      cursor.style.transform = 'translate(450px, 280px)';
+      cursor.style.transform = `translate(${frame.left + 520}px, ${frame.top + 310}px)`;
+
+      // 10. Director Bar
+      directorBar.classList.remove('hidden-recording');
     }
 
-    // Full Automated Cinema Scenario
-    async function runChoreography() {
+    // Choreographed Playback Sequence
+    async function playChoreography() {
       resetDemo();
       directorBar.classList.add('hidden-recording');
 
-      // 1. Initial breathing room
-      await wait(900);
-
-      // 2. Move to search input & type
-      await moveCursorTo('#demoSearchInput', 700);
-      await clickElement('#demoSearchInput', 200);
-      document.getElementById('demoSearchClear').classList.remove('hidden');
-      await typeText(document.getElementById('demoSearchInput'), 'Illustrious', 55);
-      
-      // Filter list and show match badge
-      document.getElementById('cardFlux').style.display = 'none';
-      document.getElementById('cardPony').style.display = 'none';
-      document.getElementById('cardAnimeBadge').classList.remove('hidden');
-      await wait(1000);
-
-      // 3. Clear search
-      await clickElement('#demoSearchClear', 400);
-      document.getElementById('demoSearchInput').value = '';
-      document.getElementById('demoSearchClear').classList.add('hidden');
-      document.getElementById('cardFlux').style.display = 'flex';
-      document.getElementById('cardPony').style.display = 'flex';
-      document.getElementById('cardAnimeBadge').classList.add('hidden');
-      await wait(600);
-
-      // 4. Click SDXL Anime Masterpiece
-      await clickElement('#cardAnime', 500);
-      document.getElementById('cardFlux').classList.remove('active');
-      document.getElementById('cardPony').classList.remove('active');
-      document.getElementById('cardAnime').classList.add('active');
-      await wait(700);
-
-      // 5. Hover over Civitai button (shows trust options)
-      await moveCursorTo('#btnDemoCivitai', 500);
-      await wait(600);
-
-      // 6. Click ComfyShelf Download button
-      await clickElement('#btnDemoDownload', 400);
-      document.getElementById('demoDownloadModal').classList.remove('hidden');
       await wait(800);
 
-      // 7. Hover candidate pill
-      await moveCursorTo('#candPill2', 600);
-      await clickElement('#candPill2', 200);
-      document.getElementById('candPill1').classList.remove('selected');
-      document.getElementById('candPill2').classList.add('selected');
-      document.getElementById('demoModalInput').value = 'animagine/sdxl-illustrious-v2';
+      // 1. Smoothly glide to Search Box
+      await clickElement('#demoSearchInput', 650);
+      await wait(250);
+
+      // 2. Type "qwen" into search
+      const searchInput = document.getElementById('demoSearchInput');
+      await typeText(searchInput, 'qwen', 70);
+      document.getElementById('demoSearchClear').classList.remove('hidden');
+
+      // Filter list: hide non-matching items, show matches with badges
+      ['itemMinimax', 'itemMinimax4070', 'itemMusic', 'itemRvc'].forEach(id => {
+        document.getElementById(id).style.display = 'none';
+      });
+      document.getElementById('hintQwenLora').classList.remove('hidden');
+      document.getElementById('hintQwenEdit').classList.remove('hidden');
+
+      await wait(750);
+
+      // 3. Clear search to reveal all workflows
+      await clickElement('#demoSearchClear', 400);
+      searchInput.value = '';
+      document.getElementById('demoSearchClear').classList.add('hidden');
+      document.getElementById('hintQwenLora').classList.add('hidden');
+      document.getElementById('hintQwenEdit').classList.add('hidden');
+      ['itemMinimax', 'itemMinimax4070', 'itemQwenLora', 'itemQwenEdit', 'itemMusic', 'itemRvc'].forEach(id => {
+        document.getElementById(id).style.display = 'flex';
+      });
+
+      await wait(450);
+
+      // 4. Move to and select Qwen_Image_Edit_2511_Illustrious
+      await clickElement('#itemQwenEdit', 550);
+      document.getElementById('itemMinimax').classList.remove('active');
+      document.getElementById('itemQwenEdit').classList.add('active');
+
+      // Update Detail View for Qwen
+      document.getElementById('demoPackageName').textContent = 'Qwen_Image_Edit_2511_Illustrious';
+      document.getElementById('demoPackagePath').textContent = 'D:\\LLM-Zwischenlager\\Qwen_Image_Edit_2511_Illustrious.zip';
+      document.getElementById('demoModelSize').textContent = '30.5 GiB';
+      document.getElementById('demoStorageImpact').textContent = '30.5 GiB needed to load';
+      document.getElementById('demoModelCount').textContent = '3';
+      document.getElementById('demoModelPresence').textContent = '0 currently local';
+      document.getElementById('demoStatusPill').textContent = 'MISSING (1)';
+      document.getElementById('demoStatusPill').style.background = 'var(--amber-wash)';
+      document.getElementById('demoStatusPill').style.color = '#e0c590';
+      document.getElementById('demoStatusPill').style.borderColor = 'rgba(198,160,100,0.3)';
+
+      // Show Missing Banner
+      document.getElementById('demoMissingBanner').classList.remove('hidden');
+
+      // Qwen dependencies list
+      document.getElementById('demoDependencyList').innerHTML = `
+        <div class="dependency-row" style="background: rgba(198,160,100,0.06); border-radius:6px;">
+          <span class="dep-state" style="color:var(--amber); background:var(--amber-wash);"><svg><use href="#i-alert"/></svg></span>
+          <span class="dep-copy">
+            <strong style="color:#e0c590;">Illustrious-XL-v2.0.safetensors</strong>
+            <span>CHECKPOINT · MISSING FROM ARCHIVE</span>
+          </span>
+          <span class="dep-size" style="color:var(--amber);">6.94 GiB</span>
+        </div>
+        <div class="dependency-row">
+          <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+          <span class="dep-copy">
+            <strong>qwen_image_edit_base_fp8.safetensors</strong>
+            <span>DIFFUSION MODEL · ARCHIVE ONLY</span>
+          </span>
+          <span class="dep-size">18.2 GiB</span>
+        </div>
+        <div class="dependency-row">
+          <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+          <span class="dep-copy">
+            <strong>sdxl_vae.safetensors</strong>
+            <span>VAE · ARCHIVE ONLY</span>
+          </span>
+          <span class="dep-size">335 MiB</span>
+        </div>
+      `;
+
       await wait(600);
 
-      // 8. Click Start Download
-      await clickElement('#btnModalStartDownload', 450);
-      document.getElementById('demoDownloadModal').classList.add('hidden');
-      document.getElementById('demoBusyOverlay').classList.remove('hidden');
+      // 5. Hover over Civitai button (showcasing Civitai integration!)
+      await moveCursorTo('#btnDemoCivitai', 500);
+      document.getElementById('btnDemoCivitai').style.transform = 'scale(1.15)';
+      document.getElementById('btnDemoCivitai').style.boxShadow = '0 0 10px rgba(78, 140, 255, 0.5)';
+      await wait(550);
+      document.getElementById('btnDemoCivitai').style.transform = 'none';
+      document.getElementById('btnDemoCivitai').style.boxShadow = 'none';
 
-      // 9. Animate live streaming progress bar
-      const progressFill = document.getElementById('busyProgressFill');
-      const progressPercent = document.getElementById('busyPercent');
-      const progressRate = document.getElementById('busyRate');
-      const progressAmount = document.getElementById('busyAmount');
+      // 6. Click Download Model Button
+      await clickElement('#btnDemoDownload', 450);
+
+      // 7. Open Hugging Face / Civitai Resolver Dialog
+      const modal = document.getElementById('demoDownloadModal');
+      modal.classList.remove('hidden');
+      await wait(500);
+
+      // 8. Hover over second suggestion repo in list
+      await moveCursorTo('#candPill2', 500);
+      await wait(350);
+
+      // Move back to first selected repo
+      await moveCursorTo('#candPill1', 350);
+      await wait(250);
+
+      // 9. Click "Start Download"
+      await clickElement('#btnModalStartDownload', 450);
+      modal.classList.add('hidden');
+
+      // 10. Streaming Download Simulation (52 MB/s)
+      const busy = document.getElementById('demoBusyOverlay');
+      const busyBar = document.getElementById('demoBusyBar');
+      const busyPct = document.getElementById('demoBusyPercent');
+      const busyDetail = document.getElementById('demoBusyDetail');
+
+      busy.classList.remove('hidden');
+      busyBar.style.width = '0%';
+      busyPct.textContent = '0%';
+      busyDetail.textContent = 'Connecting to Hugging Face CDN…';
+
+      await moveCursorTo('#windowFrame', 400);
 
       const stages = [
-        { p: 18, rate: '41.2 MB/s', amt: '1.25 GB / 6.94 GB · Noch 1m 58s' },
-        { p: 46, rate: '48.9 MB/s', amt: '3.19 GB / 6.94 GB · Noch 1m 12s' },
-        { p: 78, rate: '52.4 MB/s', amt: '5.41 GB / 6.94 GB · Noch 32s' },
-        { p: 95, rate: '47.1 MB/s', amt: '6.60 GB / 6.94 GB · Noch 6s' },
-        { p: 100, rate: 'Verifying', amt: 'SHA-256 Integrität bestätigt · 0 B dupliziert' }
+        { pct: '18%', label: 'Downloading 1.25 / 6.94 GB (52.4 MB/s)…', delay: 400 },
+        { pct: '48%', label: 'Downloading 3.33 / 6.94 GB (53.1 MB/s)…', delay: 450 },
+        { pct: '82%', label: 'Downloading 5.69 / 6.94 GB (52.8 MB/s)…', delay: 450 },
+        { pct: '100%', label: 'Verifying SHA-256 integrity hash…', delay: 400 }
       ];
 
       for (const s of stages) {
-        progressFill.style.width = s.p + '%';
-        progressPercent.textContent = s.p + ' %';
-        progressRate.textContent = s.rate;
-        progressAmount.textContent = s.amt;
-        await wait(420);
+        busyBar.style.width = s.pct;
+        busyPct.textContent = s.pct;
+        busyDetail.textContent = s.label;
+        await wait(s.delay);
       }
-      await wait(400);
 
-      // 10. Hide Busy Overlay, show Emerald Toast, Flip Status
-      document.getElementById('demoBusyOverlay').classList.add('hidden');
-      
+      // Download Complete!
+      await wait(300);
+      busy.classList.add('hidden');
+
+      // Show Toast Notification
       const toast = document.getElementById('demoToast');
       toast.classList.remove('hidden');
       setTimeout(() => toast.classList.add('hidden'), 3500);
 
-      // Flip workflow state to COMPLETE & Instant Link
-      document.getElementById('demoStatusPill').textContent = 'Lokal geladen';
-      document.getElementById('demoStatusPill').style.background = 'rgba(69,178,122,0.18)';
-      document.getElementById('demoStatusPill').style.color = '#45b27a';
-      document.getElementById('demoStatusPill').style.borderColor = 'rgba(69,178,122,0.35)';
+      // Update Qwen state: Complete!
+      document.getElementById('demoMissingBanner').classList.add('hidden');
+      document.getElementById('demoStatusPill').textContent = 'ARCHIVED';
+      document.getElementById('demoStatusPill').style.background = '#253039';
+      document.getElementById('demoStatusPill').style.color = 'var(--text-soft)';
+      document.getElementById('demoStatusPill').style.borderColor = 'transparent';
 
-      document.getElementById('demoStatusRail').innerHTML = '<span style="background:#45b27a;"></span><span style="background:#45b27a;"></span><span style="background:#45b27a;"></span><span style="background:#45b27a;"></span>';
-      document.getElementById('demoNoticePanel').classList.add('hidden');
-      document.getElementById('demoStorageImpact').innerHTML = '<span style="color:var(--teal)">🔗 Hardlink aktiv (0 B dupliziert)</span>';
-      
-      document.getElementById('demoActionBtn').innerHTML = '<svg><use href="#i-upload"/></svg><span>Workflow entladen…</span>';
-      document.getElementById('demoActionBtn').style.background = 'transparent';
-      document.getElementById('demoActionBtn').style.borderColor = 'var(--line)';
-      document.getElementById('demoActionBtn').style.color = 'var(--text-main)';
+      document.getElementById('demoStorageImpact').textContent = '30.5 GiB needed to load';
+      document.getElementById('demoModelPresence').textContent = '0 currently local';
 
-      document.getElementById('metaAnimeStatus').innerHTML = '<span class="status-link-badge hardlink" style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(121,175,167,0.15);color:var(--teal);">🔗 Hardlink</span>';
-      document.getElementById('indicatorAnime').className = 'status-indicator loaded';
-
-      document.getElementById('demoFileList').innerHTML = `
-        <div class="file-item">
-          <svg style="width:16px;height:16px;color:var(--teal);"><use href="#i-check"/></svg>
-          <div class="file-info"><strong style="color:var(--text-main);">Illustrious-XL-v2.0.safetensors</strong><span>models/checkpoints · 6.94 GB (Hardlink)</span></div>
-          <span class="status-tag present" style="color:var(--teal);">Lokal verlinkt</span>
+      document.getElementById('demoDependencyList').innerHTML = `
+        <div class="dependency-row">
+          <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+          <span class="dep-copy">
+            <strong>Illustrious-XL-v2.0.safetensors</strong>
+            <span>CHECKPOINT · ARCHIVE ONLY</span>
+          </span>
+          <span class="dep-size">6.94 GiB</span>
         </div>
-        <div class="file-item">
-          <svg style="width:16px;height:16px;color:var(--teal);"><use href="#i-check"/></svg>
-          <div class="file-info"><strong>sdxl_vae.safetensors</strong><span>models/vae · 335 MB</span></div>
-          <span class="status-tag present">Lokal vorhanden</span>
+        <div class="dependency-row">
+          <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+          <span class="dep-copy">
+            <strong>qwen_image_edit_base_fp8.safetensors</strong>
+            <span>DIFFUSION MODEL · ARCHIVE ONLY</span>
+          </span>
+          <span class="dep-size">18.2 GiB</span>
         </div>
-        <div class="file-item">
-          <svg style="width:16px;height:16px;color:var(--teal);"><use href="#i-check"/></svg>
-          <div class="file-info"><strong>anime_detailer_v1.safetensors</strong><span>models/loras · 144 MB</span></div>
-          <span class="status-tag present">Lokal vorhanden</span>
+        <div class="dependency-row">
+          <span class="dep-state"><svg><use href="#i-download"/></svg></span>
+          <span class="dep-copy">
+            <strong>sdxl_vae.safetensors</strong>
+            <span>VAE · ARCHIVE ONLY</span>
+          </span>
+          <span class="dep-size">335 MiB</span>
         </div>
       `;
 
-      // 11. Rest cursor at center
-      await moveCursorTo({ x: 700, y: 350 }, 700);
-      await wait(1800);
+      // 11. Click "Switch to this workflow" (Instant Hardlink Load!)
+      await clickElement('#btnPrimary', 500);
 
-      // Re-show director bar
+      // Instant 10ms switch feedback!
+      document.getElementById('demoStatusPill').textContent = 'LOADED';
+      document.getElementById('demoStatusPill').style.background = 'var(--teal-wash)';
+      document.getElementById('demoStatusPill').style.color = '#a8d0ca';
+      document.getElementById('demoStatusPill').style.borderColor = '#345652';
+
+      document.getElementById('demoStatusRail').innerHTML = '<span style="background:var(--teal)"></span><span style="background:var(--teal); height:100%;"></span><span style="background:var(--teal)"></span><span style="background:var(--teal)"></span>';
+      document.getElementById('demoStorageImpact').innerHTML = '<span style="color:var(--teal)">⚡ Hardlink active (0 B extra drive space)</span>';
+
+      document.getElementById('stateQwenEdit').textContent = 'LOADED';
+      document.getElementById('stateQwenEdit').style.background = 'var(--teal-wash)';
+      document.getElementById('stateQwenEdit').style.color = '#a8d0ca';
+      document.getElementById('stateQwenEdit').style.borderColor = '#345652';
+
+      document.getElementById('btnPrimary').innerHTML = '<svg><use href="#i-upload"/></svg><span>Unload workflow</span>';
+      document.getElementById('btnPrimary').className = 'secondary-button';
+
+      // 12. Move cursor to neutral resting spot
+      const frame = document.getElementById('windowFrame').getBoundingClientRect();
+      await moveCursorTo({ x: frame.left + 520, y: frame.top + 310 }, 700);
+
+      await wait(1200);
       directorBar.classList.remove('hidden-recording');
     }
 
-    // Countdown Trigger for OBS
-    async function startCountdownAndChoreography() {
-      countdownOverlay.classList.remove('hidden');
+    // 3s Countdown Trigger for OBS
+    async function startWithCountdown() {
       directorBar.classList.add('hidden-recording');
+      countdownOverlay.classList.remove('hidden');
 
-      for (let i = 3; i > 0; i--) {
-        countdownNum.textContent = String(i);
-        await wait(950);
+      for (let sec = 3; sec > 0; sec--) {
+        countdownNum.textContent = sec;
+        await wait(1000);
       }
-      countdownNum.textContent = 'AUFNAHME LÄUFT';
-      countdownNum.style.fontSize = '42px';
-      await wait(600);
-      countdownOverlay.classList.add('hidden');
-      countdownNum.style.fontSize = '96px';
 
-      await runChoreography();
+      countdownNum.textContent = '● RECORD';
+      countdownNum.style.fontSize = '40px';
+      await wait(350);
+
+      countdownOverlay.classList.add('hidden');
+      countdownNum.style.fontSize = '88px';
+
+      await playChoreography();
     }
 
-    // Button wiring
-    document.getElementById('btnCountdownStart').addEventListener('click', startCountdownAndChoreography);
-    document.getElementById('btnDirectStart').addEventListener('click', runChoreography);
+    // Event Listeners
+    document.getElementById('btnCountdownStart').addEventListener('click', startWithCountdown);
+    document.getElementById('btnDirectStart').addEventListener('click', playChoreography);
     document.getElementById('btnReset').addEventListener('click', resetDemo);
 
-    // Escape reveals director bar if hidden
-    window.addEventListener('keydown', e => {
-      if (e.key === 'Escape') directorBar.classList.remove('hidden-recording');
-    });
+    // Initialize layout on load
+    window.addEventListener('DOMContentLoaded', resetDemo);
   </script>
 </body>
 </html>
