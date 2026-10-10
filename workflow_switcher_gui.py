@@ -1203,6 +1203,12 @@ class WorkflowSwitcherApi:
             return report
         return self._result(action)
 
+    def get_workflow_json(self, archive_path: str) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            return workflow_file.extract_json(Path(archive_path))
+
+        return self._result(action)
+
     def open_archive_folder(self) -> dict[str, Any]:
         def action() -> bool:
             installation = engine.active_installation()

@@ -114,6 +114,7 @@
               <span class="muted" data-i18n="summary.comfy_free">ComfyUI free</span>
               <strong id="freeSpace">—</strong>
             </div>
+            <button class="summary-button" id="openWebUiButton" title="Open ComfyUI in browser (127.0.0.1:8188)" data-i18n-title="summary.open_web"><svg><use href="#i-external"/></svg></button>
             <button class="summary-button" id="diskRefreshButton" title="Refresh storage and package status" data-i18n-title="summary.refresh"><svg><use href="#i-refresh"/></svg></button>
             <button class="summary-button" id="historyButton" title="Open activity history" data-i18n-title="history.open"><svg><use href="#i-history"/></svg></button>
           </div>
@@ -150,7 +151,14 @@
                 <button class="rename-button" id="renameButton" title="Rename workflow" aria-label="Rename workflow" data-i18n-title="rename.button" data-i18n-aria="rename.button"><svg><use href="#i-edit"/></svg></button>
               </div>
               <p id="packagePath">—</p>
-              <button class="secondary-button workflow-file-button" id="showWorkflowFileButton" data-i18n-title="workflow_file.hint"><svg aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="workflow_file.button">Show workflow file</span></button>
+              <div class="workflow-action-strip">
+                <button class="copy-workflow-button" id="copyWorkflowButton" data-i18n-title="workflow.copy_hint">
+                  <svg><use href="#i-copy"/></svg>
+                  <span id="copyWorkflowText" data-i18n="workflow.copy_button">Copy workflow</span>
+                  <span class="kbd-chip">Ctrl+V</span>
+                </button>
+                <button class="secondary-button workflow-file-button" id="showWorkflowFileButton" data-i18n-title="workflow_file.hint"><svg aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="workflow_file.button">Show workflow file</span></button>
+              </div>
             </div>
             <div class="hero-cover hidden" id="heroCover" title="Click to view full preview" data-i18n-title="detail.preview_zoom">
               <img id="heroCoverImg" alt="Workflow preview">
@@ -189,6 +197,7 @@
           </div>
 
           <footer class="action-dock">
+            <button class="secondary-button" id="copyWorkflowDockButton" data-i18n-title="workflow.copy_hint"><svg><use href="#i-copy"/></svg><span data-i18n="workflow.copy_short">Copy workflow</span><span class="kbd-chip">Ctrl+V</span></button>
             <button class="secondary-button" id="verifyButton"><svg><use href="#i-shield"/></svg><span data-i18n="detail.verify">Verify package</span></button>
             <button class="secondary-button" id="exportButton" data-i18n-title="storage.export_hint"><svg><use href="#i-upload"/></svg><span data-i18n="storage.export_button">Export portable ZIP…</span></button>
             <button class="secondary-button" id="storageButton"></button>
@@ -247,6 +256,11 @@
           <option value="symlink" data-i18n="settings.link_mode_symlink">Force Symlink (Windows Developer Mode)</option>
         </select>
       </div>
+
+      <label class="setting-toggle">
+        <input type="checkbox" id="autoCopyWorkflowCheckbox" checked>
+        <span><strong data-i18n="settings.auto_copy">Auto-copy workflow on load</strong><small data-i18n="settings.auto_copy_hint">Automatically places the workflow graph into your clipboard when loaded, ready for Ctrl+V in ComfyUI.</small></span>
+      </label>
 
       <div class="validation-box hidden" id="settingsValidation"></div>
       <button class="diagnostic-button maintenance-button" id="optimizeLibraryButton"><svg><use href="#i-drive"/></svg><span><strong data-i18n="library_optimize.button">Optimize entire library</strong><small data-i18n="library_optimize.hint">Move older full packages into the shared model pool</small></span></button>

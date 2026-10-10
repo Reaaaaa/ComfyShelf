@@ -109,3 +109,43 @@ def restore(archive_path, comfy_root, token):
         if temporary is not None:
             temporary.unlink(missing_ok=True)
     return {**report, "exists": True, "restored": True}
+
+
+def extract_json(archive_path):
+    """Safely extract the workflow graph as a dictionary without modifying files."""
+    archive_path = Path(archive_path).resolve()
+    manifest = engine.load_package_manifest(archive_path)
+    name = manifest.get("workflow", {}).get("archive_path", "")
+    if not name:
+        for entry in manifest.get("files", []):
+            if entry.get("role") == "workflow":
+                name = str(entry.get("path", ""))
+                break
+    with zipfile.ZipFile(archive_path) as archive:
+        if not name:
+            for info in archive.infolist():
+                cand = info.filename.lower()
+                if (cand.endswith(".json") or cand.endswith(".png")) and cand != "comfy-package.json":
+                    name = info.filename
+                    break
+        if not name:
+            raise ValueError("No workflow file found in archive")
+        members = [info for info in archive.infolist() if info.filename.casefold() == name.casefold()]
+        if len(members) != 1:
+            raise ValueError("Workflow file is missing or duplicated in ZIP")
+        info = members[0]
+        if (info.is_dir() or info.file_size > MAX_JSON_BYTES or info.flag_bits & 1
+                or (info.external_attr >> 16) & 0o170000 == 0o120000):
+            raise ValueError("Unsafe or oversized workflow file in ZIP")
+        with archive.open(info) as source:
+            payload = source.read(MAX_JSON_BYTES + 1)
+    if len(payload) > MAX_JSON_BYTES:
+        raise ValueError("Workflow file exceeds maximum allowed size")
+    if name.lower().endswith(".png"):
+        data = engine.load_png_workflow_from_bytes(payload)
+    else:
+        data = json.loads(payload.decode("utf-8-sig"))
+    if not isinstance(data, dict):
+        raise ValueError("Invalid workflow JSON data structure")
+    return {"workflow": data, "name": manifest.get("name", archive_path.stem)}
+

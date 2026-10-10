@@ -53,6 +53,12 @@ class WorkflowFileTests(unittest.TestCase):
         self.assertEqual(list(self.root.iterdir()), [])
         self.assertEqual(self.archive.read_bytes(), before)
 
+    def test_extract_json_returns_dict_without_modifying_files(self):
+        result = subject.extract_json(self.archive)
+        self.assertIn("workflow", result)
+        self.assertEqual(result["workflow"]["extra"]["note"], "my workflow")
+        self.assertEqual(list(self.root.iterdir()), [])
+
     def test_restore_only_json_from_incomplete_archive_no_models_or_verification(self):
         before = self.archive.read_bytes()
         with patch.object(subject.engine, "verify_package", side_effect=AssertionError("Full verification forbidden")):

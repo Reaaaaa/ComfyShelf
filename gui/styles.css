@@ -821,6 +821,88 @@ button:focus-visible, input:not(.search-box input):focus-visible { outline: 2px 
   border-color: rgba(156, 188, 219, 0.35);
 }
 
+.workflow-action-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.copy-workflow-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(121, 175, 167, 0.16);
+  border: 1px solid rgba(121, 175, 167, 0.38);
+  color: #c4e5e0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.copy-workflow-button:hover {
+  background: rgba(121, 175, 167, 0.28);
+  border-color: rgba(121, 175, 167, 0.65);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(121, 175, 167, 0.18);
+}
+
+.copy-workflow-button:active {
+  transform: translateY(0);
+}
+
+.copy-workflow-button .kbd-chip,
+.action-dock .kbd-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #d1dcde;
+  letter-spacing: 0.5px;
+}
+
+.copy-workflow-button.copied,
+.action-dock button.copied {
+  background: rgba(66, 109, 104, 0.55) !important;
+  border-color: #79afa7 !important;
+  color: #ffffff !important;
+}
+
+.setting-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  padding: 6px 0;
+  margin-top: 4px;
+}
+
+.setting-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--teal);
+  cursor: pointer;
+}
+
+.setting-toggle span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .drop-overlay {
   position: fixed;
   inset: 0;

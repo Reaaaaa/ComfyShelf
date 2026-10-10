@@ -27,6 +27,19 @@ function t(key, variables = {}) {
   return value;
 }
 
+function getStorage(key, fallback = null) {
+  try {
+    if (typeof localStorage !== 'undefined') return localStorage.getItem(key) ?? fallback;
+  } catch (_) {}
+  return fallback;
+}
+
+function setStorage(key, value) {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+  } catch (_) {}
+}
+
 function applyTranslations() {
   document.documentElement.lang = app.language;
   document.querySelectorAll('[data-i18n]').forEach(node => { node.textContent = t(node.dataset.i18n); });
@@ -975,6 +988,9 @@ function openSettings(required = false) {
   $('comfyRootInput').value = installation?.comfy_root || '';
   $('archiveRootInput').value = installation?.archive_root || '';
   if ($('linkModeSelect')) $('linkModeSelect').value = installation?.link_mode || 'auto';
+  if ($('autoCopyWorkflowCheckbox')) {
+    $('autoCopyWorkflowCheckbox').checked = getStorage('comfyshelf_auto_copy') !== 'false';
+  }
   $('settingsValidation').classList.add('hidden');
   $('settingsCloseButton').classList.toggle('hidden', required);
   $('settingsCancelButton').classList.toggle('hidden', required);
@@ -998,6 +1014,9 @@ async function saveSettings() {
     box.textContent = t('settings.choose_both');
     box.className = 'validation-box';
     return;
+  }
+  if ($('autoCopyWorkflowCheckbox')) {
+    setStorage('comfyshelf_auto_copy', $('autoCopyWorkflowCheckbox').checked ? 'true' : 'false');
   }
   showBusy(t('settings.checking'), t('settings.checking_detail'), false);
   try {
@@ -1280,6 +1299,56 @@ async function showSelectedWorkflowFile() {
   finally { button.disabled = false; }
 }
 
+async function copySelectedWorkflowJson(options = {}) {
+  const pkg = selectedPackage();
+  if (!pkg) return;
+  const button = $('copyWorkflowButton');
+  const dockButton = $('copyWorkflowDockButton');
+  if (button) button.disabled = true;
+  if (dockButton) dockButton.disabled = true;
+
+  try {
+    const report = await callApi('get_workflow_json', pkg.path);
+    if (!report?.workflow) throw new Error('No workflow data returned');
+    const jsonStr = typeof report.workflow === 'string'
+      ? report.workflow
+      : JSON.stringify(report.workflow, null, 2);
+    await writeClipboardText(jsonStr);
+
+    if (button) {
+      button.classList.add('copied');
+      const textEl = $('copyWorkflowText');
+      if (textEl) textEl.textContent = t('workflow.copied');
+      setTimeout(() => {
+        button.classList.remove('copied');
+        if (textEl) textEl.textContent = t('workflow.copy_button');
+      }, 2500);
+    }
+    if (dockButton) {
+      dockButton.classList.add('copied');
+      setTimeout(() => dockButton.classList.remove('copied'), 2500);
+    }
+
+    if (!options.silent) {
+      toast(t('workflow.copy_success'));
+    }
+  } catch (err) {
+    toast(t('workflow.copy_failed') + ': ' + (err.message || ''), true);
+  } finally {
+    if (button) button.disabled = false;
+    if (dockButton) dockButton.disabled = false;
+  }
+}
+
+async function openComfyWebUi() {
+  try {
+    await callApi('open_external_url', 'http://127.0.0.1:8188');
+    toast(t('summary.web_opened'));
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
 async function scanSelectedDependencies() {
   const pkg = selectedPackage();
   if (!pkg) return;
@@ -1477,7 +1546,19 @@ async function previewPackageAction(actionName) {
       action: async ({allowIncomplete, allowShared}) => {
         showBusy(t(isRestore ? 'restore.running' : 'restore.unload_running'), t(isRestore ? 'restore.running_detail' : 'restore.unload_running_detail'));
         await callApi('execute_action', actionName, pkg.path, allowIncomplete, allowShared);
-        hideBusy(); toast(t(isRestore ? 'restore.done' : 'restore.unload_done')); await refreshState(pkg.path);
+        hideBusy();
+        const autoCopy = getStorage('comfyshelf_auto_copy') !== 'false';
+        if (isRestore && autoCopy) {
+          try {
+            await copySelectedWorkflowJson({silent: true});
+            toast(t('toast.restored_and_copied'));
+          } catch (_) {
+            toast(t('restore.done'));
+          }
+        } else {
+          toast(t(isRestore ? 'restore.done' : 'restore.unload_done'));
+        }
+        await refreshState(pkg.path);
       }
     });
   } catch (error) { hideBusy(); operationError(error); }
@@ -1511,7 +1592,17 @@ async function previewWorkflowSwitch() {
         showBusy(t('switch.running'), t('switch.running_detail'));
         const result = await callApi('execute_switch', pkg.path, allowIncomplete, allowShared);
         hideBusy();
-        toast(t('switch.done', {name: result.package}));
+        const autoCopy = getStorage('comfyshelf_auto_copy') !== 'false';
+        if (autoCopy) {
+          try {
+            await copySelectedWorkflowJson({silent: true});
+            toast(t('toast.switched_and_copied', {name: result.package}));
+          } catch (_) {
+            toast(t('switch.done', {name: result.package}));
+          }
+        } else {
+          toast(t('switch.done', {name: result.package}));
+        }
         await refreshState(pkg.path);
       }
     });
@@ -1738,6 +1829,9 @@ async function proceedConfirm() {
 }
 
 function installEvents() {
+  $('copyWorkflowButton')?.addEventListener('click', () => copySelectedWorkflowJson());
+  $('copyWorkflowDockButton')?.addEventListener('click', () => copySelectedWorkflowJson());
+  $('openWebUiButton')?.addEventListener('click', openComfyWebUi);
   $('showWorkflowFileButton').addEventListener('click', showSelectedWorkflowFile);
   $('dependencyScanButton').addEventListener('click', scanSelectedDependencies);
   $('exportButton').addEventListener('click', exportSelectedPackage);

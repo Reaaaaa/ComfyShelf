@@ -547,6 +547,25 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
             res = api.stage_dropped_file(empty, base64.b64encode(b"content").decode("ascii"))
             self.assertFalse(res["ok"])
 
+    def test_get_workflow_json_api(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / "test.zip"
+            manifest = {
+                "package_type": "comfyui-workflow-overlay",
+                "name": "FlowTest",
+                "workflow": {"archive_path": "workflow.json"},
+                "files": [{"path": "workflow.json", "role": "workflow"}]
+            }
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("comfy-package.json", json.dumps(manifest))
+                zf.writestr("workflow.json", json.dumps({"test": 123}))
+
+            api = GUI.WorkflowSwitcherApi()
+            res = api.get_workflow_json(str(archive))
+            self.assertTrue(res["ok"])
+            self.assertEqual(res["data"]["workflow"], {"test": 123})
+            self.assertEqual(res["data"]["name"], "FlowTest")
+
 
 if __name__ == "__main__":
     unittest.main()

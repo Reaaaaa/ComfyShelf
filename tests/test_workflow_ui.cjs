@@ -580,6 +580,21 @@ async function run(language) {
   `, context);
   assert.equal(linkModeSelect.value, 'symlink');
 
+  // Test copySelectedWorkflowJson
+  context.window.pywebview.api.get_workflow_json = async (path) => ({ok: true, data: {workflow: {nodes: [{id: 1}]}, name: 'WithThumb'}});
+  context.copiedText = '';
+  context.toastText = '';
+  await vm.runInContext('copySelectedWorkflowJson()', context);
+  assert.ok(context.copiedText.includes('"nodes"'));
+  assert.equal(context.toastText, context.messages['workflow.copy_success']);
+
+  // Test openComfyWebUi
+  const openWebCalls = [];
+  context.window.pywebview.api.open_external_url = async (url) => { openWebCalls.push(url); return {ok: true, data: true}; };
+  await vm.runInContext('openComfyWebUi()', context);
+  assert.equal(openWebCalls.length, 1);
+  assert.equal(openWebCalls[0], 'http://127.0.0.1:8188');
+
   // Drag & drop tests
   context.toastText = '';
   await vm.runInContext("handleDroppedFile({name: 'unsupported.exe', path: 'C:/unsupported.exe'})", context);

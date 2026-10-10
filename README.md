@@ -4,7 +4,7 @@
 
 # ComfyShelf
 
-[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 196 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v0.1.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
+[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 198 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v0.1.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
 
 <sub>Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.</sub>
 
@@ -31,6 +31,9 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 
 - **Instant Loading via Symlinks & Hardlinks (No File Copy Delay)**  
   Restoring a 50 GB workflow back into ComfyUI shouldn't keep you waiting for huge files to copy. With **Instant Link** mode, ComfyShelf uses NTFS Hardlinks (on the same drive) or Windows Symlinks to make models available in ComfyUI in milliseconds — consuming 0 additional bytes of disk space. Prefer traditional standalone files instead of links? You can easily switch the loading method to full physical copying at any time in the settings. Visual status badges (`⚡ Hardlink`, `🔗 Symlink`, `📁 Copy`) show the active loading method in the detail view, with automatic fallback to physical copies if needed.
+
+- **Instant Canvas Paste (`Ctrl + V` Workflow Clipboard)**  
+  Zero tab clutter and zero reload delays. ComfyShelf copies the entire workflow node tree directly into your clipboard — either automatically when loading a workflow or via 1-click `[Copy workflow · Ctrl+V]`. Switch to your open ComfyUI browser tab, press `Ctrl + V`, and the complete node graph drops right onto your canvas ready to generate.
 
 - **Keep Multiple Massive Workflows Active at Once (0 Extra SSD Space)**  
   You don't have to choose just one active project. Use **Load in addition** to keep 3, 5, or 10 heavy workflows (Flux, SDXL, Video pipelines) active simultaneously in your ComfyUI tabs. Switch between setups with zero wait time and zero duplicate disk consumption.
