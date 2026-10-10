@@ -6,7 +6,7 @@ import hashlib
 import json
 import logging
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 import shutil
 import tempfile
 import threading
@@ -46,7 +46,8 @@ def resolve_model_target_path(comfy_root: Path, filename: str, kind: str = "") -
     """Compute the safe target destination path inside ComfyUI's models directory."""
     clean_name = filename.strip().replace("\\", "/")
     pure = PurePosixPath(clean_name)
-    if pure.is_absolute() or ".." in pure.parts or any(p in {"", "."} for p in pure.parts):
+    pure_win = PureWindowsPath(clean_name)
+    if pure.is_absolute() or pure_win.is_absolute() or bool(pure_win.drive) or ":" in clean_name or ".." in pure.parts or any(p in {"", "."} for p in pure.parts):
         raise ValueError(f"Unsicherer oder ungültiger Modellpfad: {filename}")
     category = default_category_for_kind(kind)
     models_dir = (comfy_root / "models").resolve()

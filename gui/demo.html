@@ -71,6 +71,8 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      width: max-content;
+      max-width: 95vw;
       background: rgba(16, 23, 27, 0.94);
       border: 1px solid rgba(121, 175, 167, 0.3);
       padding: 7px 16px;
@@ -97,6 +99,7 @@
       font-size: 11px;
       font-weight: 600;
       cursor: pointer;
+      white-space: nowrap;
       transition: all 0.14s ease;
     }
     .demo-btn:hover {
@@ -112,6 +115,53 @@
     .demo-btn.primary:hover {
       filter: brightness(1.1);
       box-shadow: 0 0 12px rgba(121, 175, 167, 0.4);
+    }
+
+    /* Background variations for OBS / screenshot workflows */
+    body.bg-studio { background: #090c0e; }
+    body.bg-github { background: #0d1117; }
+    body.bg-chroma { background: #00b140; }
+    body.bg-frameless { background: transparent; padding: 0; }
+    body.bg-frameless .github-window-mockup { box-shadow: none; border-radius: 0; border: none; }
+
+    .demo-select {
+      height: 32px;
+      padding: 0 10px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: #141d22;
+      color: var(--text-soft);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      outline: none;
+      white-space: nowrap;
+    }
+    .demo-select:focus {
+      border-color: var(--teal);
+    }
+    .demo-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-soft);
+      cursor: pointer;
+      user-select: none;
+      padding: 0 4px;
+      white-space: nowrap;
+    }
+    .demo-toggle input {
+      accent-color: var(--teal);
+      cursor: pointer;
+    }
+    .demo-shortcut-hint {
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--muted);
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
+      padding-left: 8px;
+      white-space: nowrap;
     }
 
     /* Virtual Cursor */
@@ -243,6 +293,7 @@
     <symbol id="i-workflow" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="6" rx="1"/><rect x="14" y="14" width="7" height="6" rx="1"/><path d="M10 7h4v10"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></symbol>
   </svg>
 
   <!-- Virtual Cinema Pointer -->
@@ -263,16 +314,27 @@
 
   <!-- Bottom Director Control Bar -->
   <div class="demo-director-bar" id="directorBar">
-    <span style="font-size: 11px; font-weight: 700; color: var(--teal); letter-spacing: 0.05em; text-transform: uppercase;">GitHub Showcase</span>
-    <button class="demo-btn primary" id="btnCountdownStart">
-      <svg style="width:14px;height:14px;"><use href="#i-history"/></svg> 3s Vorlauf &amp; Start (für OBS)
+    <span style="font-size: 11px; font-weight: 700; color: var(--teal); letter-spacing: 0.05em; text-transform: uppercase;">Showcase</span>
+    <button class="demo-btn primary" id="btnCountdownStart" title="Startet einen 3s-Countdown, blendet das Menü aus und startet das Szenario (ideal für OBS)">
+      <svg style="width:14px;height:14px;"><use href="#i-history"/></svg> 3s Vorlauf &amp; Start
     </button>
-    <button class="demo-btn" id="btnDirectStart">
+    <button class="demo-btn" id="btnDirectStart" title="Startet das Demo-Szenario sofort">
       <svg style="width:14px;height:14px;"><use href="#i-check"/></svg> Direkt abspielen
     </button>
-    <button class="demo-btn" id="btnReset">
+    <button class="demo-btn" id="btnReset" title="Setzt alle Elemente auf Ausgangszustand zurück">
       <svg style="width:14px;height:14px;"><use href="#i-refresh"/></svg> Reset
     </button>
+    <label class="demo-toggle" title="Wiederholt das Szenario nach kurzer Pause automatisch in Endlosschleife">
+      <input type="checkbox" id="chkLoop">
+      <span>Auto-Loop</span>
+    </label>
+    <select id="selBg" class="demo-select" title="Hintergrund für die Aufnahme wählen">
+      <option value="bg-studio">Studio Dunkel (#090c0e)</option>
+      <option value="bg-github">GitHub Dark (#0d1117)</option>
+      <option value="bg-chroma">Green Screen (Chroma)</option>
+      <option value="bg-frameless">Nur Fenster (Frameless)</option>
+    </select>
+    <span class="demo-shortcut-hint" title="Tastaturkürzel">[Space] Start · [R] Reset · [H] Menü</span>
   </div>
 
   <!-- RECTANGULAR WINDOW CONTAINER (1024 x 624 px matching user app screenshot 1:1) -->
@@ -496,7 +558,7 @@
                 </div>
               </div>
               <div style="margin-top:8px;" id="demoMissingRow">
-                <div class="missing-item missing-file-row">
+                <div class="notice-missing-item missing-file-row">
                   <span class="missing-file-copy">
                     <strong>Illustrious-XL-v2.0.safetensors</strong>
                     <small>checkpoint</small>
@@ -1076,8 +1138,15 @@
       const frame = document.getElementById('windowFrame').getBoundingClientRect();
       await moveCursorTo({ x: frame.left + 520, y: frame.top + 310 }, 700);
 
-      await wait(1200);
-      directorBar.classList.remove('hidden-recording');
+      await wait(2000);
+
+      const isLoop = document.getElementById('chkLoop').checked;
+      if (isLoop) {
+        await wait(1200);
+        await playChoreography();
+      } else {
+        directorBar.classList.remove('hidden-recording');
+      }
     }
 
     // 3s Countdown Trigger for OBS
@@ -1104,6 +1173,23 @@
     document.getElementById('btnCountdownStart').addEventListener('click', startWithCountdown);
     document.getElementById('btnDirectStart').addEventListener('click', playChoreography);
     document.getElementById('btnReset').addEventListener('click', resetDemo);
+
+    const selBg = document.getElementById('selBg');
+    selBg.addEventListener('change', () => {
+      document.body.className = selBg.value;
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.target && e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        playChoreography();
+      } else if (e.key === 'r' || e.key === 'R') {
+        resetDemo();
+      } else if (e.key === 'h' || e.key === 'H') {
+        directorBar.classList.toggle('hidden-recording');
+      }
+    });
 
     // Initialize layout on load
     window.addEventListener('DOMContentLoaded', resetDemo);
