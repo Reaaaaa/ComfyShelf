@@ -29,11 +29,11 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 - **Zero Red Outlines in ComfyUI (All Dependencies Linked in Place)**  
   No missing-model crashes or red-boxed node graphs when opening a workflow. ComfyShelf verifies that every checkpoint, LoRA, VAE, and text encoder is linked exactly where ComfyUI expects it before you hit generate.
 
+- **Instant Loading via Symlinks & Hardlinks (No File Copy Delay)**  
+  Restoring a 50 GB workflow back into ComfyUI shouldn't keep you waiting for huge files to copy. With **Instant Link** mode, ComfyShelf uses NTFS Hardlinks (on the same drive) or Windows Symlinks to make models available in ComfyUI in milliseconds — consuming 0 additional bytes of disk space. Prefer traditional standalone files instead of links? You can easily switch the loading method to full physical copying at any time in the settings. Visual status badges (`🔗 Hardlink`, `⚡ Symlink`) show the link type in the detail view, with automatic fallback to physical copies if needed.
+
 - **Keep Multiple Massive Workflows Active at Once (0 Extra SSD Space)**  
   You don't have to choose just one active project. Use **Load in addition** to keep 3, 5, or 10 heavy workflows (Flux, SDXL, Video pipelines) active simultaneously in your ComfyUI tabs. Switch between setups with zero wait time and zero duplicate disk consumption.
-
-- **Instant Loading via Symlinks & Hardlinks (No File Copy Delay)**  
-  Restoring a 50 GB workflow back into ComfyUI shouldn't keep you waiting for huge files to copy. With **Instant Link** mode, ComfyShelf uses NTFS Hardlinks (on the same drive) or Windows Symlinks to make models available in ComfyUI in milliseconds — consuming 0 additional bytes of disk space. Visual status badges (`🔗 Hardlink`, `⚡ Symlink`) show the link type in the detail view, with automatic fallback to physical copies if needed. Keep as many massive workflows ready to roll as you want without filling your drive (though your GPU can still only melt through one generation at a time!).
 
 - **Deduplicated Shared Model Pool (Store Every File Only Once)**  
   All your models live in a single, deduplicated archive on your secondary drive. When multiple workflows rely on the same 12 GB checkpoint, LoRA, or VAE, ComfyShelf stores that file **only once**. Individual workflow packages remain lightweight (just the node graph, metadata, and cover thumbnail), preventing your backup drive from filling up with redundant duplicates.
