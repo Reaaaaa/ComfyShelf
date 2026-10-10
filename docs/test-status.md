@@ -87,5 +87,5 @@ that result instead of marking it passed.
 
 Once a GitHub repository and test workflow are configured, replace the snapshot
 test badges with real workflow badges using the confirmed repository URL. The
-license, minimum Python version and Windows-preview badges are descriptive and
+license, minimum Python version and Windows platform badges are descriptive and
 can remain local assets.

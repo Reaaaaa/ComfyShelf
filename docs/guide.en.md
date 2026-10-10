@@ -18,8 +18,9 @@ edit configuration files or type PowerShell commands.
 - Internet access during initial setup to download the app's extra Python
   components, and enough free space for the app and archived files.
 
-There is no ready-to-run EXE yet. This early version still needs setup and
-clean-machine testing; other operating systems have not been validated.
+A standalone single-file EXE is not currently provided. Version **v0.1.0** sets up automatically
+into an isolated local app environment using the provided `Setup_ComfyShelf.cmd` script;
+non-Windows systems are not yet supported.
 
 **If you do not have Python:** get it from the
 [official Python download page](https://www.python.org/downloads/windows/).

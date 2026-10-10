@@ -19,9 +19,9 @@ noch Konfigurationsdateien bearbeiten oder PowerShell-Befehle eingeben.
 - Internet bei der ersten Einrichtung für zusätzliche Python-Komponenten und
   ausreichend freien Platz für die App und deine archivierten Dateien.
 
-Eine direkt startbare EXE gibt es noch nicht. Diese frühe Version benötigt noch
-Einrichtung und Tests auf einem frischen Windows-Rechner; andere Betriebssysteme
-sind bislang nicht geprüft.
+Eine direkt startbare Einzel-EXE gibt es derzeit noch nicht. Die Version **v0.1.0** richtet sich
+vollautomatisch über das mitgelieferte Skript `Setup_ComfyShelf.cmd` in einer isolierten App-Umgebung ein;
+andere Betriebssysteme als Windows sind bislang nicht geprüft.
 
 **Falls Python fehlt:** Lade es von der
 [offiziellen Python-Seite](https://www.python.org/downloads/windows/) herunter.

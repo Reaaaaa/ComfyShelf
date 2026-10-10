@@ -4,7 +4,7 @@
 
 # ComfyShelf
 
-[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 195 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows preview](docs/assets/windows-preview.svg)](#get-started-on-windows)
+[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 195 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v0.1.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
 
 <sub>Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.</sub>
 
@@ -67,7 +67,7 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 
 ## Get started on Windows
 
-**This is an early version. There is no ready-to-run EXE yet.** Setup and native window startup still need testing on a clean Windows computer.
+**ComfyShelf v0.1.0** runs locally on Windows using Python and a native, modern webview interface. Setup is fully automated via a single double-click batch script (`Setup_ComfyShelf.cmd`) — no manual command-line typing or environment configuration required.
 
 You need an existing ComfyUI installation, installed **64-bit Python 3.10 or newer**, internet access for the initial setup, and enough storage space for your archived files.
 
