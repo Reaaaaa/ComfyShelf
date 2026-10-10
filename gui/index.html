@@ -37,6 +37,7 @@
     <symbol id="i-workflow" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="6" rx="1"/><rect x="14" y="14" width="7" height="6" rx="1"/><path d="M10 7h4v10"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -114,6 +115,7 @@
               <span class="muted" data-i18n="summary.comfy_free">ComfyUI free</span>
               <strong id="freeSpace">—</strong>
             </div>
+            <button class="summary-button" id="tourHelpButton" title="Start feature tour" data-i18n-title="tour.help_button"><svg><use href="#i-help"/></svg></button>
             <button class="summary-button" id="openWebUiButton" title="Open ComfyUI in browser (127.0.0.1:8188)" data-i18n-title="summary.open_web"><svg><use href="#i-external"/></svg></button>
             <button class="summary-button" id="diskRefreshButton" title="Refresh storage and package status" data-i18n-title="summary.refresh"><svg><use href="#i-refresh"/></svg></button>
             <button class="summary-button" id="historyButton" title="Open activity history" data-i18n-title="history.open"><svg><use href="#i-history"/></svg></button>
@@ -437,6 +439,41 @@
       <img class="lightbox-image" id="lightboxImage" alt="Workflow preview">
       <div class="lightbox-caption" id="lightboxCaption"></div>
     </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="tourModal">
+    <section class="modal tour-modal" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+      <div class="tour-header">
+        <span class="tour-step-badge" id="tourStepBadge">Step 1 of 4</span>
+        <button class="tour-close-btn" id="tourCloseButton" aria-label="Close tour"><svg><use href="#i-close"/></svg></button>
+      </div>
+
+      <div class="tour-body">
+        <div class="tour-icon-wrap" id="tourIconWrap">
+          <svg id="tourIcon"><use href="#i-shelf"/></svg>
+        </div>
+        <h2 class="tour-title" id="tourTitle">Your Workflow Shelf</h2>
+        <p class="tour-copy" id="tourCopy">Park your heavy workflows and models safely on your secondary storage drive.</p>
+        <div class="tour-highlight" id="tourHighlight">
+          <svg id="tourHighlightIcon"><use href="#i-drive"/></svg>
+          <span id="tourHighlightText">Deduplicated shared pool: Multiple workflows share models automatically.</span>
+        </div>
+      </div>
+
+      <div class="tour-footer">
+        <div class="tour-dots" id="tourDots">
+          <span class="tour-dot active"></span>
+          <span class="tour-dot"></span>
+          <span class="tour-dot"></span>
+          <span class="tour-dot"></span>
+        </div>
+        <div class="tour-actions">
+          <button class="text-button" id="tourSkipButton" data-i18n="tour.skip">Skip tour</button>
+          <button class="secondary-button hidden" id="tourPrevButton" data-i18n="tour.prev">Back</button>
+          <button class="primary-button" id="tourNextButton" data-i18n="tour.next">Next</button>
+        </div>
+      </div>
+    </section>
   </div>
 
   <div class="busy-overlay hidden" id="busyOverlay">

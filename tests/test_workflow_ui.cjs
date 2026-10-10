@@ -595,6 +595,61 @@ async function run(language) {
   assert.equal(openWebCalls.length, 1);
   assert.equal(openWebCalls[0], 'http://127.0.0.1:8188');
 
+  // Test Feature Tour
+  const tourModal = {
+    hidden: true,
+    classList: {
+      add() { tourModal.hidden = true; },
+      remove() { tourModal.hidden = false; },
+      contains() { return tourModal.hidden; }
+    }
+  };
+  const tourStepBadge = {textContent: ''};
+  const tourTitle = {textContent: ''};
+  const tourCopy = {textContent: ''};
+  const tourHighlightText = {textContent: ''};
+  const tourPrevButton = {
+    hidden: true,
+    classList: {
+      toggle(cls, val) { tourPrevButton.hidden = val; }
+    }
+  };
+  const tourNextButton = {textContent: ''};
+  const tourIcon = {querySelector: () => ({setAttribute(){}})};
+  const tourHighlightIcon = {querySelector: () => ({setAttribute(){}})};
+  const tourDots = {children: [{classList: {toggle(){}}}, {classList: {toggle(){}}}, {classList: {toggle(){}}}, {classList: {toggle(){}}}]};
+
+  const tourElements = {
+    tourModal, tourStepBadge, tourTitle, tourCopy, tourHighlightText,
+    tourPrevButton, tourNextButton, tourIcon, tourHighlightIcon, tourDots,
+  };
+  const origGetElementById = context.document.getElementById;
+  context.document.getElementById = id => tourElements[id] || origGetElementById(id);
+
+  await vm.runInContext('openTour(true)', context);
+  assert.equal(tourModal.hidden, false);
+  assert.ok(tourStepBadge.textContent.includes('1'));
+  assert.equal(tourTitle.textContent, context.messages['tour.step1_title']);
+  assert.equal(tourPrevButton.hidden, true);
+
+  await vm.runInContext('nextTourStep()', context);
+  assert.ok(tourStepBadge.textContent.includes('2'));
+  assert.equal(tourTitle.textContent, context.messages['tour.step2_title']);
+  assert.equal(tourPrevButton.hidden, false);
+
+  await vm.runInContext('prevTourStep()', context);
+  assert.ok(tourStepBadge.textContent.includes('1'));
+
+  await vm.runInContext('nextTourStep(); nextTourStep(); nextTourStep();', context);
+  assert.ok(tourStepBadge.textContent.includes('4'));
+  assert.equal(tourTitle.textContent, context.messages['tour.step4_title']);
+  assert.equal(tourNextButton.textContent, context.messages['tour.finish']);
+
+  await vm.runInContext('nextTourStep()', context);
+  assert.equal(tourModal.hidden, true);
+
+  context.document.getElementById = origGetElementById;
+
   // Drag & drop tests
   context.toastText = '';
   await vm.runInContext("handleDroppedFile({name: 'unsupported.exe', path: 'C:/unsupported.exe'})", context);

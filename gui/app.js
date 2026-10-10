@@ -350,6 +350,9 @@ async function bootstrapNativeApp(trigger) {
     app.bootstrapCompleted = true;
     clearInterval(app.bootstrapPoll);
     await reportStartupStage('frontend-ready', trigger);
+    if (getStorage('comfyshelf_tour_completed') !== 'true') {
+      setTimeout(() => openTour(), 500);
+    }
     return true;
   } catch (error) {
     await reportStartupStage('bootstrap-failed', error?.message || 'Unknown startup error');
@@ -1349,6 +1352,102 @@ async function openComfyWebUi() {
   }
 }
 
+const TOUR_STEPS = [
+  {
+    icon: '#i-shelf',
+    titleKey: 'tour.step1_title',
+    copyKey: 'tour.step1_copy',
+    highlightKey: 'tour.step1_highlight',
+    highlightIcon: '#i-drive',
+  },
+  {
+    icon: '#i-refresh',
+    titleKey: 'tour.step2_title',
+    copyKey: 'tour.step2_copy',
+    highlightKey: 'tour.step2_highlight',
+    highlightIcon: '#i-check',
+  },
+  {
+    icon: '#i-copy',
+    titleKey: 'tour.step3_title',
+    copyKey: 'tour.step3_copy',
+    highlightKey: 'tour.step3_highlight',
+    highlightIcon: '#i-workflow',
+  },
+  {
+    icon: '#i-shield',
+    titleKey: 'tour.step4_title',
+    copyKey: 'tour.step4_copy',
+    highlightKey: 'tour.step4_highlight',
+    highlightIcon: '#i-shield',
+  },
+];
+
+let currentTourStep = 0;
+
+function renderTourStep(index) {
+  currentTourStep = Math.max(0, Math.min(index, TOUR_STEPS.length - 1));
+  const step = TOUR_STEPS[currentTourStep];
+  const total = TOUR_STEPS.length;
+
+  const badge = $('tourStepBadge');
+  if (badge) badge.textContent = t('tour.step', {current: currentTourStep + 1, total});
+
+  const iconEl = $('tourIcon');
+  if (iconEl?.querySelector('use')) iconEl.querySelector('use').setAttribute('href', step.icon);
+
+  const titleEl = $('tourTitle');
+  if (titleEl) titleEl.textContent = t(step.titleKey);
+
+  const copyEl = $('tourCopy');
+  if (copyEl) copyEl.textContent = t(step.copyKey);
+
+  const highlightIcon = $('tourHighlightIcon');
+  if (highlightIcon?.querySelector('use')) highlightIcon.querySelector('use').setAttribute('href', step.highlightIcon);
+
+  const highlightText = $('tourHighlightText');
+  if (highlightText) highlightText.textContent = t(step.highlightKey);
+
+  const dots = $('tourDots')?.children || [];
+  for (let i = 0; i < dots.length; i++) {
+    dots[i].classList.toggle('active', i === currentTourStep);
+  }
+
+  const prevBtn = $('tourPrevButton');
+  if (prevBtn) prevBtn.classList.toggle('hidden', currentTourStep === 0);
+
+  const nextBtn = $('tourNextButton');
+  if (nextBtn) {
+    nextBtn.textContent = currentTourStep === total - 1 ? t('tour.finish') : t('tour.next');
+  }
+}
+
+function openTour(force = false) {
+  if (!force && getStorage('comfyshelf_tour_completed') === 'true') return;
+  currentTourStep = 0;
+  renderTourStep(0);
+  $('tourModal')?.classList.remove('hidden');
+}
+
+function closeTour() {
+  $('tourModal')?.classList.add('hidden');
+  setStorage('comfyshelf_tour_completed', 'true');
+}
+
+function nextTourStep() {
+  if (currentTourStep >= TOUR_STEPS.length - 1) {
+    closeTour();
+  } else {
+    renderTourStep(currentTourStep + 1);
+  }
+}
+
+function prevTourStep() {
+  if (currentTourStep > 0) {
+    renderTourStep(currentTourStep - 1);
+  }
+}
+
 async function scanSelectedDependencies() {
   const pkg = selectedPackage();
   if (!pkg) return;
@@ -1863,9 +1962,20 @@ function installEvents() {
   $('lightboxModal')?.addEventListener('click', event => {
     if (event.target === $('lightboxModal')) closeLightbox();
   });
+  $('tourHelpButton')?.addEventListener('click', () => openTour(true));
+  $('tourCloseButton')?.addEventListener('click', closeTour);
+  $('tourSkipButton')?.addEventListener('click', closeTour);
+  $('tourNextButton')?.addEventListener('click', nextTourStep);
+  $('tourPrevButton')?.addEventListener('click', prevTourStep);
+  $('tourModal')?.addEventListener('click', event => {
+    if (event.target === $('tourModal')) closeTour();
+  });
   window.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !$('lightboxModal')?.classList.contains('hidden')) {
       closeLightbox();
+    }
+    if (event.key === 'Escape' && !$('tourModal')?.classList.contains('hidden')) {
+      closeTour();
     }
   });
   $('settingsButton').addEventListener('click', () => openSettings(false));
