@@ -425,6 +425,35 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
             self.assertEqual(len(packages), 1)
             self.assertEqual(packages[0]["models"][0]["link_type"], "hardlink")
 
+    def test_scan_packages_detects_copy_link_type(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy = base / "Comfy"
+            archive_dir = base / "Archive"
+            comfy.mkdir()
+            archive_dir.mkdir()
+            model_dest = comfy / "models" / "checkpoints" / "model.safetensors"
+            model_dest.parent.mkdir(parents=True)
+            model_dest.write_bytes(b"standalone-copied-data")
+
+            manifest = {
+                "manifest_version": 2,
+                "package_type": "comfyui-workflow-overlay",
+                "name": "CopiedFlow",
+                "storage_mode": "shared-object-pool",
+                "files": [
+                    {"path": "models/checkpoints/model.safetensors", "role": "model", "sha256": "abcdef", "size": len(b"standalone-copied-data")}
+                ]
+            }
+
+            archive_zip = archive_dir / "CopiedFlow.zip"
+            with zipfile.ZipFile(archive_zip, "w") as zf:
+                zf.writestr("comfy-package.json", json.dumps(manifest))
+
+            packages = GUI.WorkflowSwitcherApi._scan_packages(comfy, archive_dir)
+            self.assertEqual(len(packages), 1)
+            self.assertEqual(packages[0]["models"][0]["link_type"], "copy")
+
     def test_open_external_url_valid_and_invalid(self):
         api = GUI.WorkflowSwitcherApi()
         with patch.object(GUI.webbrowser, "open") as mock_open:

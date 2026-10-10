@@ -880,7 +880,7 @@ function renderDetail(pkg) {
   $('modelList').innerHTML = pkg.models.length ? pkg.models.map(model => `
     <div class="dependency-row">
       <span class="dep-state ${model.present ? 'present' : ''}">${icon(model.present ? 'check' : 'download')}</span>
-      <span class="dep-copy"><strong title="${escapeHtml(model.filename)}">${escapeHtml(model.filename)}</strong><span>${escapeHtml(model.kind.replaceAll('_', ' '))} · ${t(model.present ? 'detail.model_present' : 'detail.model_archived')}${model.present && model.link_type && model.link_type !== 'copy' ? ` · <span class="dep-link-badge ${model.link_type}">${model.link_type === 'hardlink' ? '⚡ ' + t('detail.link_hardlink') : '🔗 ' + t('detail.link_symlink')}</span>` : ''}</span></span>
+      <span class="dep-copy"><strong title="${escapeHtml(model.filename)}">${escapeHtml(model.filename)}</strong><span>${escapeHtml(model.kind.replaceAll('_', ' '))} · ${t(model.present ? 'detail.model_present' : 'detail.model_archived')}${model.present && model.link_type ? ` · <span class="dep-link-badge ${model.link_type}">${model.link_type === 'hardlink' ? '⚡ ' + t('detail.link_hardlink') : (model.link_type === 'symlink' ? '🔗 ' + t('detail.link_symlink') : '📁 ' + t('detail.link_copy'))}</span>` : ''}</span></span>
       <span class="dep-size">${formatBytes(model.size)}</span>
     </div>`).join('') : `<div class="workflow-list-empty">${t('detail.no_models')}</div>`;
 

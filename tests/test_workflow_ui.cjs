@@ -490,7 +490,9 @@ async function run(language) {
           state: 'archived',
           model_bytes: 100,
           models: [
-            {filename: 'model.safetensors', kind: 'checkpoint', size: 100, present: true, link_type: 'hardlink'}
+            {filename: 'model.safetensors', kind: 'checkpoint', size: 100, present: true, link_type: 'hardlink'},
+            {filename: 'symlinked.safetensors', kind: 'lora', size: 50, present: true, link_type: 'symlink'},
+            {filename: 'copied.safetensors', kind: 'vae', size: 30, present: true, link_type: 'copy'}
           ],
           custom_nodes: [
             {package: 'ComfyUI-Impact-Pack', installed: true, installed_folder: 'ComfyUI-Impact-Pack', git_url: 'https://github.com/ltdrdata/ComfyUI-Impact-Pack'},
@@ -535,6 +537,10 @@ async function run(language) {
   assert.equal(heroCoverImg.src, 'data:image/png;base64,samplethumb');
   assert.ok(thumbElements.modelList.innerHTML.includes('dep-link-badge hardlink'));
   assert.ok(thumbElements.modelList.innerHTML.includes('Hardlink'));
+  assert.ok(thumbElements.modelList.innerHTML.includes('dep-link-badge symlink'));
+  assert.ok(thumbElements.modelList.innerHTML.includes('Symlink'));
+  assert.ok(thumbElements.modelList.innerHTML.includes('dep-link-badge copy'));
+  assert.ok(thumbElements.modelList.innerHTML.includes(context.messages['detail.link_copy']));
 
   vm.runInContext('openLightbox()', context);
   assert.equal(lightboxModal.hidden, false);

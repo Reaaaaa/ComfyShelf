@@ -815,6 +815,11 @@ button:focus-visible, input:not(.search-box input):focus-visible { outline: 2px 
   color: #bfa4e8;
   border-color: rgba(191, 164, 232, 0.35);
 }
+.dep-link-badge.copy {
+  background: rgba(90, 125, 154, 0.22);
+  color: #9cbcdb;
+  border-color: rgba(156, 188, 219, 0.35);
+}
 
 .drop-overlay {
   position: fixed;

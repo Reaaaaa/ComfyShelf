@@ -100,6 +100,7 @@
   "detail.model_archived": "archive only",
   "detail.link_hardlink": "Hardlink",
   "detail.link_symlink": "Symlink",
+  "detail.link_copy": "Copy",
   "detail.no_models": "No model files in this package.",
   "detail.no_custom_nodes": "No external nodes detected",
   "detail.custom_node_installed": "Installed",
