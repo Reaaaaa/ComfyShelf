@@ -21,6 +21,7 @@ notices. Do not apply ComfyShelf's license to users' models or workflow contents
 
 ```text
 comfy_archive.py           Parsing, packages, pool storage and safe file operations
+model_downloader.py        Hugging Face model search and streaming background downloader
 workflow_switcher_gui.py   Desktop bridge, logging and library state
 verification_cache.py     Historical check results and metadata-based invalidation
 workflow_file.py          Workflow JSON lookup and safe JSON-only recovery
@@ -50,7 +51,7 @@ frontend tests, not to run ComfyShelf.
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
 node tests/test_workflow_ui.cjs
 node --check gui/app.js
-.\.venv\Scripts\python.exe -m py_compile comfy_archive.py workflow_switcher_gui.py setup_comfyshelf.py verification_cache.py dependency_scan.py workflow_file.py
+.\.venv\Scripts\python.exe -m py_compile comfy_archive.py workflow_switcher_gui.py setup_comfyshelf.py verification_cache.py dependency_scan.py workflow_file.py model_downloader.py
 git diff --check
 ```
 

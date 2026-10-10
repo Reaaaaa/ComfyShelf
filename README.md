@@ -4,7 +4,7 @@
 
 # ComfyShelf
 
-[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 180 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows preview](docs/assets/windows-preview.svg)](#get-started-on-windows)
+[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 195 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows preview](docs/assets/windows-preview.svg)](#get-started-on-windows)
 
 <sub>Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.</sub>
 
@@ -42,6 +42,12 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 
 - **Custom Node Live Diagnostics & 1-Click Search**  
   Inspects all custom nodes used in a workflow against your active ComfyUI installation (Installed vs. Missing). Provides direct links to original GitHub repositories and 1-click clipboard copy to locate and install missing nodes quickly via ComfyUI-Manager.
+
+- **Hugging Face Model Resolver & Downloader (Trust & Transparency First)**
+  Missing a checkpoint, LoRA, VAE, or text encoder? Don't blindly download unknown files. ComfyShelf offers direct 1-click access to the official Hugging Face Model Card or search mask directly in your browser. Download missing models directly into ComfyUI or your shared pool with live background streaming (speed in MB/s, ETA, percentage), on-the-fly SHA-256 integrity verification, and instant status updates from *Missing* to *Ready*.
+
+- **Smart Template & Dummy Model Filter**
+  Template workflows shared online frequently contain placeholder model names (`YOUR_LORA_2_DISABLED.safetensors`, `PUT_YOUR_LORA_HERE`, `PLACEHOLDER`, `[none]`, etc.). ComfyShelf recognizes and excludes these dummy entries automatically, ensuring your template workflows stay valid and green without falsely warning about missing files.
 
 - **Self-Healing Archives & Portable Export**  
   Archived a workflow while a model was still downloading? The **Rescan Incomplete Workflow** feature scans for newly acquired files, verifies their hashes, creates a timestamped backup of the archive, and completes the package. Need to take a workflow to another PC or share it with a friend? **Export Portable ZIP** bundles the workflow and its required models into a self-contained, standalone package.

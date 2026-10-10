@@ -3,16 +3,16 @@
 The README test badges describe the local checks recorded here, **not a live
 GitHub Actions result**. They do not update automatically when code changes.
 
-Snapshot date: **2026-09-04**. Environment: Windows, Python 3.11.9 and Node.js 24.14.0.
+Snapshot date: **2026-10-10**. Environment: Windows, Python 3.11.9 and Node.js 24.14.0.
 
 | Check | Result |
 | --- | --- |
-| Python unit and regression suite | 180 passed, no failures or skips |
+| Python unit and regression suite | 195 passed, no failures or skips |
 | JavaScript frontend tests | Passed for English and German |
 | Frontend JavaScript syntax | Passed |
 | Python module compilation | Passed |
 
-These suites cover workflow parsing (JSON and PNG embedded metadata), thumbnails, Drag & Drop file staging, instant-load link modes (hardlinks and symlinks), custom nodes live status resolution (flexible matching, Git remote extraction, and ComfyUI-Manager clipboard copy), package/pool operations, portable export,
+These suites cover workflow parsing (JSON and PNG embedded metadata), placeholder dummy filtering, thumbnails, Drag & Drop file staging, instant-load link modes (hardlinks and symlinks), custom nodes live status resolution (flexible matching, Git remote extraction, and ComfyUI-Manager clipboard copy), Hugging Face model searching, streaming downloads and integrity resolution, package/pool operations, portable export,
 archive deletion (Recycle Bin, permanent delete and orphaned pool cleanup),
 safety checks, the desktop API, setup helpers, source documentation, and frontend
 flows such as missing-file copying, export confirmation and shared-file warnings.
@@ -72,7 +72,7 @@ Run from the project root in a development environment with Python and Node.js:
 python -m unittest discover -s tests -p "test_*.py"
 node tests/test_workflow_ui.cjs
 node --check gui/app.js
-python -m py_compile comfy_archive.py workflow_switcher_gui.py setup_comfyshelf.py verification_cache.py dependency_scan.py workflow_file.py
+python -m py_compile comfy_archive.py workflow_switcher_gui.py setup_comfyshelf.py verification_cache.py dependency_scan.py workflow_file.py model_downloader.py
 ```
 
 See [development setup and checks](../CONTRIBUTING.md#checks) if you need to prepare
