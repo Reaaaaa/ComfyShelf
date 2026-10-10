@@ -712,8 +712,25 @@ button:focus-visible, input:not(.search-box input):focus-visible { outline: 2px 
   .detail-view { padding-left: 22px; padding-right: 22px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
-.workflow-file-button { margin-top: 12px; max-width: 100%; height: auto; min-height: 42px; padding-top: 9px; padding-bottom: 9px; white-space: normal; text-align: left; }
-.workflow-file-button svg { flex-shrink: 0; }
+.workflow-file-button {
+  margin: 0;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.workflow-file-button svg,
+.copy-workflow-button svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
 .workflow-file-button:disabled { opacity: .5; cursor: wait; }
 .workflow-file-path { overflow-wrap: anywhere; user-select: text; color: var(--text); }
 

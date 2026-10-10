@@ -44,7 +44,7 @@
   "filter.archived": "Archived",
   "summary.choose_comfy": "Choose ComfyUI folder",
   "summary.not_configured": "Not configured",
-  "summary.comfy_free": "Avialable space on your ComfyUI drive",
+  "summary.comfy_free": "Available space on your ComfyUI drive",
   "summary.refresh": "Refresh storage and package status",
   "empty.eyebrow": "Your workflow rack",
   "empty.title": "Large workflows.<br>Local only when you need them.",

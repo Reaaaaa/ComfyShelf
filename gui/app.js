@@ -1321,9 +1321,7 @@ async function copySelectedWorkflowJson(options = {}) {
   const pkg = selectedPackage();
   if (!pkg) return;
   const button = $('copyWorkflowButton');
-  const dockButton = $('copyWorkflowDockButton');
   if (button) button.disabled = true;
-  if (dockButton) dockButton.disabled = true;
 
   try {
     const report = await callApi('get_workflow_json', pkg.path);
@@ -1342,10 +1340,6 @@ async function copySelectedWorkflowJson(options = {}) {
         if (textEl) textEl.textContent = t('workflow.copy_button');
       }, 2500);
     }
-    if (dockButton) {
-      dockButton.classList.add('copied');
-      setTimeout(() => dockButton.classList.remove('copied'), 2500);
-    }
 
     if (!options.silent) {
       toast(t('workflow.copy_success'));
@@ -1354,7 +1348,6 @@ async function copySelectedWorkflowJson(options = {}) {
     toast(t('workflow.copy_failed') + ': ' + (err.message || ''), true);
   } finally {
     if (button) button.disabled = false;
-    if (dockButton) dockButton.disabled = false;
   }
 }
 
@@ -1942,7 +1935,6 @@ async function proceedConfirm() {
 
 function installEvents() {
   $('copyWorkflowButton')?.addEventListener('click', () => copySelectedWorkflowJson());
-  $('copyWorkflowDockButton')?.addEventListener('click', () => copySelectedWorkflowJson());
   $('openWebUiButton')?.addEventListener('click', openComfyWebUi);
   $('showWorkflowFileButton').addEventListener('click', showSelectedWorkflowFile);
   $('dependencyScanButton').addEventListener('click', scanSelectedDependencies);
