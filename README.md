@@ -43,8 +43,8 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 - **Custom Node Live Diagnostics & 1-Click Search**  
   Inspects all custom nodes used in a workflow against your active ComfyUI installation (Installed vs. Missing). Provides direct links to original GitHub repositories and 1-click clipboard copy to locate and install missing nodes quickly via ComfyUI-Manager.
 
-- **Hugging Face Model Resolver & Downloader (Trust & Transparency First)**
-  Missing a checkpoint, LoRA, VAE, or text encoder? Don't blindly download unknown files. ComfyShelf offers direct 1-click access to the official Hugging Face Model Card or search mask directly in your browser. Download missing models directly into ComfyUI or your shared pool with live background streaming (speed in MB/s, ETA, percentage), on-the-fly SHA-256 integrity verification, and instant status updates from *Missing* to *Ready*.
+- **Hugging Face & Civitai Model Resolution & Downloader (Trust & Transparency First)**
+  Missing a checkpoint, LoRA, VAE, or text encoder? Don't blindly download unknown files. ComfyShelf offers direct 1-click access to the official Hugging Face Model Card or Civitai search mask directly in your browser. Download missing models directly from Hugging Face into ComfyUI or your shared pool with live background streaming (speed in MB/s, ETA, percentage), on-the-fly SHA-256 integrity verification, and instant status updates from *Missing* to *Ready*.
 
 - **Smart Template & Dummy Model Filter**
   Template workflows shared online frequently contain placeholder model names (`YOUR_LORA_2_DISABLED.safetensors`, `PUT_YOUR_LORA_HERE`, `PLACEHOLDER`, `[none]`, etc.). ComfyShelf recognizes and excludes these dummy entries automatically, ensuring your template workflows stay valid and green without falsely warning about missing files.
