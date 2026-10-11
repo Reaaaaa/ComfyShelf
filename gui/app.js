@@ -946,7 +946,7 @@ function renderDetail(pkg) {
   $('modelList').innerHTML = pkg.models.length ? pkg.models.map(model => `
     <div class="dependency-row">
       <span class="dep-state ${model.present ? 'present' : ''}">${icon(model.present ? 'check' : 'download')}</span>
-      <span class="dep-copy"><strong title="${escapeHtml(model.filename)}">${escapeHtml(model.filename)}</strong><span>${escapeHtml(model.kind.replaceAll('_', ' '))} · ${t(model.present ? 'detail.model_present' : 'detail.model_archived')}${model.present && model.link_type ? ` · <span class="dep-link-badge ${model.link_type}">${model.link_type === 'hardlink' ? '⚡ ' + t('detail.link_hardlink') : (model.link_type === 'symlink' ? '🔗 ' + t('detail.link_symlink') : '📁 ' + t('detail.link_copy'))}</span>` : ''}</span></span>
+      <span class="dep-copy"><strong title="${escapeHtml(model.filename)}">${escapeHtml(model.filename)}</strong><span>${escapeHtml((model.kind || '').replaceAll('_', ' '))} · ${t(model.present ? 'detail.model_present' : 'detail.model_archived')}${model.present && model.link_type ? ` · <span class="dep-link-badge ${model.link_type}">${model.link_type === 'hardlink' ? '⚡ ' + t('detail.link_hardlink') : (model.link_type === 'symlink' ? '🔗 ' + t('detail.link_symlink') : '📁 ' + t('detail.link_copy'))}</span>` : ''}</span></span>
       <span class="dep-size">${formatBytes(model.size)}</span>
     </div>`).join('') : `<div class="workflow-list-empty">${t('detail.no_models')}</div>`;
 
@@ -996,6 +996,7 @@ function renderDetail(pkg) {
 
   const primary = $('primaryActionButton');
   const secondary = $('secondaryActionButton');
+  const tertiary = $('tertiaryActionButton');
   const storage = $('storageButton');
   storage.innerHTML = `${icon('drive')}${t('storage.optimize_button')}`;
   storage.classList.toggle('hidden', !!pkg.deduplicated);
@@ -1003,6 +1004,8 @@ function renderDetail(pkg) {
   const otherActive = (app.state.packages || []).some(item =>
     item.path !== pkg.path && (item.state === 'loaded' || item.state === 'partial')
   );
+  if (tertiary) tertiary.classList.add('hidden');
+
   if (pkg.state === 'loaded') {
     primary.innerHTML = `${icon('upload')}${t('actions.unload')}`;
     primary.onclick = () => previewPackageAction('unload');
@@ -1023,9 +1026,14 @@ function renderDetail(pkg) {
     if (otherActive) {
       primary.innerHTML = `${icon('switch')}${t('actions.switch')}`;
       primary.onclick = previewWorkflowSwitch;
-      secondary.innerHTML = `${icon('upload')}${t('actions.unload_present')}`;
-      secondary.onclick = () => previewPackageAction('unload');
+      secondary.innerHTML = `${icon('download')}${t('actions.load_missing')}`;
+      secondary.onclick = () => previewPackageAction('restore');
       secondary.classList.remove('hidden');
+      if (tertiary) {
+        tertiary.innerHTML = `${icon('upload')}${t('actions.unload_present')}`;
+        tertiary.onclick = () => previewPackageAction('unload');
+        tertiary.classList.remove('hidden');
+      }
     } else {
       primary.innerHTML = `${icon('download')}${t('actions.load_missing')}`;
       primary.onclick = () => previewPackageAction('restore');

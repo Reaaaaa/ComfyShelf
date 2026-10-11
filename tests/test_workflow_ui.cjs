@@ -469,7 +469,8 @@ async function run(language) {
     noticeList: {innerHTML: ''},
     customNodeList: {innerHTML: ''},
     primaryActionButton: {innerHTML: ''},
-    secondaryActionButton: {innerHTML: '', classList: {add(){}, remove(){}}},
+    secondaryActionButton: {innerHTML: '', classList: {add(){}, remove(){}}, onclick: null},
+    tertiaryActionButton: {innerHTML: '', classList: {add(){}, remove(){}}, onclick: null},
     storageButton: {innerHTML: '', classList: {toggle(){}}},
     showWorkflowFileButton: {disabled: false},
   };
@@ -550,6 +551,50 @@ async function run(language) {
   vm.runInContext('closeLightbox()', context);
   assert.equal(lightboxModal.hidden, true);
   assert.equal(lightboxImage.src, '');
+
+  // Partial workflow action buttons test (with and without other active packages)
+  vm.runInContext(`
+    app.state.packages = [
+      {
+        name: 'LoadedPkg',
+        path: 'E:/Archive/LoadedPkg.zip',
+        state: 'loaded',
+        models: [{filename: 'shared.safetensors', kind: 'checkpoints', present: true}]
+      },
+      {
+        name: 'PartialPkg',
+        path: 'E:/Archive/PartialPkg.zip',
+        state: 'partial',
+        models: [
+          {filename: 'shared.safetensors', kind: 'checkpoints', present: true},
+          {filename: 'missing.safetensors', kind: 'checkpoints', present: false}
+        ]
+      }
+    ];
+    app.selectedPath = 'E:/Archive/PartialPkg.zip';
+    renderDetail(app.state.packages[1]);
+  `, context);
+  assert.ok(thumbElements.primaryActionButton.innerHTML.includes(context.messages['actions.switch']));
+  assert.ok(thumbElements.secondaryActionButton.innerHTML.includes(context.messages['actions.load_missing']));
+  assert.ok(thumbElements.tertiaryActionButton.innerHTML.includes(context.messages['actions.unload_present']));
+
+  vm.runInContext(`
+    app.state.packages = [
+      {
+        name: 'PartialPkg',
+        path: 'E:/Archive/PartialPkg.zip',
+        state: 'partial',
+        models: [
+          {filename: 'shared.safetensors', kind: 'checkpoints', present: true},
+          {filename: 'missing.safetensors', kind: 'checkpoints', present: false}
+        ]
+      }
+    ];
+    app.selectedPath = 'E:/Archive/PartialPkg.zip';
+    renderDetail(app.state.packages[0]);
+  `, context);
+  assert.ok(thumbElements.primaryActionButton.innerHTML.includes(context.messages['actions.load_missing']));
+  assert.ok(thumbElements.secondaryActionButton.innerHTML.includes(context.messages['actions.unload_present']));
 
   // Settings link mode test
   const saveSettingsCalls = [];
