@@ -120,6 +120,12 @@ your local edits) are not overwritten, and the package stays unchanged.
 This checks only the JSON, not the whole package, and does not change its verified
 status. The button does not start ComfyUI or automatically open a browser tab.
 
+### Rename, hide, or delete workflows
+
+- **Rename:** Click the pen icon next to the workflow title to rename it instantly.
+- **Hide:** Click the eye icon next to the title to hide a workflow from the main library view. It will then only appear under the **Hidden** filter tab. Active (loaded) workflows cannot be hidden to prevent models from occupying SSD space unnoticed.
+- **Delete:** Click **Delete archive…** in the bottom action bar to move the package to the Windows Recycle Bin or delete it permanently.
+
 ## 6. Switch between workflows
 
 - **Load in addition:** loads the chosen workflow's files and keeps other loaded files.

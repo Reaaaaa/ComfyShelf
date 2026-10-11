@@ -130,6 +130,12 @@ Paket bleibt unverändert. Dabei wird nur die JSON geprüft, nicht das ganze Pak
 der Verifiziert-Status ändert sich nicht. Der Button startet ComfyUI nicht und
 öffnet auch keinen Workflow automatisch im Browser.
 
+### Workflows umbenennen, ausblenden oder löschen
+
+- **Umbenennen:** Klicke auf das Stift-Icon neben dem Workflow-Namen. Der Name wird sofort aktualisiert.
+- **Ausblenden:** Mit dem Augen-Icon neben dem Namen kannst du einen Workflow aus der Hauptansicht ausblenden. Er erscheint dann nur noch im Filter-Reiter **Ausgeblendet**. Aktive (geladene) Workflows können nicht ausgeblendet werden, damit keine Modelle unbemerkt Speicherplatz auf der SSD belegen.
+- **Löschen:** Über **Archiv löschen…** in der Fußleiste kannst du das Paket in den Windows-Papierkorb verschieben oder unwiderruflich löschen.
+
 ## 6. Zwischen Workflows wechseln
 
 - **Nur zusätzlich laden:** lädt die Dateien des gewählten Workflows und lässt
