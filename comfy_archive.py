@@ -827,7 +827,10 @@ def package_parser_warnings(archive_path: Path, manifest: dict[str, Any]) -> lis
             content = archive.read(member)
         if hashlib.sha256(content).hexdigest() != entry.get("sha256"):
             return warnings
-        data = json.loads(content)
+        if member.casefold().endswith(".png"):
+            data = load_png_workflow_from_bytes(content)
+        else:
+            data = json.loads(content.decode("utf-8-sig") if isinstance(content, bytes) else content)
         if not isinstance(data, dict) or not isinstance(data.get("nodes"), list):
             return warnings
         nodes_by_id: dict[str, list[dict[str, Any]]] = {}
@@ -2895,7 +2898,7 @@ def find_shared_model_references(
 
     packaged_workflow = manifest.get("workflow", {}).get("archive_path")
     packaged_path = comfy_root.joinpath(*PurePosixPath(packaged_workflow).parts).resolve() if packaged_workflow else None
-    for workflow_path in user_root.rglob("*.json"):
+    for workflow_path in (*user_root.rglob("*.json"), *user_root.rglob("*.png")):
         if "workflows" not in {part.casefold() for part in workflow_path.parts}:
             continue
         try:

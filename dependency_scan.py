@@ -55,7 +55,13 @@ def _load(archive):
         content = source.read(member)
     if hashlib.sha256(content).hexdigest() != entry.get("sha256"):
         raise ValueError("The workflow JSON failed its recorded hash check. Verify the package first.")
-    data = json.loads(content)
+    if member.casefold().endswith(".png"):
+        data = engine.load_png_workflow_from_bytes(content)
+    else:
+        try:
+            data = json.loads(content.decode("utf-8-sig") if isinstance(content, bytes) else content)
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+            raise ValueError(f"Ungültige Workflow-JSON: {exc}") from exc
     rules = engine.load_node_rules()
     fmt = engine.workflow_format(data)
     if fmt == "comfyui-ui-workflow":

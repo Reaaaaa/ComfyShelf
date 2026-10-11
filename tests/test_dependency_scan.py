@@ -278,6 +278,42 @@ class DependencyScanTests(unittest.TestCase):
         self.assertEqual(self.archive.read_bytes(), original)
         self.assertEqual(list(self.library.glob("*.zip.bak")), [])
 
+    def test_scan_and_complete_png_workflow_package(self):
+        import struct
+        import zlib
+
+        def make_png(meta):
+            def chunk(t, d):
+                crc = zlib.crc32(t + d) & 0xffffffff
+                return struct.pack(">I", len(d)) + t + d + struct.pack(">I", crc)
+            chunks = [
+                b"\x89PNG\r\n\x1a\n",
+                chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)),
+            ]
+            for k, v in meta.items():
+                chunks.append(chunk(b"tEXt", k.encode("latin-1") + b"\x00" + v.encode("utf-8")))
+            chunks.extend([chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\xff")), chunk(b"IEND", b"")])
+            return b"".join(chunks)
+
+        png_path = self.comfy / "user" / "default" / "workflows" / "FromImage.png"
+        png_path.parent.mkdir(parents=True, exist_ok=True)
+        wf_data = {
+            "nodes": [
+                {"id": 1, "type": "VAELoader", "widgets_values": ["png_model.safetensors"]}
+            ]
+        }
+        png_path.write_bytes(make_png({"workflow": json.dumps(wf_data)}))
+        engine.build_package(png_path, self.comfy, self.archive, True, False, shared_pool=True)
+
+        self.local("png_model.safetensors", b"png-model-bytes")
+        report = self.inspect()
+        self.assertEqual(report["counts"], {"included": 0, "found": 1, "missing": 0, "ambiguous": 0})
+        self.assertEqual(report["rows"][0]["name"], "png_model.safetensors")
+
+        completed = self.complete(report)
+        self.assertEqual(completed["added"], 1)
+        self.assertTrue(completed["complete"])
+
 
 if __name__ == "__main__":
     unittest.main()
