@@ -262,7 +262,26 @@ NODE_RULES_ENV_VAR = "COMFY_WORKFLOW_SWITCHER_NODE_RULES"
 def load_node_rules(path: Path | None = None) -> dict[str, Any]:
     """Load declarative local mappings; never load code or rules from a workflow/ZIP."""
     override = os.environ.get(NODE_RULES_ENV_VAR)
-    selected = path or (Path(override).expanduser() if override else Path(__file__).with_name("node-rules.json"))
+    if path:
+        selected = path
+    elif override:
+        selected = Path(override).expanduser()
+    else:
+        candidates = [Path(__file__).resolve().with_name("node-rules.json")]
+        if getattr(sys, "frozen", False):
+            exe_rules = Path(sys.executable).resolve().with_name("node-rules.json")
+            if exe_rules not in candidates:
+                candidates.insert(0, exe_rules)
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass:
+                meipass_rules = Path(meipass) / "node-rules.json"
+                if meipass_rules not in candidates:
+                    candidates.append(meipass_rules)
+        selected = candidates[0]
+        for cand in candidates:
+            if cand.exists():
+                selected = cand
+                break
     if not selected.exists() and path is None and not override:
         return {}
     try:

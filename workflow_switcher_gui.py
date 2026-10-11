@@ -19,12 +19,36 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Callable
 
-APP_DIR = Path(__file__).resolve().parent
+def _resolve_gui_state_dir(app_dir: Path) -> Path:
+    env_dir = os.environ.get("COMFYSHELF_STATE_DIR")
+    if env_dir:
+        candidate = Path(env_dir).resolve()
+        candidate.mkdir(parents=True, exist_ok=True)
+        return candidate
+    candidate = app_dir / ".gui-state"
+    try:
+        candidate.mkdir(parents=True, exist_ok=True)
+        test_file = candidate / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+        return candidate
+    except OSError:
+        pass
+    base_appdata = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+    if base_appdata:
+        fallback = Path(base_appdata) / "ComfyShelf" / ".gui-state"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+    return candidate
+
+
+APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "gui"
-HISTORY_PATH = APP_DIR / ".gui-state" / "history.json"
-LOG_PATH = APP_DIR / ".gui-state" / "comfyshelf.log"
-PREFERENCES_PATH = APP_DIR / ".gui-state" / "preferences.json"
-STAGING_DIR = APP_DIR / ".gui-state" / "staging"
+GUI_STATE_DIR = _resolve_gui_state_dir(APP_DIR)
+HISTORY_PATH = GUI_STATE_DIR / "history.json"
+LOG_PATH = GUI_STATE_DIR / "comfyshelf.log"
+PREFERENCES_PATH = GUI_STATE_DIR / "preferences.json"
+STAGING_DIR = GUI_STATE_DIR / "staging"
 LOCALES_DIR = WEB_DIR / "locales"
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
@@ -1458,7 +1482,7 @@ def main() -> int:
         daemon=True,
     ).start()
     try:
-        webview.start(debug=False, private_mode=False, storage_path=str(APP_DIR / ".gui-state"))
+        webview.start(debug=False, private_mode=False, storage_path=str(GUI_STATE_DIR))
     finally:
         app_closed.set()
     LOGGER.info("ComfyShelf closed")
@@ -1472,7 +1496,7 @@ if __name__ == "__main__":
         raise
     except BaseException as exc:
         details = traceback.format_exc()
-        log_path = APP_DIR / "workflow-switcher-error.log"
+        log_path = GUI_STATE_DIR / "workflow-switcher-error.log"
         try:
             log_path.write_text(details, encoding="utf-8")
         except OSError:

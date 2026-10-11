@@ -103,7 +103,7 @@ def search_huggingface_model(filename: str, timeout: float = 6.0) -> list[dict[s
         search_term = stem
 
     api_url = f"https://huggingface.co/api/models?search={urllib.parse.quote(search_term)}&limit=10"
-    headers = {"User-Agent": "ComfyShelf/0.1.0"}
+    headers = {"User-Agent": "ComfyShelf/1.0.0"}
     req = urllib.request.Request(api_url, headers=headers)
     candidates: list[dict[str, Any]] = []
 
@@ -221,7 +221,7 @@ def download_model_file(
     req = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "ComfyShelf/0.1.0 (https://github.com/Reaaaaa/ComfyShelf)",
+            "User-Agent": "ComfyShelf/1.0.0 (https://github.com/Reaaaaa/ComfyShelf)",
         },
     )
 

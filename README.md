@@ -4,7 +4,7 @@
 
 # ComfyShelf
 
-[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 200 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v0.1.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
+[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 200 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v1.0.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
 
 <sub>Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.</sub>
 
@@ -80,16 +80,31 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 
 ## Get started on Windows
 
-**ComfyShelf v0.1.0** runs locally on Windows using Python and a native, modern webview interface. Setup is fully automated via a single double-click batch script (`Setup_ComfyShelf.cmd`) — no manual command-line typing or environment configuration required.
+**ComfyShelf v1.0.0** is available in three convenient ways:
 
-You need an existing ComfyUI installation (standard git, official portable standalone, or one-click setups like the fantastic **[ComfyUI-Easy-Install](https://github.com/Tavris1/ComfyUI-Easy-Install)**), installed **64-bit Python 3.10 or newer**, internet access for the initial setup, and enough storage space for your archived files.
+### Option 1: Windows Setup Installer (`.exe`) — *Recommended*
+1. Download **`ComfyShelf-v1.0.0-windows-setup.exe`** from the [Releases](https://github.com/Reaaaaa/ComfyShelf/releases) page.
+2. Run the installer. It installs per-user into `%LOCALAPPDATA%\Programs\ComfyShelf` — **no administrator privileges required**, no system modifications.
+3. Launch ComfyShelf directly from your Start Menu or Desktop shortcut.
 
-1. Save the **whole ComfyShelf folder** in a writable location (e.g. Documents). If you received a ZIP, extract it first; do not run setup from inside the ZIP.
-2. Double-click **Setup_ComfyShelf.cmd**. Choose English or German and confirm the installation. It prepares an isolated Python environment for the app without altering ComfyUI or your models.
-3. When setup finishes, double-click **Start_ComfyShelf.cmd** (or the **ComfyShelf** desktop shortcut).
-4. Select your ComfyUI directory and a separate archive directory (preferably on a secondary drive with ample free space). You can configure your preferred **Model Loading Method** (Instant Link via Hardlink/Symlink or Full Copy) in the settings dialog.
+### Option 2: Portable Version (`.zip`)
+1. Download **`ComfyShelf-v1.0.0-windows-portable.zip`**.
+2. Extract the folder anywhere you like (e.g. on your desktop, secondary drive, or USB drive).
+3. Double-click **`ComfyShelf.exe`** to run immediately — no installation, no extra runtime setup.
 
-You do not need to type commands or edit configuration files. If Python is missing, setup guides you on how to install it.
+### Option 3: Run from Source / Batch Script
+1. Clone the repository or download the source folder.
+2. Double-click **`Setup_ComfyShelf.cmd`** (requires Python 3.10+ installed).
+3. Once the environment is prepared, start the app via **`Start_ComfyShelf.cmd`**.
+
+> [!NOTE]
+> **Windows SmartScreen Notice:**  
+> Because ComfyShelf is an open-source project and unsigned binaries do not purchase expensive commercial code-signing certificates, Windows SmartScreen may show an informational prompt (*"Windows protected your PC"*). Click **"More info"** (*"Weitere Informationen"*) and then **"Run anyway"** (*"Trotzdem ausführen"*). All code and build pipelines are 100% open-source and auditable.
+
+### First-Time Configuration
+1. When starting ComfyShelf for the first time, select your **ComfyUI directory** (standard git, official portable standalone, or one-click setups like **[ComfyUI-Easy-Install](https://github.com/Tavris1/ComfyUI-Easy-Install)**).
+2. Choose a separate **archive directory** (preferably on a secondary drive with ample storage space).
+3. In the settings dialog, choose your preferred **Model Loading Method** (Instant Link via Hardlink/Symlink or Full Copy).
 
 For the complete first-run walkthrough and troubleshooting:
 - [English instructions](docs/guide.en.md)

@@ -53,6 +53,7 @@ node_modules/
 build/
 dist/
 *.egg-info/
+*.spec
 
 # Temporary browser profiles, screenshots and OS metadata
 work/
