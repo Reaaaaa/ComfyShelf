@@ -1816,6 +1816,183 @@ async function clearHistory() {
   catch (error) { toast(error.message, true); }
 }
 
+let modelPoolData = null;
+let modelPoolFilter = 'all';
+let modelPoolSearch = '';
+
+function categoryLabel(kind) {
+  const key = `model_pool.categories.${kind}`;
+  const translated = t(key);
+  if (translated !== key) return translated;
+  return kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : 'Model';
+}
+
+async function openModelPool() {
+  $('modelPoolModal').classList.remove('hidden');
+  $('modelPoolList').innerHTML = `<div class="pool-model-empty">${t('history.loading')}</div>`;
+  $('modelPoolSearchInput').value = modelPoolSearch = '';
+  $('modelPoolSearchClear').classList.add('hidden');
+  modelPoolFilter = 'all';
+  await loadModelPoolData();
+}
+
+function closeModelPool() {
+  $('modelPoolModal').classList.add('hidden');
+}
+
+async function loadModelPoolData() {
+  try {
+    modelPoolData = await callApi('inspect_model_pool');
+    renderModelPool();
+  } catch (err) {
+    $('modelPoolList').innerHTML = `<div class="pool-model-empty">${escapeHtml(err.message || String(err))}</div>`;
+  }
+}
+
+function selectWorkflowByPath(archivePath) {
+  if (!archivePath || !app.state?.packages) return;
+  const pkg = app.state.packages.find(item => item.path === archivePath || item.path.endsWith(archivePath));
+  if (pkg) {
+    app.selectedPath = pkg.path;
+    renderLibrary();
+    renderDetail(pkg);
+    const activeEl = document.querySelector(`.workflow-item[data-path="${CSS.escape(pkg.path)}"]`);
+    if (activeEl) activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function renderModelPool() {
+  if (!modelPoolData) return;
+  const { summary, categories, models } = modelPoolData;
+
+  $('poolStatModels').textContent = summary.total_models || 0;
+  const refCount = summary.total_references || 0;
+  $('poolStatRefs').textContent = `${refCount} ${refCount === 1 ? 'Referenz' : (app.language === 'de' ? 'Referenzen' : 'references')}`;
+  $('poolStatSize').textContent = formatBytes(summary.total_bytes || 0);
+  $('poolStatDisk').textContent = app.language === 'de' ? 'im Speicherpool' : 'in storage pool';
+  $('poolStatSaved').textContent = formatBytes(summary.saved_bytes || 0);
+  const savedPct = summary.referenced_bytes > 0 ? Math.round((summary.saved_bytes / summary.referenced_bytes) * 100) : 0;
+  $('poolStatSavedPercent').textContent = `${savedPct}% ${app.language === 'de' ? 'Deduplikationsrate' : 'deduplicated'}`;
+  $('poolStatLoaded').textContent = summary.active_in_comfy_count || 0;
+  $('poolStatLoadedSize').textContent = formatBytes(summary.active_in_comfy_bytes || 0);
+
+  $('modelPoolPath').textContent = summary.pool_directory || summary.archive_root || '—';
+
+  const totalCount = models ? models.length : 0;
+  let catHtml = `
+    <button class="pool-cat-chip ${modelPoolFilter === 'all' ? 'active' : ''}" data-cat="all">
+      <span>${t('model_pool.all_categories')}</span>
+      <span class="pool-cat-badge">${totalCount}</span>
+    </button>
+  `;
+  for (const cat of (categories || [])) {
+    const isAct = modelPoolFilter === cat.id;
+    catHtml += `
+      <button class="pool-cat-chip ${isAct ? 'active' : ''}" data-cat="${escapeHtml(cat.id)}">
+        <span>${escapeHtml(categoryLabel(cat.id))}</span>
+        <span class="pool-cat-badge">${cat.count}</span>
+      </button>
+    `;
+  }
+  const catContainer = $('modelPoolCategories');
+  catContainer.innerHTML = catHtml;
+  catContainer.querySelectorAll('.pool-cat-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      modelPoolFilter = btn.dataset.cat;
+      renderModelPool();
+    });
+  });
+
+  const q = modelPoolSearch.trim().toLowerCase();
+  const filtered = (models || []).filter(m => {
+    if (modelPoolFilter !== 'all' && m.kind !== modelPoolFilter) return false;
+    if (q) {
+      const matchName = (m.filename || '').toLowerCase().includes(q);
+      const matchKind = (m.kind || '').toLowerCase().includes(q);
+      const matchSha = (m.sha256 || '').toLowerCase().includes(q);
+      const matchWf = (m.workflows || []).some(w => (w.name || '').toLowerCase().includes(q));
+      if (!matchName && !matchKind && !matchSha && !matchWf) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    $('modelPoolList').innerHTML = `<div class="pool-model-empty">${t('model_pool.no_models')}</div>`;
+    return;
+  }
+
+  $('modelPoolList').innerHTML = filtered.map(m => {
+    const kindClass = `pool-kind-${m.kind || 'model'}`;
+    const statusClass = m.present_in_comfy ? 'active' : 'archived';
+    const statusText = m.present_in_comfy ? t('model_pool.active_in_comfy') : t('model_pool.archived_in_pool');
+
+    const wfCount = m.workflows?.length || 0;
+    const wfListHtml = (m.workflows || []).map(w => {
+      return `<button class="pool-wf-badge" data-archive="${escapeHtml(w.archive_path || '')}" title="${escapeHtml(w.name)}">${icon('workflow')}${escapeHtml(w.name)}</button>`;
+    }).join('');
+
+    const shortHash = m.short_hash || (m.sha256 ? m.sha256.substring(0, 10) : '');
+
+    return `
+      <div class="pool-model-card">
+        <div class="pool-model-header">
+          <div class="pool-model-title-wrap">
+            <span class="pool-kind-badge ${kindClass}">${escapeHtml(categoryLabel(m.kind))}</span>
+            <span class="pool-model-name" title="${escapeHtml(m.filename)}">${escapeHtml(m.filename)}</span>
+          </div>
+          <div class="pool-model-meta-right">
+            <span class="pool-status-pill ${statusClass}">${statusText}</span>
+            <span class="pool-model-size">${formatBytes(m.size || 0)}</span>
+          </div>
+        </div>
+        <div class="pool-model-details">
+          <div class="pool-model-workflows">
+            <span>${wfCount === 1 ? t('model_pool.used_in_one') : t('model_pool.used_in', {count: wfCount})}:</span>
+            ${wfListHtml}
+          </div>
+          <div class="pool-model-actions">
+            ${shortHash ? `<button class="pool-action-icon-btn copy-hash-btn" data-hash="${escapeHtml(m.sha256)}" title="${t('model_pool.copy_hash')} (${shortHash})">${icon('shield')}</button>` : ''}
+            <button class="pool-action-icon-btn copy-name-btn" data-filename="${escapeHtml(m.filename)}" title="${t('model_pool.copy_name')}">${icon('copy')}</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  $('modelPoolList').querySelectorAll('.pool-wf-badge').forEach(badge => {
+    badge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const archivePath = badge.dataset.archive;
+      if (archivePath) {
+        closeModelPool();
+        selectWorkflowByPath(archivePath);
+      }
+    });
+  });
+
+  $('modelPoolList').querySelectorAll('.copy-name-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const fn = btn.dataset.filename;
+      try {
+        await navigator.clipboard.writeText(fn);
+        toast(`${t('model_pool.copied')}: ${fn}`);
+      } catch (_) {}
+    });
+  });
+
+  $('modelPoolList').querySelectorAll('.copy-hash-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const hash = btn.dataset.hash;
+      try {
+        await navigator.clipboard.writeText(hash);
+        toast(`${t('model_pool.copied')} SHA-256`);
+      } catch (_) {}
+    });
+  });
+}
+
 function selectedPackage() {
   return app.state?.packages?.find(item => item.path === app.selectedPath);
 }
@@ -2010,6 +2187,23 @@ function installEvents() {
   $('historyCloseButton').addEventListener('click', closeHistory);
   $('historyDoneButton').addEventListener('click', closeHistory);
   $('clearHistoryButton').addEventListener('click', clearHistory);
+  $('modelPoolButton')?.addEventListener('click', openModelPool);
+  $('modelPoolFooterButton')?.addEventListener('click', openModelPool);
+  $('modelPoolCloseButton')?.addEventListener('click', closeModelPool);
+  $('modelPoolDoneButton')?.addEventListener('click', closeModelPool);
+  $('modelPoolModal')?.addEventListener('click', event => {
+    if (event.target === $('modelPoolModal')) closeModelPool();
+  });
+  $('modelPoolSearchInput')?.addEventListener('input', event => {
+    modelPoolSearch = event.target.value;
+    $('modelPoolSearchClear')?.classList.toggle('hidden', !modelPoolSearch);
+    renderModelPool();
+  });
+  $('modelPoolSearchClear')?.addEventListener('click', () => {
+    $('modelPoolSearchInput').value = modelPoolSearch = '';
+    $('modelPoolSearchClear').classList.add('hidden');
+    renderModelPool();
+  });
   $('renameButton').addEventListener('click', openRename);
   $('hideWorkflowButton')?.addEventListener('click', toggleHideSelected);
   $('renameCloseButton').addEventListener('click', closeRename);
@@ -2043,6 +2237,9 @@ function installEvents() {
     }
     if (event.key === 'Escape' && !$('tourModal')?.classList.contains('hidden')) {
       closeTour();
+    }
+    if (event.key === 'Escape' && !$('modelPoolModal')?.classList.contains('hidden')) {
+      closeModelPool();
     }
   });
   $('settingsButton').addEventListener('click', () => openSettings(false));

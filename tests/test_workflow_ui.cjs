@@ -857,6 +857,91 @@ async function run(language) {
   assert.ok(context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
   assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
   assert.ok(context.workflowList.innerHTML.includes('Music Generator'));
+
+  // Model Pool overview tests
+  assert.equal(vm.runInContext("categoryLabel('checkpoint')", context), context.messages['model_pool.categories.checkpoint']);
+  assert.equal(vm.runInContext("categoryLabel('lora')", context), context.messages['model_pool.categories.lora']);
+
+  const poolElements = {
+    poolStatModels: { textContent: '' },
+    poolStatRefs: { textContent: '' },
+    poolStatSize: { textContent: '' },
+    poolStatDisk: { textContent: '' },
+    poolStatSaved: { textContent: '' },
+    poolStatSavedPercent: { textContent: '' },
+    poolStatLoaded: { textContent: '' },
+    poolStatLoadedSize: { textContent: '' },
+    modelPoolPath: { textContent: '' },
+    modelPoolCategories: { innerHTML: '', querySelectorAll: () => [] },
+    modelPoolList: { innerHTML: '', querySelectorAll: () => [] },
+    modelPoolSearchInput: { value: '' },
+    modelPoolSearchClear: { classList: { toggle() {}, add() {}, remove() {} } },
+    modelPoolModal: { classList: { toggle() {}, add() {}, remove() {}, contains() { return false; } } },
+  };
+  const prevGetElementById = context.document.getElementById;
+  context.document.getElementById = id => poolElements[id] || prevGetElementById(id);
+
+  context.mockPoolData = {
+    summary: {
+      total_models: 2,
+      total_bytes: 5000000000,
+      total_references: 3,
+      referenced_bytes: 8000000000,
+      saved_bytes: 3000000000,
+      active_in_comfy_count: 1,
+      active_in_comfy_bytes: 2000000000,
+      pool_directory: 'D:/Archive/.comfyshelf/objects',
+    },
+    categories: [
+      { id: 'checkpoint', count: 1, bytes: 3000000000 },
+      { id: 'lora', count: 1, bytes: 2000000000 },
+    ],
+    models: [
+      {
+        id: 'chk1',
+        filename: 'sdxl_base.safetensors',
+        kind: 'checkpoint',
+        size: 3000000000,
+        sha256: 'abc123456789',
+        short_hash: 'abc123456789',
+        present_in_comfy: true,
+        workflows: [{ name: 'Anime Flow', archive_path: 'Anime.zip' }, { name: 'Realistic Flow', archive_path: 'Real.zip' }],
+      },
+      {
+        id: 'lora1',
+        filename: 'style_lora.safetensors',
+        kind: 'lora',
+        size: 2000000000,
+        sha256: 'def987654321',
+        short_hash: 'def987654321',
+        present_in_comfy: false,
+        workflows: [{ name: 'Anime Flow', archive_path: 'Anime.zip' }],
+      },
+    ],
+  };
+
+  vm.runInContext(`
+    modelPoolData = mockPoolData;
+    modelPoolFilter = 'all';
+    modelPoolSearch = '';
+    renderModelPool();
+  `, context);
+
+  assert.equal(poolElements.poolStatModels.textContent, 2);
+  assert.ok(poolElements.modelPoolList.innerHTML.includes('sdxl_base.safetensors'));
+  assert.ok(poolElements.modelPoolList.innerHTML.includes('style_lora.safetensors'));
+  assert.ok(poolElements.modelPoolList.innerHTML.includes('Anime Flow'));
+  assert.ok(poolElements.modelPoolList.innerHTML.includes('Realistic Flow'));
+
+  // Test filter
+  vm.runInContext("modelPoolFilter = 'checkpoint'; renderModelPool();", context);
+  assert.ok(poolElements.modelPoolList.innerHTML.includes('sdxl_base.safetensors'));
+  assert.ok(!poolElements.modelPoolList.innerHTML.includes('style_lora.safetensors'));
+
+  // Test search
+  vm.runInContext("modelPoolFilter = 'all'; modelPoolSearch = 'style'; renderModelPool();", context);
+  assert.ok(!poolElements.modelPoolList.innerHTML.includes('sdxl_base.safetensors'));
+  assert.ok(poolElements.modelPoolList.innerHTML.includes('style_lora.safetensors'));
 }
 
 (async () => {
@@ -898,6 +983,17 @@ async function run(language) {
   assert.ok(indexHtml.includes('id="hiddenPill"'));
   assert.ok(indexHtml.includes('id="i-eye"'));
   assert.ok(indexHtml.includes('id="i-eye-off"'));
+  assert.ok(indexHtml.includes('id="i-database"'));
+  assert.ok(indexHtml.includes('id="modelPoolButton"'));
+  assert.ok(indexHtml.includes('id="modelPoolFooterButton"'));
+  assert.ok(indexHtml.includes('id="modelPoolModal"'));
+  assert.ok(indexHtml.includes('id="modelPoolSearchInput"'));
+  assert.ok(indexHtml.includes('id="modelPoolCategories"'));
+  assert.ok(indexHtml.includes('id="modelPoolList"'));
+  assert.ok(indexHtml.includes('id="poolStatModels"'));
+  assert.ok(indexHtml.includes('id="poolStatSize"'));
+  assert.ok(indexHtml.includes('id="poolStatSaved"'));
+  assert.ok(indexHtml.includes('id="poolStatLoaded"'));
 
   for (const lang of ['de', 'en']) {
     const loc = JSON.parse(fs.readFileSync(path.join(root, 'locales', `${lang}.json`), 'utf8'));
@@ -953,6 +1049,25 @@ async function run(language) {
       'download.busy_detail',
       'download.success',
       'phase.download',
+      'model_pool.title',
+      'model_pool.open',
+      'model_pool.eyebrow',
+      'model_pool.intro',
+      'model_pool.stat_models',
+      'model_pool.stat_pool_size',
+      'model_pool.stat_savings',
+      'model_pool.stat_loaded',
+      'model_pool.search_placeholder',
+      'model_pool.all_categories',
+      'model_pool.workflows_label',
+      'model_pool.used_in',
+      'model_pool.active_in_comfy',
+      'model_pool.archived_in_pool',
+      'model_pool.pool_directory',
+      'model_pool.no_models',
+      'model_pool.copy_name',
+      'model_pool.copy_hash',
+      'model_pool.copied',
     ]) {
       assert.ok(loc[key], `Missing key ${key} in ${lang}.json`);
     }

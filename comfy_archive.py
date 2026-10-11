@@ -2306,6 +2306,248 @@ def inspect_library_optimization(archive_root: Path) -> dict[str, Any]:
     }
 
 
+def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> dict[str, Any]:
+    """Inspect all models stored across archive packages and the shared model pool."""
+    root = archive_root.resolve()
+    pool_objects_dir = root / ".comfyshelf" / "objects" / "sha256"
+
+    def normalize_kind(raw_kind: str) -> str:
+        k = (raw_kind or "model").strip().casefold()
+        if k in ("checkpoint", "checkpoints"):
+            return "checkpoint"
+        if k in ("diffusion_model", "diffusion_models", "unet"):
+            return "diffusion_model"
+        if k in ("vae",):
+            return "vae"
+        if k in ("text_encoder", "text_encoders", "clip"):
+            return "text_encoder"
+        if k in ("lora", "loras"):
+            return "lora"
+        if k in ("controlnet", "diffcontrolnet"):
+            return "controlnet"
+        if k in ("clip_vision",):
+            return "clip_vision"
+        if k in ("upscale_model", "upscale_models"):
+            return "upscale_model"
+        if k in ("style_model", "style_models"):
+            return "style_model"
+        return "model"
+
+    warnings: list[dict[str, str]] = []
+    models_by_key: dict[str, dict[str, Any]] = {}
+
+    archive_paths = sorted(root.glob("*.zip"), key=lambda p: p.name.casefold()) if root.is_dir() else []
+    for archive_path in archive_paths:
+        try:
+            manifest = load_package_manifest(archive_path)
+        except (OSError, ValueError) as exc:
+            warnings.append({"name": archive_path.name, "error": str(exc)})
+            continue
+
+        assets_by_path = {item.get("archive_path"): item for item in manifest.get("assets", [])}
+        model_files = [f for f in manifest.get("files", []) if f.get("role") == "model"]
+
+        if not model_files and manifest.get("assets"):
+            for asset in manifest.get("assets", []):
+                fn = asset.get("filename") or "unknown"
+                sha = str(asset.get("sha256") or "").casefold()
+                sz = int(asset.get("size") or 0)
+                kind = normalize_kind(asset.get("kind", "model"))
+                key = sha if len(sha) == 64 else f"{kind}:{fn.casefold()}"
+                if key not in models_by_key:
+                    models_by_key[key] = {
+                        "id": key,
+                        "filename": fn,
+                        "kind": kind,
+                        "size": sz,
+                        "sha256": sha,
+                        "short_hash": sha[:12] if len(sha) == 64 else "",
+                        "storage": "embedded",
+                        "in_pool": False,
+                        "present_in_comfy": False,
+                        "link_type": None,
+                        "comfy_path": None,
+                        "workflows": [],
+                        "detection": asset.get("detection"),
+                        "resolution": asset.get("resolution"),
+                    }
+                models_by_key[key]["workflows"].append({
+                    "name": archive_path.stem,
+                    "archive_path": str(archive_path.resolve()),
+                    "storage": "embedded",
+                })
+            continue
+
+        for entry in model_files:
+            raw_path = str(entry.get("path", ""))
+            asset = assets_by_path.get(raw_path, {})
+            fn = asset.get("filename") or Path(raw_path).name or "unknown"
+            sha = str(entry.get("sha256") or asset.get("sha256") or "").casefold()
+            sz = int(entry.get("size") or asset.get("size") or 0)
+            kind = normalize_kind(asset.get("kind") or "model")
+            key = sha if len(sha) == 64 else f"{kind}:{fn.casefold()}"
+
+            storage_mode = entry.get("storage") or (
+                SHARED_OBJECT_STORAGE if manifest.get("storage_mode") == "shared-object-pool" else "embedded"
+            )
+
+            exists_in_comfy = False
+            link_type = None
+            comfy_target_str = None
+            if comfy_root:
+                try:
+                    target = _safe_model_target(comfy_root, raw_path)
+                    comfy_target_str = str(target)
+                    if target.is_file() and target.stat().st_size == sz:
+                        exists_in_comfy = True
+                        st = target.stat()
+                        is_sym = target.is_symlink()
+                        is_hard = not is_sym and getattr(st, "st_nlink", 1) > 1
+                        link_type = "symlink" if is_sym else ("hardlink" if is_hard else "copy")
+                except (OSError, ValueError):
+                    pass
+
+            in_pool = False
+            if len(sha) == 64:
+                try:
+                    obj_path = _shared_object_path(archive_path, sha)
+                    in_pool = obj_path.is_file()
+                except (OSError, ValueError):
+                    pass
+
+            if key not in models_by_key:
+                models_by_key[key] = {
+                    "id": key,
+                    "filename": fn,
+                    "kind": kind,
+                    "size": sz,
+                    "sha256": sha,
+                    "short_hash": sha[:12] if len(sha) == 64 else "",
+                    "storage": "pool" if in_pool else ("pool" if storage_mode == SHARED_OBJECT_STORAGE else "embedded"),
+                    "in_pool": in_pool,
+                    "present_in_comfy": exists_in_comfy,
+                    "link_type": link_type,
+                    "comfy_path": comfy_target_str if exists_in_comfy else None,
+                    "workflows": [],
+                    "detection": asset.get("detection"),
+                    "resolution": asset.get("resolution"),
+                }
+            else:
+                existing = models_by_key[key]
+                if not existing.get("present_in_comfy") and exists_in_comfy:
+                    existing["present_in_comfy"] = True
+                    existing["link_type"] = link_type
+                    existing["comfy_path"] = comfy_target_str
+                if in_pool:
+                    existing["in_pool"] = True
+                if sz > existing.get("size", 0):
+                    existing["size"] = sz
+
+            wf_entry = {
+                "name": archive_path.stem,
+                "archive_path": str(archive_path.resolve()),
+                "storage": storage_mode,
+            }
+            if not any(w["archive_path"] == wf_entry["archive_path"] for w in models_by_key[key]["workflows"]):
+                models_by_key[key]["workflows"].append(wf_entry)
+
+    pool_objects_count = 0
+    pool_objects_bytes = 0
+    if pool_objects_dir.is_dir():
+        try:
+            for prefix_dir in pool_objects_dir.iterdir():
+                if prefix_dir.is_dir():
+                    for obj_file in prefix_dir.iterdir():
+                        if obj_file.is_file():
+                            obj_sha = obj_file.name.casefold()
+                            if len(obj_sha) == 64:
+                                pool_objects_count += 1
+                                try:
+                                    obj_size = obj_file.stat().st_size
+                                except OSError:
+                                    obj_size = 0
+                                pool_objects_bytes += obj_size
+                                if obj_sha not in models_by_key:
+                                    models_by_key[obj_sha] = {
+                                        "id": obj_sha,
+                                        "filename": f"object_{obj_sha[:10]}",
+                                        "kind": "model",
+                                        "size": obj_size,
+                                        "sha256": obj_sha,
+                                        "short_hash": obj_sha[:12],
+                                        "storage": "pool",
+                                        "in_pool": True,
+                                        "present_in_comfy": False,
+                                        "link_type": None,
+                                        "comfy_path": None,
+                                        "workflows": [],
+                                        "detection": "pool-storage",
+                                        "resolution": "orphaned-object",
+                                    }
+        except OSError:
+            pass
+
+    model_list = list(models_by_key.values())
+    for item in model_list:
+        item["workflow_count"] = len(item["workflows"])
+    model_list.sort(key=lambda m: (-m["workflow_count"], -m["size"], m["filename"].casefold()))
+
+    total_models = len(model_list)
+    total_bytes = sum(m["size"] for m in model_list)
+    total_references = sum(m["workflow_count"] for m in model_list)
+    referenced_bytes = sum(m["size"] * m["workflow_count"] for m in model_list)
+    saved_bytes = max(0, referenced_bytes - total_bytes)
+    active_in_comfy_count = sum(bool(m["present_in_comfy"]) for m in model_list)
+    active_in_comfy_bytes = sum(m["size"] for m in model_list if m["present_in_comfy"])
+
+    kind_order = [
+        "checkpoint",
+        "diffusion_model",
+        "lora",
+        "vae",
+        "text_encoder",
+        "controlnet",
+        "clip_vision",
+        "upscale_model",
+        "style_model",
+        "model",
+    ]
+    category_stats: dict[str, dict[str, Any]] = {}
+    for m in model_list:
+        k = m["kind"]
+        if k not in category_stats:
+            category_stats[k] = {"id": k, "count": 0, "bytes": 0}
+        category_stats[k]["count"] += 1
+        category_stats[k]["bytes"] += m["size"]
+
+    categories = []
+    for k in kind_order:
+        if k in category_stats:
+            categories.append(category_stats[k])
+    for k, v in category_stats.items():
+        if k not in kind_order:
+            categories.append(v)
+
+    return {
+        "summary": {
+            "total_models": total_models,
+            "total_bytes": total_bytes,
+            "total_references": total_references,
+            "referenced_bytes": referenced_bytes,
+            "saved_bytes": saved_bytes,
+            "active_in_comfy_count": active_in_comfy_count,
+            "active_in_comfy_bytes": active_in_comfy_bytes,
+            "pool_objects_count": pool_objects_count,
+            "pool_objects_bytes": pool_objects_bytes,
+            "pool_directory": str((root / ".comfyshelf" / "objects").resolve()),
+            "archive_root": str(root),
+        },
+        "categories": categories,
+        "models": model_list,
+        "warnings": warnings,
+    }
+
+
 def optimize_library(
     archive_root: Path,
     progress: ProgressCallback = None,

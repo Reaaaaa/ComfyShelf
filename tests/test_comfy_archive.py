@@ -519,6 +519,55 @@ class ParserTests(unittest.TestCase):
             self.assertEqual(len(list((archive_root / ".comfyshelf" / "objects" / "sha256").glob("*/*"))), 1)
             self.assertEqual(MODULE.inspect_library_optimization(archive_root)["package_count"], 0)
 
+    def test_inspect_model_pool_aggregates_models_and_savings(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "ComfyUI"
+            archive_root = base / "Archive"
+            vae = root / "models" / "vae" / "shared.safetensors"
+            lora = root / "models" / "loras" / "unique.safetensors"
+            workflows = root / "user" / "default" / "workflows"
+            vae.parent.mkdir(parents=True)
+            lora.parent.mkdir(parents=True)
+            workflows.mkdir(parents=True)
+            archive_root.mkdir()
+            vae_bytes = b"shared-vae-data-bytes"
+            lora_bytes = b"unique-lora-data-bytes"
+            vae.write_bytes(vae_bytes)
+            lora.write_bytes(lora_bytes)
+
+            wf1 = workflows / "First.json"
+            wf1.write_text(json.dumps({
+                "nodes": [
+                    {"id": 1, "type": "VAELoader", "widgets_values": [vae.name]},
+                    {"id": 2, "type": "LoraLoader", "widgets_values": [lora.name]},
+                ]
+            }), encoding="utf-8")
+            MODULE.build_package(wf1, root, archive_root / "First.zip", False, False)
+
+            wf2 = workflows / "Second.json"
+            wf2.write_text(json.dumps({
+                "nodes": [
+                    {"id": 1, "type": "VAELoader", "widgets_values": [vae.name]},
+                ]
+            }), encoding="utf-8")
+            MODULE.build_package(wf2, root, archive_root / "Second.zip", False, False)
+
+            MODULE.optimize_library(archive_root)
+
+            pool = MODULE.inspect_model_pool(archive_root, root)
+            self.assertEqual(pool["summary"]["total_models"], 2)
+            self.assertEqual(pool["summary"]["total_references"], 3)
+            self.assertEqual(pool["summary"]["saved_bytes"], len(vae_bytes))
+            self.assertEqual(pool["summary"]["active_in_comfy_count"], 2)
+            self.assertTrue(any(c["id"] == "vae" for c in pool["categories"]))
+            self.assertTrue(any(c["id"] == "lora" for c in pool["categories"]))
+
+            shared_model = next(m for m in pool["models"] if m["filename"] == "shared.safetensors")
+            self.assertEqual(shared_model["workflow_count"], 2)
+            self.assertTrue(shared_model["present_in_comfy"])
+            self.assertTrue(shared_model["in_pool"])
+
     def test_unload_blocks_shared_model_without_explicit_override(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)

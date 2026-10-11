@@ -137,6 +137,15 @@ der Verifiziert-Status ändert sich nicht. Der Button startet ComfyUI nicht und
 - **Ausblenden:** Mit dem Augen-Icon neben dem Namen kannst du einen Workflow aus der Hauptansicht ausblenden. Er erscheint dann nur noch im Filter-Reiter **Ausgeblendet**. Aktive (geladene) Workflows können nicht ausgeblendet werden, damit keine Modelle unbemerkt Speicherplatz auf der SSD belegen.
 - **Löschen:** Über **Archiv löschen…** in der Fußleiste kannst du das Paket in den Windows-Papierkorb verschieben oder unwiderruflich löschen.
 
+### Modellpool-Übersicht
+
+Über das Datenbank-Symbol in der oberen Speicherleiste oder über den Button **Modellpool** in der linken Fußleiste öffnest du die zentrale Übersicht aller Modelle:
+- **Speicherstatistiken:** Sieh auf einen Blick, wie viele einzigartige Modelle im Pool liegen, wie viel Speicherplatz die Deduplikation spart und welche Modelle aktuell in ComfyUI verlinkt sind.
+- **Kategorien:** Filtere übersichtlich nach Modelltypen (Checkpoints, Diffusion Models, LoRAs, VAEs, Text Encoders, ControlNet etc.).
+- **Live-Suche:** Finde Modelle sofort nach Dateinamen, SHA-256-Hash oder verknüpftem Workflow.
+- **Workflow-Verweise:** Klicke auf ein Workflow-Badge eines Modells, um direkt zum entsprechenden Workflow in deiner Bibliothek zu springen.
+- **Schnellaktionen:** Kopiere Dateinamen oder SHA-256-Hashes mit einem Klick in die Zwischenablage.
+
 ## 6. Zwischen Workflows wechseln
 
 - **Nur zusätzlich laden:** lädt die Dateien des gewählten Workflows und lässt

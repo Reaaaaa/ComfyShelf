@@ -672,6 +672,21 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
             prefs = GUI.WorkflowSwitcherApi._read_preferences()
             self.assertNotIn("RenamedHidden.zip", prefs["hidden_workflows"])
 
+    def test_inspect_model_pool_api_returns_structured_summary(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy = base / "Comfy"
+            archive_dir = base / "Archive"
+            comfy.mkdir()
+            archive_dir.mkdir()
+            api = GUI.WorkflowSwitcherApi()
+            with patch.object(GUI.engine, "active_installation", return_value={"comfy_root": str(comfy), "archive_root": str(archive_dir)}):
+                res = api.inspect_model_pool()
+                self.assertTrue(res["ok"])
+                self.assertIn("summary", res["data"])
+                self.assertIn("categories", res["data"])
+                self.assertIn("models", res["data"])
+
 
 if __name__ == "__main__":
     unittest.main()

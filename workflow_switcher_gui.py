@@ -1164,6 +1164,17 @@ class WorkflowSwitcherApi:
 
         return self._operation(action)
 
+    def inspect_model_pool(self) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            installation = engine.active_installation()
+            if not installation:
+                raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
+            archive_root = Path(installation["archive_root"])
+            comfy_root = Path(installation["comfy_root"]) if installation.get("comfy_root") else None
+            return engine.inspect_model_pool(archive_root, comfy_root)
+
+        return self._operation(action)
+
     def optimize_library(self) -> dict[str, Any]:
         def action() -> dict[str, Any]:
             installation = engine.active_installation()

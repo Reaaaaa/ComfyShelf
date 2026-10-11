@@ -40,6 +40,7 @@
     <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></symbol>
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"/></symbol>
+    <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -102,6 +103,7 @@
         <div class="workflow-list" id="workflowList"></div>
 
         <div class="sidebar-footer">
+          <button class="footer-action footer-action-secondary" id="modelPoolFooterButton" title="Open model pool overview" data-i18n-title="model_pool.open"><svg><use href="#i-database"/></svg><span data-i18n="model_pool.title">Model Pool</span></button>
           <button class="footer-action" id="openArchiveButton"><svg><use href="#i-folder"/></svg><span data-i18n="library.open_archive">Open archive</span></button>
           <button class="footer-action" id="settingsButton"><svg><use href="#i-settings"/></svg><span data-i18n="settings.button">Settings</span></button>
         </div>
@@ -120,6 +122,7 @@
               <span class="muted" data-i18n="summary.comfy_free">ComfyUI free</span>
               <strong id="freeSpace">—</strong>
             </div>
+            <button class="summary-button" id="modelPoolButton" title="Open model pool overview" data-i18n-title="model_pool.open"><svg><use href="#i-database"/></svg></button>
             <button class="summary-button" id="tourHelpButton" title="Start feature tour" data-i18n-title="tour.help_button"><svg><use href="#i-help"/></svg></button>
             <button class="summary-button" id="openWebUiButton" title="Open ComfyUI in browser (127.0.0.1:8188)" data-i18n-title="summary.open_web"><svg><use href="#i-external"/></svg></button>
             <button class="summary-button" id="diskRefreshButton" title="Refresh storage and package status" data-i18n-title="summary.refresh"><svg><use href="#i-refresh"/></svg></button>
@@ -483,6 +486,65 @@
           <button class="text-button" id="tourSkipButton" data-i18n="tour.skip">Skip tour</button>
           <button class="secondary-button hidden" id="tourPrevButton" data-i18n="tour.prev">Back</button>
           <button class="primary-button" id="tourNextButton" data-i18n="tour.next">Next</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop hidden" id="modelPoolModal">
+    <section class="modal model-pool-modal" role="dialog" aria-modal="true" aria-labelledby="modelPoolTitle">
+      <div class="modal-heading">
+        <div>
+          <span class="eyebrow" data-i18n="model_pool.eyebrow">Shared Storage Pool</span>
+          <h2 id="modelPoolTitle" data-i18n="model_pool.title">Model Pool Overview</h2>
+        </div>
+        <button class="icon-button modal-close" id="modelPoolCloseButton" aria-label="Close dialog" data-i18n-aria="common.close_dialog"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <p class="modal-intro" data-i18n="model_pool.intro">Categorized overview of all shared and archived models across your workflows.</p>
+
+      <div class="model-pool-stats" id="modelPoolStats">
+        <div class="pool-stat-card">
+          <span class="pool-stat-label" data-i18n="model_pool.stat_models">Unique Models</span>
+          <strong class="pool-stat-value" id="poolStatModels">0</strong>
+          <small class="pool-stat-sub" id="poolStatRefs">0 references</small>
+        </div>
+        <div class="pool-stat-card">
+          <span class="pool-stat-label" data-i18n="model_pool.stat_pool_size">Pool Size</span>
+          <strong class="pool-stat-value" id="poolStatSize">0 B</strong>
+          <small class="pool-stat-sub" id="poolStatDisk">on disk</small>
+        </div>
+        <div class="pool-stat-card highlight">
+          <span class="pool-stat-label" data-i18n="model_pool.stat_savings">Storage Saved</span>
+          <strong class="pool-stat-value text-teal" id="poolStatSaved">0 B</strong>
+          <small class="pool-stat-sub" id="poolStatSavedPercent">deduplicated</small>
+        </div>
+        <div class="pool-stat-card">
+          <span class="pool-stat-label" data-i18n="model_pool.stat_loaded">ComfyUI Active</span>
+          <strong class="pool-stat-value text-amber" id="poolStatLoaded">0</strong>
+          <small class="pool-stat-sub" id="poolStatLoadedSize">currently linked</small>
+        </div>
+      </div>
+
+      <div class="model-pool-controls">
+        <div class="pool-search-box">
+          <span class="search-icon"><svg><use href="#i-search"/></svg></span>
+          <input type="text" id="modelPoolSearchInput" placeholder="Filter models by name or workflow…" data-i18n-placeholder="model_pool.search_placeholder" autocomplete="off" spellcheck="false">
+          <button class="search-clear hidden" id="modelPoolSearchClear" title="Clear filter"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="model-pool-categories" id="modelPoolCategories" role="tablist"></div>
+      </div>
+
+      <div class="model-pool-scroll" id="modelPoolScroll">
+        <div class="model-pool-list" id="modelPoolList"></div>
+      </div>
+
+      <div class="model-pool-footer">
+        <div class="model-pool-location" id="modelPoolLocation">
+          <svg><use href="#i-folder"/></svg>
+          <span id="modelPoolPath" class="muted">—</span>
+        </div>
+        <div class="modal-actions">
+          <button class="secondary-button" id="modelPoolDoneButton" data-i18n="common.close">Close</button>
         </div>
       </div>
     </section>

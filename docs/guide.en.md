@@ -127,6 +127,15 @@ status. The button does not start ComfyUI or automatically open a browser tab.
 - **Hide:** Click the eye icon next to the title to hide a workflow from the main library view. It will then only appear under the **Hidden** filter tab. Active (loaded) workflows cannot be hidden to prevent models from occupying SSD space unnoticed.
 - **Delete:** Click **Delete archive…** in the bottom action bar to move the package to the Windows Recycle Bin or delete it permanently.
 
+### Model Pool Overview
+
+Click the database icon in the top storage summary bar or the **Model Pool** button in the sidebar footer to open the centralized model overview:
+- **Storage Metrics:** See total unique models, pool disk footprint, deduplication savings, and active models currently linked into ComfyUI.
+- **Category Filters:** Quick chips for Checkpoints, Diffusion Models, LoRAs, VAEs, Text Encoders, ControlNet, etc.
+- **Instant Search:** Filter models by filename, SHA-256 hash, or referenced workflow name.
+- **Workflow References:** Click any workflow badge on a model card to immediately navigate to and select that workflow in your library.
+- **Quick Actions:** One-click copy for model filenames and verified SHA-256 hashes.
+
 ## 6. Switch between workflows
 
 - **Load in addition:** loads the chosen workflow's files and keeps other loaded files.
