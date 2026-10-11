@@ -1332,6 +1332,7 @@ class WorkflowSwitcherApi:
             allow_incomplete,
             allow_shared,
             self._progress,
+            archive_preverified=confirm,
             link_mode=link_mode,
         )
 
@@ -1351,7 +1352,13 @@ class WorkflowSwitcherApi:
         if action_name == "restore":
             link_mode = str(installation.get("link_mode") or "auto")
             return engine.restore_package(
-                archive_path, comfy_root, confirm, allow_incomplete, progress, link_mode=link_mode
+                archive_path,
+                comfy_root,
+                confirm,
+                allow_incomplete,
+                progress,
+                archive_preverified=confirm,
+                link_mode=link_mode,
             )
         if action_name == "unload":
             return engine.unload_package(
@@ -1361,6 +1368,7 @@ class WorkflowSwitcherApi:
                 allow_incomplete,
                 allow_shared,
                 progress,
+                archive_preverified=confirm,
             )
         raise ValueError(f"Unknown action: {action_name}")
 

@@ -412,6 +412,8 @@
   "restore.done": "Workflow models loaded.",
   "restore.unload_done": "Workflow models unloaded.",
   "restore.instant_link": "Instant link",
+  "restore.instant_unlink": "Unlink models",
+  "restore.pool_preserved": "Preserved in pool",
   "restore.zero_storage": "0 B additional storage",
   "switch.preparing": "Preparing workflow switch",
   "switch.preparing_detail": "Fully verifying the target package and loaded models.",

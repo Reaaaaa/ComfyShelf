@@ -70,11 +70,16 @@ async function run(language) {
   assert.ok(librarySharing.includes('sharing-library'));
   assert.ok(librarySharing.includes('&lt;Renamed&gt;'));
   assert.ok(librarySharing.includes(context.messages['sharing.library_scope']));
+  context.preview = {candidates: [context.sharedCandidate], conflicts: [], bytes_reclaimable: 0, bytes_unlinked: 13340000000};
+  await vm.runInContext("previewPackageAction('unload')", context);
+  assert.ok(context.confirmation.copy.includes(context.messages['restore.instant_unlink']));
+  assert.ok(context.confirmation.copy.includes(context.messages['restore.pool_preserved']));
+
   await vm.runInContext("previewPackageAction('restore')", context);
   assert.equal(context.confirmation.showShared, false);
   assert.ok(!context.confirmation.copy.includes('sharing-warning'));
   context.switchPreview = {unload_candidates:[context.sharedCandidate], shared_count:1, conflicts:[],
-    blockers:[], restore:{conflicts:[]}, source_packages:['Previous'], bytes_required:50, bytes_reclaimable:42};
+    blockers:[], restore:{conflicts:[]}, source_packages:['Previous'], bytes_required:50, bytes_reclaimable:0, bytes_unlinked:13340000000};
   await vm.runInContext(`
     window.pywebview.api.preview_switch = async () => ({ok:true, data:switchPreview});
     previewWorkflowSwitch();
@@ -83,6 +88,8 @@ async function run(language) {
   assert.equal(context.confirmation.wide, true);
   assert.ok(context.confirmation.copy.includes('sharing-warning'));
   assert.ok(context.confirmation.copy.includes('&lt;shared&gt;'));
+  assert.ok(context.confirmation.copy.includes(context.messages['restore.instant_unlink']));
+  assert.ok(context.confirmation.copy.includes(context.messages['restore.pool_preserved']));
   context.switchPreview.unload_candidates = [];
   await vm.runInContext('previewWorkflowSwitch()', context);
   assert.equal(context.confirmation.showShared, true);

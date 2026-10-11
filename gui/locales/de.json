@@ -412,6 +412,8 @@
   "restore.done": "Workflow-Modelle wurden geladen.",
   "restore.unload_done": "Workflow-Modelle wurden entladen.",
   "restore.instant_link": "Sofort-Verknüpfung",
+  "restore.instant_unlink": "Verknüpfte Modelle entfernen",
+  "restore.pool_preserved": "Im Pool erhalten",
   "restore.zero_storage": "0 B zusätzlicher Speicher",
   "switch.preparing": "Workflow-Wechsel wird vorbereitet",
   "switch.preparing_detail": "Zielpaket und geladene Modelle werden vollständig geprüft.",

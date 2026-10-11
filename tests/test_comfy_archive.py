@@ -495,6 +495,25 @@ class ParserTests(unittest.TestCase):
             self.assertEqual(restore_result["restored"], [str(model.resolve())])
             self.assertEqual(model.read_bytes(), b"model-content")
 
+            # Restore via hardlink to test unloading linked models
+            model.unlink()
+            MODULE.restore_package(archive, root, True, False, link_mode="hardlink")
+            self.assertTrue(model.exists())
+
+            unload_preview2 = MODULE.unload_package(archive, root, False, False, False)
+            self.assertEqual(unload_preview2["bytes_unlinked"], len(b"model-content"))
+            self.assertEqual(unload_preview2["bytes_reclaimable"], 0)
+            self.assertTrue(unload_preview2["candidates"][0]["is_link"])
+
+            from unittest.mock import patch
+            with patch.object(MODULE, "verify_package", side_effect=AssertionError("Should not re-verify")):
+                unload_result2 = MODULE.unload_package(
+                    archive, root, True, False, False, archive_preverified=True
+                )
+                self.assertFalse(model.exists())
+                self.assertEqual(unload_result2["bytes_unlinked"], len(b"model-content"))
+                self.assertEqual(unload_result2["bytes_reclaimable"], 0)
+
     def test_entire_library_optimization_reuses_shared_models(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)

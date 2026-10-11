@@ -3272,6 +3272,7 @@ def unload_package(
     allow_incomplete: bool,
     allow_shared: bool,
     progress: ProgressCallback = None,
+    archive_preverified: bool = False,
 ) -> dict[str, Any]:
     initial_manifest = load_package_manifest(archive_path)
     pool_preparation_required = any(
@@ -3287,7 +3288,13 @@ def unload_package(
             log=True,
         )
         pool_preparation = deduplicate_package(archive_path, progress)
-    verification = verify_package(archive_path, progress)
+        archive_preverified = False
+
+    verification = (
+        {"valid": True, "errors": []}
+        if archive_preverified
+        else verify_package(archive_path, progress)
+    )
     if not verification["valid"]:
         details = "\n".join(f"- {error}" for error in verification["errors"])
         raise ValueError(f"Paketintegrität ist fehlerhaft; Entladen abgebrochen:\n{details}")
@@ -3368,6 +3375,7 @@ def unload_package(
         key = _asset_key(asset.get("kind", "model"), asset.get("filename", target.name))
         shared_by = shared.get(key, [])
         stat = target.stat()
+        is_link = bool(is_same or target.is_symlink())
         candidates.append(
             {
                 "path": str(target),
@@ -3376,6 +3384,7 @@ def unload_package(
                 "sha256": actual_hash,
                 "mtime_ns": stat.st_mtime_ns,
                 "shared_by": shared_by,
+                "is_link": is_link,
             }
         )
         if shared_by and not allow_shared:
@@ -3388,6 +3397,9 @@ def unload_package(
         blockers.append("Mindestens eine lokale Modelldatei weicht vom ZIP-Manifest ab.")
     if removal_issues:
         blockers.append("Some model files cannot be removed; close applications using them or check permissions.")
+
+    bytes_unlinked = sum(item["size"] for item in candidates if item.get("is_link"))
+    bytes_reclaimable = sum(item["size"] for item in candidates if not item.get("is_link"))
 
     result = {
         "package": manifest.get("package"),
@@ -3402,7 +3414,8 @@ def unload_package(
         "removal_issues": removal_issues,
         "action": "unload",
         "blockers": list(dict.fromkeys(blockers)),
-        "bytes_reclaimable": sum(item["size"] for item in candidates),
+        "bytes_reclaimable": bytes_reclaimable,
+        "bytes_unlinked": bytes_unlinked,
         "pool_preparation_required": pool_preparation_required,
         "pool_preparation": pool_preparation,
         "removed": [],
@@ -3803,6 +3816,7 @@ def switch_package(
     allow_incomplete: bool,
     allow_shared: bool,
     progress: ProgressCallback = None,
+    archive_preverified: bool = False,
     link_mode: str = "auto",
 ) -> dict[str, Any]:
     """Load the target first, then remove verified models not needed by it."""
@@ -3840,7 +3854,8 @@ def switch_package(
         if item.get("status") == "included"
     }
     restore_preview = restore_package(
-        target_archive, comfy_root, False, allow_incomplete, progress, link_mode=link_mode
+        target_archive, comfy_root, False, allow_incomplete, progress,
+        archive_preverified=archive_preverified, link_mode=link_mode
     )
     blockers = list(restore_preview.get("blockers", []))
     conflicts: list[dict[str, str]] = []
@@ -3926,6 +3941,7 @@ def switch_package(
                         f"{target.name} wird von {len(references)} weiterem lokalen Workflow(s) referenziert."
                     )
             stat = target.stat()
+            is_link = bool(is_same or target.is_symlink())
             unload_candidates.append(
                 {
                     "path": str(target),
@@ -3934,6 +3950,7 @@ def switch_package(
                     "sha256": actual_hash,
                     "mtime_ns": stat.st_mtime_ns,
                     "shared_by": references,
+                    "is_link": is_link,
                 }
             )
             seen_targets.add(target_key)
@@ -3942,6 +3959,10 @@ def switch_package(
         blockers.append("Mindestens ein altes Workflow-Modell stimmt nicht mit seinem Paket überein.")
     if removal_issues:
         blockers.append("Some model files cannot be removed; close applications using them or check permissions.")
+
+    bytes_unlinked = sum(item["size"] for item in unload_candidates if item.get("is_link"))
+    bytes_reclaimable = sum(item["size"] for item in unload_candidates if not item.get("is_link"))
+
     result = {
         "package": target_manifest.get("package"),
         "target_archive": str(target_archive.resolve()),
@@ -3955,7 +3976,9 @@ def switch_package(
         "shared_count": shared_count,
         "blockers": list(dict.fromkeys(blockers)),
         "bytes_required": int(restore_preview.get("bytes_required", 0)),
-        "bytes_reclaimable": sum(item["size"] for item in unload_candidates),
+        "bytes_linkable": int(restore_preview.get("bytes_linkable", 0)),
+        "bytes_unlinked": bytes_unlinked,
+        "bytes_reclaimable": bytes_reclaimable,
         "pool_preparations": pool_preparations,
         "removed": [],
     }
@@ -4315,6 +4338,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Paketinhalt:       {'vollständig' if result['package_complete'] else 'unvollständig'}")
             print(f"Modell-Dateien:    {len(result['candidates'])}")
             print(f"Freigebbarer Platz: {human_size(result['bytes_reclaimable'])}")
+            if result.get("bytes_unlinked"):
+                print(f"Verknüpfte Modelle: {human_size(result['bytes_unlinked'])} (bleibt im Pool erhalten)")
             print(f"Modus:             {'ENTFERNEN' if args.confirm else 'NUR VORSCHAU'}")
             for item in result["candidates"]:
                 print(f"  {'ENTFERNT' if item['path'] in result['removed'] else 'BEREIT'}  {item['path']}")

@@ -142,9 +142,9 @@ der Verifiziert-Status ändert sich nicht. Der Button startet ComfyUI nicht und
 Über das Datenbank-Symbol in der oberen Speicherleiste oder über den Button **Modellpool** in der linken Fußleiste öffnest du die zentrale Übersicht aller Modelle:
 - **Speicherstatistiken:** Sieh auf einen Blick, wie viele einzigartige Modelle im Pool liegen, wie viel Speicherplatz die Deduplikation spart und welche Modelle aktuell in ComfyUI verlinkt sind.
 - **Kategorien:** Filtere übersichtlich nach Modelltypen (Checkpoints, Diffusion Models, LoRAs, VAEs, Text Encoders, ControlNet etc.).
-- **Live-Suche:** Finde Modelle sofort nach Dateinamen, SHA-256-Hash oder verknüpftem Workflow.
+- **Live-Suche:** Finde Modelle sofort nach Dateinamen, Modell-Hash oder verknüpftem Workflow.
 - **Workflow-Verweise:** Klicke auf ein Workflow-Badge eines Modells, um direkt zum entsprechenden Workflow in deiner Bibliothek zu springen.
-- **Schnellaktionen:** Kopiere Dateinamen oder SHA-256-Hashes mit einem Klick in die Zwischenablage.
+- **Schnellaktionen:** Kopiere Dateinamen oder Hashes mit einem Klick in die Zwischenablage.
 
 ## 6. Zwischen Workflows wechseln
 

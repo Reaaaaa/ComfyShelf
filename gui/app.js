@@ -1682,6 +1682,7 @@ async function previewPackageAction(actionName) {
       <div class="confirm-stat"><span>${t(isRestore ? 'restore.restorable' : 'restore.unloadable')}</span><strong>${count}</strong></div>
       <div class="confirm-stat"><span>${t(isRestore ? 'restore.required' : 'restore.reclaimed')}</span><strong>${formatBytes(bytes)}</strong></div>
       ${isRestore && preview.bytes_linkable ? `<div class="confirm-stat"><span>${t('restore.instant_link')}</span><strong>${formatBytes(preview.bytes_linkable)} (${t('restore.zero_storage')})</strong></div>` : ''}
+      ${!isRestore && preview.bytes_unlinked ? `<div class="confirm-stat"><span>${t('restore.instant_unlink')}</span><strong>${formatBytes(preview.bytes_unlinked)} (${t('restore.pool_preserved')})</strong></div>` : ''}
       <div class="confirm-stat"><span>${t('common.conflicts')}</span><strong>${conflictCount}</strong></div>
       ${removalIssuesHtml(preview.removal_issues)}
       ${!isRestore && preview.pool_preparation_required ? `<p>${t('restore.pool_prepare')}</p>` : ''}`;
@@ -1726,7 +1727,9 @@ async function previewWorkflowSwitch() {
       <p>${t('switch.copy', {name: escapeHtml(pkg.name)})}</p>
       ${shared ? sharedFilesHtml(preview.unload_candidates, {force: true}) : ''}
       <div class="confirm-stat"><span>${t('switch.load')}</span><strong>${formatBytes(preview.bytes_required)}</strong></div>
+      ${preview.bytes_linkable ? `<div class="confirm-stat"><span>${t('restore.instant_link')}</span><strong>${formatBytes(preview.bytes_linkable)} (${t('restore.zero_storage')})</strong></div>` : ''}
       <div class="confirm-stat"><span>${t('switch.unload')}</span><strong>${formatBytes(preview.bytes_reclaimable)}</strong></div>
+      ${preview.bytes_unlinked ? `<div class="confirm-stat"><span>${t('restore.instant_unlink')}</span><strong>${formatBytes(preview.bytes_unlinked)} (${t('restore.pool_preserved')})</strong></div>` : ''}
       <div class="confirm-stat"><span>${t('switch.other')}</span><strong>${preview.source_packages.length}</strong></div>
       <div class="confirm-stat"><span>${t('common.conflicts')}</span><strong>${conflictCount}</strong></div>
       ${removalIssuesHtml(preview.removal_issues)}
