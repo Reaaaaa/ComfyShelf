@@ -245,10 +245,12 @@ h1, h2, h3, p { margin: 0; }
   position: relative; width: 100%; margin-bottom: 7px; padding: 8px 10px 8px 14px; border: 1px solid transparent;
   border-radius: 11px; background: transparent; text-align: left; overflow: hidden;
   display: flex; align-items: center; gap: 10px;
+  transition: background .12s ease, border-color .12s ease, box-shadow .12s ease;
 }
 .workflow-item-thumb {
   width: 36px; height: 36px; flex: 0 0 36px; border-radius: 7px; overflow: hidden;
   background: #161e22; border: 1px solid #27343b; display: flex; align-items: center; justify-content: center;
+  transition: border-color .12s ease;
 }
 .workflow-item-thumb img {
   width: 100%; height: 100%; object-fit: cover; display: block;
@@ -259,15 +261,61 @@ h1, h2, h3, p { margin: 0; }
 .workflow-item-info {
   min-width: 0; flex: 1;
 }
-.workflow-item::before { content: ""; position: absolute; left: 6px; top: 12px; bottom: 12px; width: 2px; border-radius: 2px; background: #3b474f; }
+.workflow-item::before {
+  content: ""; position: absolute; left: 6px; top: 12px; bottom: 12px; width: 2px; border-radius: 2px;
+  background: #3b474f;
+  transition: width .12s ease, left .12s ease, background .12s ease, box-shadow .12s ease;
+}
 .workflow-item[data-state="loaded"]::before { background: var(--teal); }
 .workflow-item[data-state="partial"]::before { background: var(--amber); }
-.workflow-item:hover { background: #1a2227; }
+.workflow-item:hover { background: #182126; border-color: #243037; }
+.workflow-item.active {
+  background: linear-gradient(135deg, #1f2c35 0%, #1a252c 100%);
+  border-color: #364753;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(121, 175, 167, 0.16);
+}
+.workflow-item.active:hover {
+  background: linear-gradient(135deg, #23313a 0%, #1e2a31 100%);
+  border-color: #3f5260;
+}
+.workflow-item.active::before {
+  width: 3px;
+  left: 5px;
+  background: #5d7382;
+}
+.workflow-item[data-state="loaded"].active {
+  background: linear-gradient(135deg, #19272b 0%, #152225 100%);
+  border-color: #2c4847;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(121, 175, 167, 0.28);
+}
+.workflow-item[data-state="loaded"].active:hover {
+  background: linear-gradient(135deg, #1e2e33 0%, #19272b 100%);
+  border-color: #345654;
+}
+.workflow-item[data-state="loaded"].active::before {
+  background: var(--teal);
+  box-shadow: 0 0 8px rgba(121, 175, 167, 0.6);
+}
+.workflow-item[data-state="partial"].active {
+  background: linear-gradient(135deg, #24221b 0%, #1e1b15 100%);
+  border-color: #483d28;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(198, 160, 100, 0.28);
+}
+.workflow-item[data-state="partial"].active:hover {
+  background: linear-gradient(135deg, #2a271f 0%, #232018 100%);
+  border-color: #55482f;
+}
+.workflow-item[data-state="partial"].active::before {
+  background: var(--amber);
+  box-shadow: 0 0 8px rgba(198, 160, 100, 0.6);
+}
 .workflow-name-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .workflow-name { display: block; min-width: 0; flex: 1; color: var(--text-soft); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .workflow-hidden-tag { display: inline-flex; align-items: center; color: #d9a04f; flex-shrink: 0; opacity: .85; }
 .workflow-hidden-tag svg { width: 13px; height: 13px; }
-.workflow-item.active .workflow-name { color: var(--text); }
+.workflow-item.active .workflow-name { color: #ffffff; font-weight: 650; }
+.workflow-item.active .workflow-meta { color: var(--text-soft); }
+.workflow-item.active .workflow-item-thumb { border-color: #384c57; }
 .workflow-match-hint {
   display: flex;
   align-items: center;
