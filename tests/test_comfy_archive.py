@@ -689,6 +689,51 @@ class ParserTests(unittest.TestCase):
             self.assertEqual(model.stat().st_nlink, 1)
             self.assertEqual(model.read_bytes(), model_bytes)
 
+    def test_hardlink_unload_and_switch_avoids_rehashing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "ComfyUI"
+            checkpoints = root / "models" / "checkpoints"
+            checkpoints.mkdir(parents=True)
+            archive_root = base / "Archive"
+            archive_root.mkdir()
+
+            model = checkpoints / "FastModel.safetensors"
+            model_bytes = b"model-for-fast-switch"
+            model.write_bytes(model_bytes)
+
+            workflow = root / "fast_flow.json"
+            workflow.write_text(
+                json.dumps({"1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": model.name}}}),
+                encoding="utf-8"
+            )
+
+            archive = archive_root / "FastFlow.zip"
+            MODULE.build_package(workflow, root, archive, False, False, shared_pool=True)
+
+            # Unload model so it's in shared pool
+            MODULE.unload_package(archive, root, True, False, True)
+            self.assertFalse(model.exists())
+
+            # Restore model with hardlink
+            MODULE.restore_package(archive, root, True, False, link_mode="hardlink")
+            self.assertTrue(model.exists())
+            self.assertGreater(model.stat().st_nlink, 1)
+
+            # Track calls to sha256_file
+            original_sha256 = MODULE.sha256_file
+            hashed_targets = []
+            def spy_sha256(path, *args, **kwargs):
+                hashed_targets.append(Path(path).resolve())
+                return original_sha256(path, *args, **kwargs)
+
+            with patch.object(MODULE, "sha256_file", side_effect=spy_sha256):
+                # Unloading a hardlink should recognize samefile and NOT call sha256_file on the model!
+                preview = MODULE.unload_package(archive, root, False, False, False)
+                self.assertNotIn(model.resolve(), hashed_targets, "Hardlink model must use samefile fast-path without rehashing")
+                self.assertEqual(len(preview["candidates"]), 1)
+
+
     def test_configuration_saves_link_mode(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)

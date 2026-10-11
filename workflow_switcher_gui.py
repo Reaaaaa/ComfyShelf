@@ -1162,9 +1162,14 @@ class WorkflowSwitcherApi:
             raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
         comfy_root = Path(installation["comfy_root"])
         archive_root = Path(installation["archive_root"])
+        packages_list = (
+            self._state_cache.get("packages", [])
+            if (self._state_cache and self._state_cache.get("packages"))
+            else self._scan_packages(comfy_root, archive_root)
+        )
         other_archives = [
             Path(item["path"])
-            for item in self._scan_packages(comfy_root, archive_root)
+            for item in packages_list
             if item["path"].casefold() != str(archive_path.resolve()).casefold()
             and item["state"] in {"loaded", "partial"}
         ]

@@ -3069,14 +3069,29 @@ def unload_package(
             removal_issues.append(issue)
             continue
         expected_hash = file_entry.get("sha256")
-        try:
-            actual_hash = sha256_file(
-                target, progress=progress, phase="local-hash",
-                message=f"Compare local model {target.name}",
-            )
-        except OSError as exc:
-            removal_issues.append(_removal_os_error(target, exc))
-            continue
+        is_same = False
+        if file_entry.get("storage") == SHARED_OBJECT_STORAGE:
+            try:
+                source_obj = _shared_object_path(
+                    archive_path,
+                    str(file_entry.get("object_sha256") or expected_hash),
+                )
+                if source_obj.is_file() and os.path.samefile(target, source_obj):
+                    is_same = True
+            except (OSError, ValueError):
+                pass
+
+        if is_same:
+            actual_hash = expected_hash
+        else:
+            try:
+                actual_hash = sha256_file(
+                    target, progress=progress, phase="local-hash",
+                    message=f"Compare local model {target.name}",
+                )
+            except OSError as exc:
+                removal_issues.append(_removal_os_error(target, exc))
+                continue
         if not expected_hash or actual_hash != expected_hash:
             conflicts.append(
                 {
@@ -3198,6 +3213,13 @@ def restore_package(
     archive_preverified: bool = False,
     link_mode: str = "auto",
 ) -> dict[str, Any]:
+    manifest = load_package_manifest(archive_path)
+    if not archive_preverified:
+        import verification_cache
+        cache_status = verification_cache.status(archive_path, manifest)
+        if cache_status.get("state") == "verified":
+            archive_preverified = True
+
     verification = (
         {"valid": True, "errors": []}
         if archive_preverified
@@ -3206,7 +3228,6 @@ def restore_package(
     if not verification["valid"]:
         details = "\n".join(f"- {error}" for error in verification["errors"])
         raise ValueError(f"Paketintegrität ist fehlerhaft; Wiederherstellung abgebrochen:\n{details}")
-    manifest = load_package_manifest(archive_path)
     if not comfy_root.is_dir():
         raise ValueError(f"ComfyUI-Root nicht gefunden: {comfy_root}")
 
@@ -3568,11 +3589,16 @@ def switch_package(
     for archive_path in other_archives:
         if archive_path.resolve() == target_archive.resolve():
             continue
-        verification = verify_package(archive_path, progress)
+        manifest = load_package_manifest(archive_path)
+        import verification_cache
+        cache_status = verification_cache.status(archive_path, manifest)
+        if cache_status.get("state") == "verified":
+            verification = {"valid": True, "errors": []}
+        else:
+            verification = verify_package(archive_path, progress)
         if not verification["valid"]:
             blockers.append(f"Anderes Paket ist beschädigt: {archive_path.name}")
             continue
-        manifest = load_package_manifest(archive_path)
         source_packages.append(str(manifest.get("package") or archive_path.stem))
         shared = find_shared_model_references(manifest, comfy_root)
         assets_by_path = {
@@ -3602,14 +3628,29 @@ def switch_package(
             if target.stat().st_size != expected_size:
                 conflicts.append({"path": str(target), "reason": "Lokale Datei hat eine andere Größe"})
                 continue
-            try:
-                actual_hash = sha256_file(
-                    target, progress=progress, phase="local-hash",
-                    message=f"Check previous workflow model {target.name}",
-                )
-            except OSError as exc:
-                removal_issues.append(_removal_os_error(target, exc))
-                continue
+            is_same = False
+            if file_entry.get("storage") == SHARED_OBJECT_STORAGE:
+                try:
+                    source_obj = _shared_object_path(
+                        archive_path,
+                        str(file_entry.get("object_sha256") or file_entry.get("sha256")),
+                    )
+                    if source_obj.is_file() and os.path.samefile(target, source_obj):
+                        is_same = True
+                except (OSError, ValueError):
+                    pass
+
+            if is_same:
+                actual_hash = file_entry.get("sha256")
+            else:
+                try:
+                    actual_hash = sha256_file(
+                        target, progress=progress, phase="local-hash",
+                        message=f"Check previous workflow model {target.name}",
+                    )
+                except OSError as exc:
+                    removal_issues.append(_removal_os_error(target, exc))
+                    continue
             if actual_hash != file_entry.get("sha256"):
                 conflicts.append({"path": str(target), "reason": "Lokaler SHA-256-Hash weicht ab"})
                 continue
@@ -3666,7 +3707,7 @@ def switch_package(
     if issues:
         _stop_removal(result, unload_candidates, issues)
     restore_result = restore_package(
-        target_archive, comfy_root, True, allow_incomplete, progress, link_mode=link_mode
+        target_archive, comfy_root, True, allow_incomplete, progress, archive_preverified=True, link_mode=link_mode
     )
     # Preserve the actual restore outcome if a subsequent removal fails.
     result["restore"] = restore_result

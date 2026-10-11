@@ -3,11 +3,11 @@
 The README test badges describe the local checks recorded here, **not a live
 GitHub Actions result**. They do not update automatically when code changes.
 
-Snapshot date: **2026-10-10**. Environment: Windows, Python 3.11.9 and Node.js 24.14.0.
+Snapshot date: **2026-10-11**. Environment: Windows, Python 3.11.9 and Node.js 24.14.0.
 
 | Check | Result |
 | --- | --- |
-| Python unit and regression suite | 198 passed, no failures or skips |
+| Python unit and regression suite | 200 passed, no failures or skips |
 | JavaScript frontend tests | Passed for English and German |
 | Frontend JavaScript syntax | Passed |
 | Python module compilation | Passed |
