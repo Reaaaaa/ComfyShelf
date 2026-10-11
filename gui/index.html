@@ -38,6 +38,8 @@
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></symbol>
     <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -92,6 +94,7 @@
           <button class="filter-chip active" data-filter="all" data-i18n="filter.all">All</button>
           <button class="filter-chip" data-filter="loaded" data-i18n="filter.loaded">Loaded</button>
           <button class="filter-chip" data-filter="archived" data-i18n="filter.archived">Archived</button>
+          <button class="filter-chip" data-filter="hidden" data-i18n="filter.hidden">Hidden</button>
         </div>
 
         <div class="workflow-list" id="workflowList"></div>
@@ -146,11 +149,13 @@
             <div class="detail-title-wrap">
               <div class="detail-kicker">
                 <span class="status-pill" id="statusPill">Archived</span>
+                <span class="status-pill hidden-badge hidden" id="hiddenPill" data-i18n="filter.hidden">Hidden</span>
                 <span class="integrity-label" id="integrityLabel"><svg><use href="#i-shield"/></svg>Not verified</span>
               </div>
               <div class="package-name-row">
                 <h1 id="packageName">Workflow</h1>
                 <button class="rename-button" id="renameButton" title="Rename workflow" aria-label="Rename workflow" data-i18n-title="rename.button" data-i18n-aria="rename.button"><svg><use href="#i-edit"/></svg></button>
+                <button class="hide-button" id="hideWorkflowButton" title="Hide workflow" aria-label="Hide workflow" data-i18n-title="detail.hide_workflow" data-i18n-aria="detail.hide_workflow"><svg><use href="#i-eye-off"/></svg></button>
               </div>
               <p id="packagePath">—</p>
               <div class="workflow-action-strip">

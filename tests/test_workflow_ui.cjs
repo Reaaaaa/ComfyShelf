@@ -473,7 +473,7 @@ async function run(language) {
     storageButton: {innerHTML: '', classList: {toggle(){}}},
     showWorkflowFileButton: {disabled: false},
   };
-  context.document.getElementById = id => thumbElements[id] || {classList: {add(){}, remove(){}, toggle(){}, contains(){ return false; }}, addEventListener(){}};
+  context.document.getElementById = id => thumbElements[id] || {classList: {add(){}, remove(){}, toggle(){}, contains(){ return false; }}, addEventListener(){}, setAttribute(){}};
   context.thumbCalls = [];
   vm.runInContext(`
     window.pywebview.api.get_archive_thumbnail = async (path) => {
@@ -744,6 +744,26 @@ async function run(language) {
   assert.ok(context.workflowList.innerHTML.includes('SDXL Fast Anime'));
   assert.ok(context.workflowList.innerHTML.includes('Music Generator'));
 
+  // Hidden workflow filtering
+  vm.runInContext(`
+    app.state.packages.push({
+      name: 'Hidden Workflow', path: 'E:/Archive/Hidden.zip', state: 'archived',
+      hidden: true, models: [], missing: [], custom_nodes: []
+    });
+    app.filter = 'all';
+    app.searchQuery = '';
+    renderLibrary();
+  `, context);
+  assert.ok(!context.workflowList.innerHTML.includes('Hidden Workflow'));
+
+  vm.runInContext("app.filter = 'hidden'; renderLibrary();", context);
+  assert.ok(context.workflowList.innerHTML.includes('Hidden Workflow'));
+  assert.ok(!context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
+  assert.ok(context.workflowList.innerHTML.includes('workflow-hidden-tag'));
+
+  // Reset to all
+  vm.runInContext("app.filter = 'all'; app.state.packages.pop(); renderLibrary();", context);
+
   // Filter by workflow name (matches title, no match hint needed)
   vm.runInContext("app.searchScope = 'all'; app.searchQuery = 'Flux'; renderLibrary();", context);
   assert.ok(context.workflowList.innerHTML.includes('Flux Dev Inpainting'));
@@ -828,6 +848,11 @@ async function run(language) {
   assert.ok(indexHtml.includes('id="downloadCandidatesBox"'));
   assert.ok(indexHtml.includes('id="downloadStoreInPoolOption"'));
   assert.ok(indexHtml.includes('id="downloadStartButton"'));
+  assert.ok(indexHtml.includes('data-filter="hidden"'));
+  assert.ok(indexHtml.includes('id="hideWorkflowButton"'));
+  assert.ok(indexHtml.includes('id="hiddenPill"'));
+  assert.ok(indexHtml.includes('id="i-eye"'));
+  assert.ok(indexHtml.includes('id="i-eye-off"'));
 
   for (const lang of ['de', 'en']) {
     const loc = JSON.parse(fs.readFileSync(path.join(root, 'locales', `${lang}.json`), 'utf8'));
@@ -851,6 +876,12 @@ async function run(language) {
       'library.match_model',
       'library.match_node',
       'library.match_missing',
+      'filter.hidden',
+      'detail.hide_workflow',
+      'detail.unhide_workflow',
+      'detail.hide_loaded_prevent',
+      'detail.hidden_toast',
+      'detail.unhidden_toast',
       'missing.copy_name',
       'missing.download_model',
       'missing.open_hf_search',
@@ -882,5 +913,5 @@ async function run(language) {
     }
   }
 
-  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, custom nodes live status, Drag & Drop file staging, and library instant search with match hints and scopes.');
+  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, custom nodes live status, Drag & Drop file staging, library instant search with match hints and scopes, and hidden workflow toggle & filtering.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

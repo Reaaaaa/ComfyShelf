@@ -776,11 +776,16 @@ function renderLibrary() {
   const packagesWithMatch = (app.state.packages || []).map(item => {
     return { item, match: getMatchInfo(item, query, scope) };
   }).filter(({ item, match }) => {
-    if (app.filter !== 'all') {
-      if (app.filter === 'archived') {
-        if (item.state !== 'archived' && item.state !== 'partial') return false;
-      } else if (item.state !== app.filter) {
-        return false;
+    if (app.filter === 'hidden') {
+      if (!item.hidden) return false;
+    } else {
+      if (item.hidden) return false;
+      if (app.filter !== 'all') {
+        if (app.filter === 'archived') {
+          if (item.state !== 'archived' && item.state !== 'partial') return false;
+        } else if (item.state !== app.filter) {
+          return false;
+        }
       }
     }
     return match.matches;
@@ -807,7 +812,10 @@ function renderLibrary() {
       <button class="workflow-item ${item.path === app.selectedPath ? 'active' : ''}" data-path="${escapeHtml(item.path)}" data-state="${item.state}">
         <div class="workflow-item-thumb">${renderItemThumbHtml(item)}</div>
         <div class="workflow-item-info">
-          <span class="workflow-name">${escapeHtml(item.name)}</span>
+          <div class="workflow-name-wrap">
+            <span class="workflow-name">${escapeHtml(item.name)}</span>
+            ${item.hidden ? `<span class="workflow-hidden-tag" title="${escapeHtml(t('filter.hidden'))}">${icon('eye-off')}</span>` : ''}
+          </div>
           ${matchHintHtml}
           <span class="workflow-meta"><span class="workflow-state">${stateLabel(item.state)}</span><span title="${t('detail.model_size')}">${formatBytes(item.model_bytes)}</span></span>
         </div>
@@ -870,6 +878,29 @@ function renderDetail(pkg) {
   $('packageName').textContent = pkg.name;
   $('packagePath').textContent = pkg.path;
   $('renameButton').disabled = false;
+  const hideBtn = $('hideWorkflowButton');
+  if (hideBtn) {
+    const isLoaded = pkg.state === 'loaded' || pkg.state === 'partial';
+    if (isLoaded) {
+      hideBtn.disabled = true;
+      hideBtn.title = t('detail.hide_loaded_prevent');
+      hideBtn.setAttribute?.('aria-label', t('detail.hide_loaded_prevent'));
+      hideBtn.classList?.remove?.('is-hidden');
+      hideBtn.innerHTML = icon('eye-off');
+    } else if (pkg.hidden) {
+      hideBtn.disabled = false;
+      hideBtn.title = t('detail.unhide_workflow');
+      hideBtn.setAttribute?.('aria-label', t('detail.unhide_workflow'));
+      hideBtn.classList?.add?.('is-hidden');
+      hideBtn.innerHTML = icon('eye');
+    } else {
+      hideBtn.disabled = false;
+      hideBtn.title = t('detail.hide_workflow');
+      hideBtn.setAttribute?.('aria-label', t('detail.hide_workflow'));
+      hideBtn.classList?.remove?.('is-hidden');
+      hideBtn.innerHTML = icon('eye-off');
+    }
+  }
   $('modelCount').textContent = String(pkg.model_count);
   $('modelPresence').textContent = t('detail.local_models', {count: pkg.present_models});
   $('modelSize').textContent = formatBytes(pkg.model_bytes);
@@ -905,6 +936,10 @@ function renderDetail(pkg) {
   pill.textContent = stateLabel(pkg.state);
   pill.className = `status-pill ${pkg.state}`;
   $('statusRail').className = `status-rail ${pkg.state}`;
+  const hiddenPill = $('hiddenPill');
+  if (hiddenPill) {
+    hiddenPill.classList.toggle('hidden', !pkg.hidden);
+  }
 
   renderIntegrity(pkg);
 
@@ -1822,6 +1857,24 @@ async function saveRename() {
   }
 }
 
+async function toggleHideSelected() {
+  const pkg = selectedPackage();
+  if (!pkg) return;
+  if (pkg.state === 'loaded' || pkg.state === 'partial') {
+    toast(t('detail.hide_loaded_prevent'), true);
+    return;
+  }
+  try {
+    const result = await callApi('toggle_hide_workflow', pkg.path);
+    pkg.hidden = !!result.hidden;
+    toast(t(result.hidden ? 'detail.hidden_toast' : 'detail.unhidden_toast', {name: pkg.name}));
+    renderLibrary();
+    renderDetail(pkg);
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
 let currentDeleteInspection = null;
 
 async function openDeleteModal() {
@@ -1950,6 +2003,7 @@ function installEvents() {
   $('historyDoneButton').addEventListener('click', closeHistory);
   $('clearHistoryButton').addEventListener('click', clearHistory);
   $('renameButton').addEventListener('click', openRename);
+  $('hideWorkflowButton')?.addEventListener('click', toggleHideSelected);
   $('renameCloseButton').addEventListener('click', closeRename);
   $('renameCancelButton').addEventListener('click', closeRename);
   $('renameSaveButton').addEventListener('click', saveRename);

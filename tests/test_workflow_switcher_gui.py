@@ -574,6 +574,105 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
             self.assertEqual(res["data"]["workflow"], {"test": 123})
             self.assertEqual(res["data"]["name"], "FlowTest")
 
+    def test_toggle_hide_workflow_lifecycle_and_scan(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive_dir = Path(temp) / "archive"
+            archive_dir.mkdir()
+            archive = archive_dir / "FlowA.zip"
+            manifest = {
+                "package_type": "comfyui-workflow-overlay",
+                "name": "FlowA",
+                "files": [{"path": "models/checkpoints/v1.safetensors", "role": "model", "size": 100}]
+            }
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("comfy-package.json", json.dumps(manifest))
+
+            comfy = Path(temp) / "comfy"
+            comfy.mkdir()
+
+            api = GUI.WorkflowSwitcherApi()
+
+            # Initially FlowA is archived and not hidden
+            packages = GUI.WorkflowSwitcherApi._scan_packages(comfy, archive_dir)
+            self.assertEqual(len(packages), 1)
+            self.assertFalse(packages[0]["hidden"])
+
+            # Toggle hide -> hidden = True
+            res1 = api.toggle_hide_workflow(str(archive))
+            self.assertTrue(res1["ok"])
+            self.assertTrue(res1["data"]["hidden"])
+
+            # Scanned packages reflects hidden
+            packages = GUI.WorkflowSwitcherApi._scan_packages(comfy, archive_dir)
+            self.assertTrue(packages[0]["hidden"])
+
+            # Preferences file contains "FlowA.zip"
+            prefs = GUI.WorkflowSwitcherApi._read_preferences()
+            self.assertIn("FlowA.zip", prefs.get("hidden_workflows", []))
+
+            # Toggle hide again -> hidden = False
+            res2 = api.toggle_hide_workflow(str(archive))
+            self.assertTrue(res2["ok"])
+            self.assertFalse(res2["data"]["hidden"])
+            packages = GUI.WorkflowSwitcherApi._scan_packages(comfy, archive_dir)
+            self.assertFalse(packages[0]["hidden"])
+
+    def test_cannot_hide_loaded_workflow(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive_dir = Path(temp) / "archive"
+            archive_dir.mkdir()
+            archive = archive_dir / "LoadedFlow.zip"
+            model_rel = "models/checkpoints/m.safetensors"
+            manifest = {
+                "package_type": "comfyui-workflow-overlay",
+                "name": "LoadedFlow",
+                "files": [{"path": model_rel, "role": "model", "size": 50}]
+            }
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("comfy-package.json", json.dumps(manifest))
+
+            comfy = Path(temp) / "comfy"
+            comfy_model = comfy / model_rel
+            comfy_model.parent.mkdir(parents=True)
+            comfy_model.write_bytes(b"x" * 50)
+
+            api = GUI.WorkflowSwitcherApi()
+            with patch.object(GUI.engine, "active_installation", return_value={"comfy_root": str(comfy), "archive_root": str(archive_dir)}):
+                # Attempt to hide loaded workflow
+                res = api.toggle_hide_workflow(str(archive))
+                self.assertFalse(res["ok"])
+                self.assertIn("ausgeblendet", res["error"].casefold())
+
+    def test_rename_and_delete_maintain_hidden_preferences(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive_dir = Path(temp) / "archive"
+            archive_dir.mkdir()
+            archive = archive_dir / "HideMe.zip"
+            manifest = {
+                "package_type": "comfyui-workflow-overlay",
+                "name": "HideMe",
+                "files": []
+            }
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("comfy-package.json", json.dumps(manifest))
+
+            api = GUI.WorkflowSwitcherApi()
+            res = api.toggle_hide_workflow(str(archive))
+            self.assertTrue(res["ok"])
+            self.assertTrue(res["data"]["hidden"])
+
+            # Rename
+            GUI.WorkflowSwitcherApi._rename_hidden_workflow("HideMe.zip", "RenamedHidden.zip")
+            prefs = GUI.WorkflowSwitcherApi._read_preferences()
+            self.assertIn("RenamedHidden.zip", prefs["hidden_workflows"])
+            self.assertNotIn("HideMe.zip", prefs["hidden_workflows"])
+
+            # Delete
+            GUI.WorkflowSwitcherApi._remove_hidden_workflow("RenamedHidden.zip")
+            prefs = GUI.WorkflowSwitcherApi._read_preferences()
+            self.assertNotIn("RenamedHidden.zip", prefs["hidden_workflows"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

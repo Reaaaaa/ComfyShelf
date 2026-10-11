@@ -317,6 +317,49 @@ class WorkflowSwitcherApi:
             return {}
 
     @staticmethod
+    def _write_preferences(preferences: dict[str, Any]) -> None:
+        PREFERENCES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temporary = PREFERENCES_PATH.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(preferences, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, PREFERENCES_PATH)
+
+    @classmethod
+    def _hidden_workflow_keys(cls) -> set[str]:
+        preferences = cls._read_preferences()
+        hidden_list = preferences.get("hidden_workflows")
+        if not isinstance(hidden_list, list):
+            return set()
+        return {str(item).casefold() for item in hidden_list if isinstance(item, str)}
+
+    @classmethod
+    def _remove_hidden_workflow(cls, filename: str) -> None:
+        preferences = cls._read_preferences()
+        hidden_list = preferences.get("hidden_workflows")
+        if not isinstance(hidden_list, list):
+            return
+        lowered = str(filename).casefold()
+        new_list = [item for item in hidden_list if str(item).casefold() != lowered]
+        if len(new_list) != len(hidden_list):
+            preferences["hidden_workflows"] = new_list
+            cls._write_preferences(preferences)
+
+    @classmethod
+    def _rename_hidden_workflow(cls, old_filename: str, new_filename: str) -> None:
+        preferences = cls._read_preferences()
+        hidden_list = preferences.get("hidden_workflows")
+        if not isinstance(hidden_list, list):
+            return
+        old_lowered = str(old_filename).casefold()
+        if any(str(item).casefold() == old_lowered for item in hidden_list):
+            new_list = [item for item in hidden_list if str(item).casefold() != old_lowered]
+            new_list.append(new_filename)
+            preferences["hidden_workflows"] = new_list
+            cls._write_preferences(preferences)
+
+    @staticmethod
     def _detect_system_language() -> str:
         try:
             if sys.platform == "win32":
@@ -367,13 +410,7 @@ class WorkflowSwitcherApi:
                 raise ValueError("Unsupported interface language.")
             preferences = self._read_preferences()
             preferences["language"] = language
-            PREFERENCES_PATH.parent.mkdir(parents=True, exist_ok=True)
-            temporary = PREFERENCES_PATH.with_suffix(".tmp")
-            temporary.write_text(
-                json.dumps(preferences, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            os.replace(temporary, PREFERENCES_PATH)
+            self._write_preferences(preferences)
             LOGGER.info("Interface language changed: %s", language)
             return self._locale_payload(language)
 
@@ -493,7 +530,7 @@ class WorkflowSwitcherApi:
             "installation": installation,
             "validation": {"comfy_free": None},
             "packages": [],
-            "summary": {"loaded": 0, "archived": 0, "partial": 0, "archive_bytes": 0},
+            "summary": {"loaded": 0, "archived": 0, "partial": 0, "hidden": 0, "archive_bytes": 0},
             "scan_warnings": [],
             "loading": True,
         }
@@ -574,6 +611,7 @@ class WorkflowSwitcherApi:
                 "loaded": sum(item["state"] == "loaded" for item in packages),
                 "archived": sum(item["state"] == "archived" for item in packages),
                 "partial": sum(item["state"] == "partial" for item in packages),
+                "hidden": sum(bool(item.get("hidden")) for item in packages),
                 "archive_bytes": sum(item["archive_size"] for item in packages),
                 "shared_packages": sum(bool(item.get("deduplicated")) for item in packages),
                 "logical_model_bytes": sum(int(item.get("model_bytes", 0)) for item in packages),
@@ -590,6 +628,7 @@ class WorkflowSwitcherApi:
         packages: list[dict[str, Any]] = []
         verification_stamps: dict[str, Any] = {}
         archive_paths = list(archive_root.glob("*.zip"))
+        hidden_keys = WorkflowSwitcherApi._hidden_workflow_keys()
         LOGGER.info("Archive directory contains %d ZIP package(s)", len(archive_paths))
         for index, archive_path in enumerate(archive_paths, 1):
             if progress:
@@ -662,6 +701,7 @@ class WorkflowSwitcherApi:
                     "modified": archive_path.stat().st_mtime,
                     "complete": bool(manifest.get("complete")),
                     "state": state,
+                    "hidden": archive_path.name.casefold() in hidden_keys and state == "archived",
                     "present_models": present,
                     "model_count": len(model_files),
                     "model_bytes": sum(int(item.get("size", 0)) for item in model_files),
@@ -752,12 +792,83 @@ class WorkflowSwitcherApi:
             )
             if result["changed"]:
                 verification_cache.finish_rename(Path(result["path"]), manifest, previous_check)
+                self._rename_hidden_workflow(Path(archive_path).name, Path(result["path"]).name)
                 self._record_history(
                     "rename",
                     result["name"],
                     f'Archive renamed: {result["old_name"]} → {result["name"]}',
                 )
             return result
+
+        return self._result(action)
+
+    def toggle_hide_workflow(self, archive_path: str) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            target_path = Path(archive_path).resolve()
+            if not target_path.is_file():
+                raise FileNotFoundError(f"Workflow-Paket nicht gefunden: {target_path}")
+
+            is_active = False
+            with self._state_lock:
+                if self._state_cache and "packages" in self._state_cache:
+                    for pkg in self._state_cache["packages"]:
+                        if Path(pkg["path"]).resolve() == target_path:
+                            if pkg.get("state") in {"loaded", "partial"}:
+                                is_active = True
+                            break
+
+            if not is_active:
+                installation = engine.active_installation()
+                if installation:
+                    comfy_root = Path(installation["comfy_root"])
+                    try:
+                        manifest = engine.load_package_manifest(target_path)
+                        model_files = [
+                            entry for entry in manifest.get("files", []) if entry.get("role") == "model"
+                        ]
+                        present = 0
+                        for entry in model_files:
+                            target = engine._safe_model_target(comfy_root, str(entry["path"]))
+                            if target.is_file() and target.stat().st_size == int(entry.get("size", -1)):
+                                present += 1
+                        if model_files and present > 0:
+                            is_active = True
+                    except Exception:
+                        pass
+
+            if is_active:
+                raise ValueError("Aktive oder teilweise geladene Workflows können nicht ausgeblendet werden. Bitte vorher auslagern.")
+
+            preferences = self._read_preferences()
+            hidden_list = preferences.get("hidden_workflows")
+            if not isinstance(hidden_list, list):
+                hidden_list = []
+
+            filename = target_path.name
+            lowered = filename.casefold()
+            is_currently_hidden = any(str(item).casefold() == lowered for item in hidden_list)
+
+            if is_currently_hidden:
+                new_hidden = [item for item in hidden_list if str(item).casefold() != lowered]
+                new_state = False
+            else:
+                new_hidden = [item for item in hidden_list if str(item).casefold() != lowered]
+                new_hidden.append(filename)
+                new_state = True
+
+            preferences["hidden_workflows"] = new_hidden
+            self._write_preferences(preferences)
+
+            with self._state_lock:
+                if self._state_cache and "packages" in self._state_cache:
+                    for pkg in self._state_cache["packages"]:
+                        if Path(pkg["path"]).resolve() == target_path:
+                            pkg["hidden"] = new_state
+                    summary = self._state_cache.get("summary")
+                    if summary:
+                        summary["hidden"] = sum(bool(p.get("hidden")) for p in self._state_cache["packages"])
+
+            return {"path": str(target_path), "hidden": new_state, "name": target_path.stem}
 
         return self._result(action)
 
@@ -790,6 +901,7 @@ class WorkflowSwitcherApi:
                 send_to_trash=send_to_trash,
                 delete_orphaned_models=delete_orphaned_models,
             )
+            self._remove_hidden_workflow(target_path.name)
             verification_cache.discard_record(target_path)
             mode = "Papierkorb" if send_to_trash else "unwiderruflich"
             detail = f'Workflow-Archiv gelöscht ({mode}): {result["name"]}'
@@ -1115,6 +1227,8 @@ class WorkflowSwitcherApi:
             )
             changed = result.get("restored", []) if action_name == "restore" else result.get("removed", [])
             bytes_changed = sum(int(item.get("size", 0)) for item in result.get("candidates", []))
+            if action_name == "restore":
+                self._remove_hidden_workflow(Path(archive_path).name)
             self._record_history(
                 action_name,
                 result.get("package"),
@@ -1140,6 +1254,7 @@ class WorkflowSwitcherApi:
             result = self._run_switch(
                 Path(archive_path), True, allow_incomplete, allow_shared
             )
+            self._remove_hidden_workflow(Path(archive_path).name)
             self._record_history(
                 "switch",
                 result.get("package"),
