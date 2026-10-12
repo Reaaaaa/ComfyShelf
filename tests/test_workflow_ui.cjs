@@ -1071,6 +1071,23 @@ async function run(language) {
   assert.ok(indexHtml.includes('id="i-sort"'));
   assert.ok(indexHtml.includes('id="i-grip"'));
 
+  const readmeMd = fs.readFileSync(path.join(root, '..', 'README.md'), 'utf8');
+  assert.ok(readmeMd.includes('Python tests: 206 passed locally'));
+  assert.ok(!readmeMd.includes('200 passed'));
+
+  const testStatusMd = fs.readFileSync(path.join(root, '..', 'docs', 'test-status.md'), 'utf8');
+  assert.ok(testStatusMd.includes('206 passed, no failures or skips'));
+
+  const pythonBadgeSvg = fs.readFileSync(path.join(root, '..', 'docs', 'assets', 'python-tests.svg'), 'utf8');
+  assert.ok(pythonBadgeSvg.includes('206 passed'));
+  assert.ok(!pythonBadgeSvg.includes('200 passed'));
+
+  const contributingMd = fs.readFileSync(path.join(root, '..', 'CONTRIBUTING.md'), 'utf8');
+  assert.ok(!contributingMd.includes('development draft'));
+
+  const releaseChecklistMd = fs.readFileSync(path.join(root, '..', 'docs', 'release-checklist.md'), 'utf8');
+  assert.ok(!releaseChecklistMd.includes('Private draft'));
+
   for (const lang of ['de', 'en']) {
     const loc = JSON.parse(fs.readFileSync(path.join(root, 'locales', `${lang}.json`), 'utf8'));
     for (const key of [

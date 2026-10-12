@@ -3,16 +3,16 @@
 The README test badges describe the local checks recorded here, **not a live
 GitHub Actions result**. They do not update automatically when code changes.
 
-Snapshot date: **2026-10-11**. Environment: Windows, Python 3.11.9 and Node.js 24.14.0.
+Snapshot date: **2026-10-12**. Environment: Windows, Python 3.11.9 and Node.js 24.14.0.
 
 | Check | Result |
 | --- | --- |
-| Python unit and regression suite | 200 passed, no failures or skips |
+| Python unit and regression suite | 206 passed, no failures or skips |
 | JavaScript frontend tests | Passed for English and German |
 | Frontend JavaScript syntax | Passed |
 | Python module compilation | Passed |
 
-These suites cover workflow parsing (JSON and PNG embedded metadata), placeholder dummy filtering, thumbnails, Drag & Drop file staging, instant-load link modes (hardlinks and symlinks), custom nodes live status resolution (flexible matching, Git remote extraction, and ComfyUI-Manager clipboard copy), Hugging Face model searching, streaming downloads and integrity resolution, package/pool operations, portable export,
+These suites cover workflow parsing (JSON and PNG embedded metadata), placeholder dummy filtering, thumbnails, Drag & Drop file staging, workflow Drag & Drop reordering with customizable sort modes (manual, recent, name), model pool inspection and deduplication overview, instant-load link modes (hardlinks and symlinks), custom nodes live status resolution (flexible matching, Git remote extraction, and ComfyUI-Manager clipboard copy), Hugging Face model searching, streaming downloads and integrity resolution, package/pool operations, portable export,
 archive deletion (Recycle Bin, permanent delete and orphaned pool cleanup),
 safety checks, the desktop API, setup helpers, source documentation, and frontend
 flows such as missing-file copying, export confirmation and shared-file warnings.

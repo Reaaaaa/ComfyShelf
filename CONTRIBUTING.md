@@ -1,37 +1,34 @@
-# Development notes
+# Contributing to ComfyShelf
 
-This is a development draft licensed under [AGPL-3.0-only](LICENSE).
-Repository ownership and public contribution arrangements still need to be
-decided before publication.
+ComfyShelf is an open-source project licensed under [AGPL-3.0-only](LICENSE).
+Contributions, bug reports, and pull requests are welcome!
 
 ## Licensing
 
-The project uses GNU Affero General Public License version 3 only, not an
-automatic grant for later versions. The unmodified license text in `LICENSE`
+The project uses GNU Affero General Public License version 3 only (`AGPL-3.0-only`),
+not an automatic grant for later versions. The unmodified license text in `LICENSE`
 comes from the [SPDX license list](https://spdx.org/licenses/AGPL-3.0-only.html).
 
-Third-party components keep their own terms. The directly declared GUI dependency,
+Third-party components retain their own terms. The GUI framework,
 [pywebview](https://github.com/r0x0r/pywebview/blob/master/LICENSE), uses BSD-3-Clause.
-That initial source-level check is not a complete dependency or provenance audit.
-Before distribution, review the exact dependency versions, transitive packages,
-native runtimes, packaging tools and any bundled assets, and include their required
-notices. Do not apply ComfyShelf's license to users' models or workflow contents.
+Do not apply ComfyShelf's license to users' models or workflow contents.
 
 ## Project layout
 
 ```text
 comfy_archive.py           Parsing, packages, pool storage and safe file operations
+dependency_scan.py         Workflow dependency scanner and missing model completion
 model_downloader.py        Hugging Face model search and streaming background downloader
 workflow_switcher_gui.py   Desktop bridge, logging and library state
-verification_cache.py     Historical check results and metadata-based invalidation
-workflow_file.py          Workflow JSON lookup and safe JSON-only recovery
-gui/                      HTML, CSS, JavaScript and English/German translations
-tests/                    Python tests, frontend tests and a layout fixture
-docs/                     Usage, safety and release preparation
+verification_cache.py      Historical check results and metadata-based invalidation
+workflow_file.py           Workflow JSON lookup and safe JSON-only recovery
+gui/                       HTML, CSS, JavaScript and English/German translations
+tests/                     Python tests, frontend tests and a layout fixture
+docs/                      Usage, safety and technical references
 node-rules*.json           Empty default rules and a fictional schema example
 Start_ComfyShelf.cmd       Windows launcher for the project environment
 Setup_ComfyShelf.cmd       Double-click, consent-based setup entry point
-scripts/setup-bootstrap.ps1  Finds an installed suitable Python without installing one
+scripts/setup-bootstrap.ps1 Finds an installed suitable Python without installing one
 setup_comfyshelf.py        Isolated app setup, dependency checks and setup log
 ```
 

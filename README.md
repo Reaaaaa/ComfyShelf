@@ -4,7 +4,7 @@
 
 # ComfyShelf
 
-[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 200 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v1.0.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
+[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 206 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v1.0.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
 
 <sub>Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.</sub>
 
@@ -41,11 +41,17 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 - **Deduplicated Shared Model Pool (Store Every File Only Once)**  
   All your models live in a single, deduplicated archive on your secondary drive. When multiple workflows rely on the same 12 GB checkpoint, LoRA, or VAE, ComfyShelf stores that file **only once**. Individual workflow packages remain lightweight (just the node graph, metadata, and cover thumbnail), preventing your backup drive from filling up with redundant duplicates.
 
+- **Visual Model Pool & Deduplication Overview**  
+  Want to know exactly how much disk space ComfyShelf is saving? The dedicated **Model Pool** dashboard breaks down all stored models by category (Checkpoints, LoRAs, VAEs, Diffusion Models, etc.), calculates total deduplication savings, lists active models in ComfyUI, and shows which workflows share each file.
+
 - **Safe Unloading with SHA-256 Checksums (Anxiety-Free SSD Cleanup)**  
   Freeing up space by unloading a workflow removes local model copies from ComfyUI — but **only after** an automated SHA-256 checksum comparison confirms that an identical, uncorrupted copy is safely preserved in your archive. If a file is damaged, incomplete, or modified, ComfyShelf never touches the original. A verification cache keeps subsequent checks fast without re-reading gigabytes from disk.
 
 - **Shared Model Collision Protection (Never Breaks Other Active Projects)**  
   No broken workflows: before unloading or removing files, ComfyShelf checks whether other active workflows depend on those same models. Shared files are protected automatically so you don't accidentally break another project.
+
+- **Smooth Drag & Drop Workflow Sorting & Quick Reordering**  
+  Keep your most important setups right at hand. Freely arrange workflows in the sidebar via smooth drag & drop reordering with dedicated grip handles, or switch sorting modes on the fly (**Manual / Drag & Drop**, **Recently modified**, or **Name A–Z**). Your custom order is saved automatically.
 
 - **Visual Workflow Shelf with PNG Metadata Extraction**  
   Drag & drop a generated `.png` image directly onto ComfyShelf. It automatically extracts the embedded ComfyUI workflow graph, detects all required models, and uses the image as a high-res cover thumbnail with a built-in zoom lightbox. Standard `.json` workflow files and `.zip` archives work just as well.
