@@ -91,7 +91,8 @@ def scan_dependencies(archive, comfy_root, archive_root, progress=None):
             other = engine.load_package_manifest(sibling)
             files = {item.get("path"): item for item in other.get("files", [])}
             for asset in other.get("assets", []):
-                key = _key(asset.get("kind"), asset.get("filename"))
+                inferred_kind = engine.infer_model_kind(asset.get("kind"), asset.get("archive_path"), asset.get("filename"))
+                key = _key(inferred_kind, asset.get("filename"))
                 if key not in wanted or asset.get("status") != "included":
                     continue
                 entry = files.get(asset.get("archive_path"), {})

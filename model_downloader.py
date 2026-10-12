@@ -36,9 +36,14 @@ KIND_TO_FOLDER: dict[str, str] = {
 }
 
 
-def default_category_for_kind(kind: str) -> str:
+def default_category_for_kind(kind: str, filename: str = "") -> str:
     """Return the default ComfyUI models subfolder for a given asset kind."""
     clean_kind = str(kind or "").strip().lower()
+    if not clean_kind or clean_kind in ("model", "unknown", "other"):
+        if filename:
+            inferred = engine.infer_model_kind(clean_kind, filename=filename)
+            if inferred != "model":
+                clean_kind = inferred
     return KIND_TO_FOLDER.get(clean_kind, "checkpoints")
 
 
@@ -49,7 +54,7 @@ def resolve_model_target_path(comfy_root: Path, filename: str, kind: str = "") -
     pure_win = PureWindowsPath(clean_name)
     if pure.is_absolute() or pure_win.is_absolute() or bool(pure_win.drive) or ":" in clean_name or ".." in pure.parts or any(p in {"", "."} for p in pure.parts):
         raise ValueError(f"Unsicherer oder ungültiger Modellpfad: {filename}")
-    category = default_category_for_kind(kind)
+    category = default_category_for_kind(kind, filename)
     models_dir = (comfy_root / "models").resolve()
     target = (models_dir / category / pure).resolve()
     try:

@@ -699,7 +699,11 @@ class WorkflowSwitcherApi:
                         "path": str(target),
                         "archive_path": entry.get("path"),
                         "filename": asset.get("filename") or Path(str(entry.get("path"))).name,
-                        "kind": asset.get("kind", "model"),
+                        "kind": engine.infer_model_kind(
+                            asset.get("kind", "model"),
+                            entry.get("path"),
+                            asset.get("filename") or Path(str(entry.get("path"))).name,
+                        ),
                         "size": int(entry.get("size", 0)),
                         "present": exists,
                         "shared": entry.get("storage") == engine.SHARED_OBJECT_STORAGE,
@@ -1065,7 +1069,7 @@ class WorkflowSwitcherApi:
                 raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
             comfy_root = Path(installation["comfy_root"])
             target = model_downloader.resolve_model_target_path(comfy_root, filename, kind)
-            category = model_downloader.default_category_for_kind(kind)
+            category = model_downloader.default_category_for_kind(kind, filename)
             return {
                 "target_path": str(target),
                 "category": category,

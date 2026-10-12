@@ -587,6 +587,13 @@ class ParserTests(unittest.TestCase):
             self.assertTrue(shared_model["present_in_comfy"])
             self.assertTrue(shared_model["in_pool"])
 
+            self.assertEqual(MODULE.infer_model_kind("model", "models/vae/custom_vae_bf16.safetensors", "custom_vae_bf16.safetensors"), "vae")
+            self.assertEqual(MODULE.infer_model_kind("model", "models/text_encoders/qwen3vl.safetensors", "qwen3vl.safetensors"), "text_encoder")
+            self.assertEqual(MODULE.infer_model_kind("model", "models/diffusion_models/qwen_int8.safetensors", "qwen_int8.safetensors"), "diffusion_model")
+            self.assertEqual(MODULE.infer_model_kind("", "", "qwen_image_2.1_vae_bf16.safetensors"), "vae")
+            self.assertEqual(MODULE.infer_model_kind("", "", "ae.safetensors"), "vae")
+            self.assertEqual(MODULE.infer_model_kind("", "", "travel_guide.safetensors"), "model")
+
     def test_unload_blocks_shared_model_without_explicit_override(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)

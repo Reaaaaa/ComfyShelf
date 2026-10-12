@@ -499,7 +499,86 @@ def _is_model_filename(value: Any) -> bool:
     )
 
 
-def _generic_kind(node_type: str, field: str = "") -> tuple[str, tuple[str, ...]]:
+FOLDER_TO_KIND: dict[str, str] = {
+    "checkpoints": "checkpoint",
+    "checkpoint": "checkpoint",
+    "diffusion_models": "diffusion_model",
+    "diffusion_model": "diffusion_model",
+    "unet": "diffusion_model",
+    "unets": "diffusion_model",
+    "vae": "vae",
+    "vaes": "vae",
+    "vae_approx": "vae",
+    "loras": "lora",
+    "lora": "lora",
+    "text_encoders": "text_encoder",
+    "text_encoder": "text_encoder",
+    "clip": "text_encoder",
+    "controlnet": "controlnet",
+    "diffcontrolnet": "controlnet",
+    "clip_vision": "clip_vision",
+    "upscale_models": "upscale_model",
+    "upscale_model": "upscale_model",
+    "style_models": "style_model",
+    "style_model": "style_model",
+    "photomaker": "photomaker",
+    "embeddings": "embedding",
+    "embedding": "embedding",
+    "gligen": "gligen",
+    "hypernetworks": "hypernetwork",
+    "hypernetwork": "hypernetwork",
+}
+
+
+def infer_model_kind(raw_kind: str = "", path: str | Path = "", filename: str = "") -> str:
+    """Infer or normalize model kind from explicit kind, model path, and filename."""
+    raw = (raw_kind or "").strip().casefold()
+    if raw and raw not in ("model", "unknown", "other"):
+        if raw in FOLDER_TO_KIND:
+            return FOLDER_TO_KIND[raw]
+
+    path_str = str(path or "").replace("\\", "/").strip().casefold()
+    if path_str:
+        parts = [p for p in path_str.split("/") if p]
+        if "models" in parts:
+            idx = parts.index("models")
+            if idx + 1 < len(parts):
+                folder = parts[idx + 1]
+                if folder in FOLDER_TO_KIND:
+                    return FOLDER_TO_KIND[folder]
+        for part in parts[:-1]:
+            if part in FOLDER_TO_KIND:
+                return FOLDER_TO_KIND[part]
+
+    fn = Path(filename or path or "").name.casefold()
+    if fn:
+        if (
+            re.search(r"(?:^|[\W_])(?:vae|taesd(?:xl)?)(?:[\W_]|$)", fn)
+            or fn.startswith("ae.")
+            or re.search(r"(?:^|[\W_])ae(?:[\W_]|$)", fn)
+        ):
+            return "vae"
+        if re.search(r"(?:^|[\W_])loras?(?:[\W_]|$)", fn):
+            return "lora"
+        if re.search(r"(?:^|[\W_])(?:text[_-]?encoder|clip|t5(?:xxl)?|qwen\d*vl)(?:[\W_]|$)", fn):
+            return "text_encoder"
+        if re.search(r"(?:^|[\W_])(?:diffusion[_-]?model|unet)(?:[\W_]|$)", fn):
+            return "diffusion_model"
+        if re.search(r"(?:^|[\W_])controlnet(?:[\W_]|$)", fn):
+            return "controlnet"
+        if re.search(r"(?:^|[\W_])clip[_-]?vision(?:[\W_]|$)", fn):
+            return "clip_vision"
+        if re.search(r"(?:^|[\W_])(?:upscale|esrgan|remacri|nmkd|4x|2x)(?:[\W_]|$)", fn):
+            return "upscale_model"
+        if re.search(r"(?:^|[\W_])style[_-]?model(?:[\W_]|$)", fn):
+            return "style_model"
+        if re.search(r"(?:^|[\W_])checkpoint(?:[\W_]|$)", fn):
+            return "checkpoint"
+
+    return "model"
+
+
+def _generic_kind(node_type: str, field: str = "", filename: str = "") -> tuple[str, tuple[str, ...]]:
     key = f"{node_type} {field}".lower()
     guesses = (
         ("lora", "lora", ("loras",)),
@@ -517,6 +596,21 @@ def _generic_kind(node_type: str, field: str = "") -> tuple[str, tuple[str, ...]
     for marker, kind, categories in guesses:
         if marker in key:
             return kind, categories
+    if filename:
+        inferred = infer_model_kind("", filename=filename)
+        if inferred != "model":
+            cat_map: dict[str, tuple[str, ...]] = {
+                "checkpoint": ("checkpoints",),
+                "diffusion_model": ("diffusion_models", "unet"),
+                "vae": ("vae",),
+                "text_encoder": ("text_encoders", "clip"),
+                "lora": ("loras",),
+                "controlnet": ("controlnet",),
+                "clip_vision": ("clip_vision",),
+                "upscale_model": ("upscale_models",),
+                "style_model": ("style_models",),
+            }
+            return inferred, cat_map.get(inferred, ())
     return "model", ()
 
 
@@ -575,7 +669,7 @@ def parse_ui_workflow(data: dict[str, Any], rules: dict[str, Any] | None = None)
         # deliberately marked as a heuristic so callers can review it.
         for field, value in _walk_strings(widget_values, "widgets_values"):
             if _is_model_filename(value) and value not in claimed:
-                kind, categories = _generic_kind(node_type, field)
+                kind, categories = _generic_kind(node_type, field, value)
                 assets.append(
                     Asset(
                         kind=kind,
@@ -623,7 +717,7 @@ def parse_api_prompt(data: dict[str, Any], rules: dict[str, Any] | None = None) 
                 )
         for field, value in _walk_strings(inputs, "inputs"):
             if _is_model_filename(value) and value not in claimed:
-                kind, categories = _generic_kind(node_type, field)
+                kind, categories = _generic_kind(node_type, field, value)
                 assets.append(
                     Asset(
                         kind=kind,
@@ -1449,6 +1543,7 @@ def build_package(
                     except ValueError as exc:
                         raise ValueError(f"Asset liegt außerhalb des ComfyUI-Roots: {source}") from exc
                     arc = _zip_path(relative)
+                    entry["kind"] = infer_model_kind(asset["kind"], arc, asset["filename"])
                     if arc.casefold() not in archive_paths:
                         if shared_pool:
                             object_path, digest, reused = _store_file_as_object(
@@ -1953,6 +2048,7 @@ def import_package(
                     }
                     if matched:
                         arc = matched.path
+                        asset_entry["kind"] = infer_model_kind(asset.kind, arc, asset.filename)
                         if arc.casefold() not in copied:
                             copied[arc.casefold()] = _copy_import_member(
                                 source_archive, matched, target_archive, arc, "model", progress
@@ -2311,28 +2407,6 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
     root = archive_root.resolve()
     pool_objects_dir = root / ".comfyshelf" / "objects" / "sha256"
 
-    def normalize_kind(raw_kind: str) -> str:
-        k = (raw_kind or "model").strip().casefold()
-        if k in ("checkpoint", "checkpoints"):
-            return "checkpoint"
-        if k in ("diffusion_model", "diffusion_models", "unet"):
-            return "diffusion_model"
-        if k in ("vae",):
-            return "vae"
-        if k in ("text_encoder", "text_encoders", "clip"):
-            return "text_encoder"
-        if k in ("lora", "loras"):
-            return "lora"
-        if k in ("controlnet", "diffcontrolnet"):
-            return "controlnet"
-        if k in ("clip_vision",):
-            return "clip_vision"
-        if k in ("upscale_model", "upscale_models"):
-            return "upscale_model"
-        if k in ("style_model", "style_models"):
-            return "style_model"
-        return "model"
-
     warnings: list[dict[str, str]] = []
     models_by_key: dict[str, dict[str, Any]] = {}
 
@@ -2352,7 +2426,7 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
                 fn = asset.get("filename") or "unknown"
                 sha = str(asset.get("sha256") or "").casefold()
                 sz = int(asset.get("size") or 0)
-                kind = normalize_kind(asset.get("kind", "model"))
+                kind = infer_model_kind(asset.get("kind", "model"), asset.get("archive_path") or "", fn)
                 key = sha if len(sha) == 64 else f"{kind}:{fn.casefold()}"
                 if key not in models_by_key:
                     models_by_key[key] = {
@@ -2384,7 +2458,7 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
             fn = asset.get("filename") or Path(raw_path).name or "unknown"
             sha = str(entry.get("sha256") or asset.get("sha256") or "").casefold()
             sz = int(entry.get("size") or asset.get("size") or 0)
-            kind = normalize_kind(asset.get("kind") or "model")
+            kind = infer_model_kind(asset.get("kind") or "model", raw_path, fn)
             key = sha if len(sha) == 64 else f"{kind}:{fn.casefold()}"
 
             storage_mode = entry.get("storage") or (
@@ -2434,6 +2508,10 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
                 }
             else:
                 existing = models_by_key[key]
+                if existing.get("kind") in ("model", "", None) and kind not in ("model", "", None):
+                    existing["kind"] = kind
+                if str(existing.get("filename", "")).startswith("object_") and not str(fn).startswith("object_"):
+                    existing["filename"] = fn
                 if not existing.get("present_in_comfy") and exists_in_comfy:
                     existing["present_in_comfy"] = True
                     existing["link_type"] = link_type
