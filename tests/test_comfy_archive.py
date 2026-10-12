@@ -1192,6 +1192,30 @@ class ParserTests(unittest.TestCase):
                 MODULE.resolve_custom_node("efficiency-nodes", comfy_root),
                 custom_nodes / "efficiency-nodes-comfyui",
             )
+            # Git author match (e.g. jamesWalker55/comfyui-various -> jameswalker-nodes)
+            various_node = custom_nodes / "comfyui-various"
+            various_node.mkdir()
+            various_git = various_node / ".git"
+            various_git.mkdir()
+            (various_git / "config").write_text(
+                '[remote "origin"]\n\turl = https://github.com/jamesWalker55/comfyui-various.git\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                MODULE.resolve_custom_node("jameswalker-nodes", comfy_root),
+                various_node,
+            )
+            # pyproject.toml name match
+            pyproj_node = custom_nodes / "my-custom-addon"
+            pyproj_node.mkdir()
+            (pyproj_node / "pyproject.toml").write_text(
+                '[project]\nname = "special-nodes-pkg"\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                MODULE.resolve_custom_node("special-nodes-pkg", comfy_root),
+                pyproj_node,
+            )
             # Not found
             self.assertIsNone(MODULE.resolve_custom_node("non-existent-node", comfy_root))
 

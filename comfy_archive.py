@@ -1192,6 +1192,37 @@ def resolve_custom_node(package: str, comfy_root: Path) -> Path | None:
             if len(core_wanted) >= 3 and _core_node_name(repo_part) == core_wanted:
                 return child
 
+    # Pass 5: pyproject.toml package name match
+    for child in children:
+        pyproject = child / "pyproject.toml"
+        if pyproject.is_file():
+            try:
+                content = pyproject.read_text(encoding="utf-8", errors="replace")
+                match = re.search(r'name\s*=\s*["\']([^"\']+)["\']', content)
+                if match:
+                    pkg_name = match.group(1).strip()
+                    if pkg_name.casefold() == wanted or pkg_name.casefold() == wanted_short:
+                        return child
+                    if clean_wanted and _clean_node_name(pkg_name) == clean_wanted:
+                        return child
+            except Exception:
+                pass
+
+    # Pass 6: git author match when package name references the author (e.g. jameswalker-nodes -> jamesWalker55/comfyui-various)
+    author_matches: list[Path] = []
+    for child in children:
+        remote_url = _read_git_remote_url(child)
+        if remote_url:
+            parts = [p for p in remote_url.rstrip("/").split("/") if p]
+            if len(parts) >= 2:
+                author_clean = re.sub(r"\d+$", "", _clean_node_name(parts[-2]))
+                wanted_clean = re.sub(r"(?:nodes?|comfyui|comfy)+$", "", clean_wanted)
+                if len(author_clean) >= 4 and len(wanted_clean) >= 4:
+                    if author_clean == wanted_clean or author_clean in wanted_clean or wanted_clean in author_clean:
+                        author_matches.append(child)
+    if len(author_matches) == 1:
+        return author_matches[0]
+
     return None
 
 
