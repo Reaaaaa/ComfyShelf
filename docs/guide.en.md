@@ -111,6 +111,20 @@ Depending on the current state, the button may say **Load missing models** or
 **Unload available models**. “Loaded” describes files present in ComfyUI's
 folders, not models currently held in graphics-card memory.
 
+### Model Loading Methods: Instant Links vs. Full Copy
+
+Under **Settings → Model loading method**, you can configure how models are restored into ComfyUI:
+- **Instant Link (Recommended):** Uses NTFS hardlinks (on the same drive) or Windows symlinks (across drives). Multi-gigabyte models become available in ComfyUI in milliseconds — consuming 0 additional bytes of disk space.
+- **Full Copy:** Physically copies model files from your archive storage into ComfyUI (traditional duplication).
+
+#### Seamless Compatibility with Third-Party Applications & Integrations
+**Can external tools and applications based on ComfyUI use the symlinks in the Comfy directory?**  
+**Yes, completely seamlessly.**  
+Because Windows and the NTFS file system resolve symlinks and hardlinks transparently at the operating system level, linked models behave exactly like standard local files for any software:
+- **Extensions & Plugins:** Third-party integrations (such as the Krita AI plugin, Photoshop extensions, Blender addons, or SwarmUI) access models in the ComfyUI folder without any difference.
+- **PyTorch & Safetensors:** Native loaders (`torch.load`, `safetensors.torch.load_file`) and memory mapping (`mmap`) read linked models directly with zero overhead or configuration changes.
+- **Zero Configuration Needed:** Neither your workflows nor external tools need special configuration to interact with linked models.
+
 ### Open the workflow in ComfyUI again
 
 Click **Show workflow file** below the workflow name. Explorer opens with the

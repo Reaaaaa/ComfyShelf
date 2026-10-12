@@ -120,6 +120,20 @@ Je nach Zustand heißen die Buttons auch **Fehlende Modelle laden** oder
 **Vorhandene Modelle entladen**. „Geladen“ meint Dateien in den ComfyUI-Ordnern,
 nicht Modelle, die gerade im Grafikkartenspeicher liegen.
 
+### Modell-Lademethoden: Sofort-Verknüpfung vs. Vollständige Kopie
+
+Unter **Einstellungen → Modell-Lademethode** kannst du festlegen, wie Modelle beim Laden bereitgestellt werden:
+- **Sofort-Verknüpfung (Empfohlen):** Nutzt NTFS-Hardlinks (auf demselben Laufwerk) oder Windows-Symlinks (laufwerksübergreifend). Modelle stehen in Millisekunden in ComfyUI bereit – ohne Wartezeit beim Kopieren von Gigabytes und mit 0 Byte zusätzlichem SSD-Speicherbedarf.
+- **Vollständige Kopie:** Kopiert die Modelldateien physisch vollständig vom Auslagerungsort nach ComfyUI (klassische Duplizierung).
+
+#### Transparenz für Drittanwendungen, Extensions und Skripte
+**Können andere Programme die Symlinks und Hardlinks im ComfyUI-Ordner ganz normal nutzen?**  
+**Ja, uneingeschränkt.**  
+Da Windows Symlinks und Hardlinks direkt auf Betriebssystem-Ebene (NTFS) auflöst, verhalten sich verlinkte Modelle für jede Anwendung exakt wie echte lokale Dateien:
+- **Erweiterungen & Plugins:** Tools wie das Krita-AI-Plugin, Photoshop-Erweiterungen, Blender-Addons oder SwarmUI greifen transparent auf die Modelle im ComfyUI-Verzeichnis zu.
+- **PyTorch & Safetensors:** PyTorch (`torch.load`, `safetensors.torch.load_file`) und Memory-Mapping (`mmap`) laden verlinkte Dateien ohne Geschwindigkeitsverlust oder Konfigurationsänderungen.
+- **Keine Anpassungen nötig:** Weder deine Workflows noch Drittanwendungen müssen wissen, dass die Modelldateien physisch im zentralen Modellpool liegen.
+
 ### Den Workflow wieder in ComfyUI öffnen
 
 Klicke unter dem Workflow-Namen auf **Workflow-Datei anzeigen**. Der Explorer
