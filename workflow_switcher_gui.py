@@ -552,7 +552,7 @@ class WorkflowSwitcherApi:
         return {
             "configured": True,
             "installation": installation,
-            "validation": {"comfy_free": None},
+            "validation": {"comfy_free": None, "archive_free": None},
             "packages": [],
             "summary": {"loaded": 0, "archived": 0, "partial": 0, "hidden": 0, "archive_bytes": 0},
             "scan_warnings": [],

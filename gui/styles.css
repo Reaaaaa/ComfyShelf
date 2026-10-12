@@ -558,18 +558,19 @@ h1, h2, h3, p { margin: 0; }
 
 .content { min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; background: var(--ink-900); }
 .top-summary { height: 54px; flex: 0 0 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; border-bottom: 1px solid var(--line-soft); }
-.summary-path, .storage-readout { display: flex; align-items: center; gap: 9px; font-size: 12px; }
-.summary-path { min-width: 0; overflow: hidden; }
+.summary-path { display: flex; align-items: center; gap: 9px; font-size: 12px; min-width: 0; overflow: hidden; }
 .summary-path .muted { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.storage-tools { display: flex; align-items: center; gap: 6px; }
-.storage-readout { margin-right: 3px; }
+.storage-tools { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.storage-readouts { display: flex; align-items: center; gap: 10px; margin-right: 4px; }
+.storage-readout { display: flex; align-items: center; gap: 7px; font-size: 12px; white-space: nowrap; }
+.storage-readout strong { color: var(--text-soft); font: 500 12px/1 var(--mono); }
+.storage-readout-divider { color: var(--line); font-size: 12px; opacity: 0.45; user-select: none; }
 .summary-button { width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); transition: .14s ease; }
 .summary-button:hover { border-color: var(--line); background: var(--ink-750); color: var(--text); }
 .summary-button svg { width: 14px; height: 14px; }
 .summary-button.refreshing svg { animation: spin .75s linear infinite; }
 .summary-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 4px rgba(121,175,167,.09); }
 .path-divider { color: #435059; }
-.storage-readout strong { color: var(--text-soft); font: 500 12px/1 var(--mono); }
 
 .empty-state { flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; max-width: 610px; margin: 0 auto; padding: 20px 40px 80px; }
 .empty-rail { display: flex; align-items: flex-end; gap: 6px; height: 76px; margin-bottom: 30px; }

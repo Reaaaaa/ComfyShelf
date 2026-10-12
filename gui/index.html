@@ -145,9 +145,16 @@
             <span class="muted" id="comfyPath" data-i18n="summary.choose_comfy">Choose ComfyUI folder</span>
           </div>
           <div class="storage-tools">
-            <div class="storage-readout">
-              <span class="muted" data-i18n="summary.comfy_free">ComfyUI free</span>
-              <strong id="freeSpace">—</strong>
+            <div class="storage-readouts">
+              <div class="storage-readout" id="comfyStorageReadout">
+                <span class="muted" data-i18n="summary.comfy_free">Available space on your ComfyUI drive</span>
+                <strong id="freeSpace">—</strong>
+              </div>
+              <span class="storage-readout-divider" aria-hidden="true">|</span>
+              <div class="storage-readout" id="archiveStorageReadout">
+                <span class="muted" data-i18n="summary.archive_free">Available space on your model pool drive</span>
+                <strong id="archiveFreeSpace">—</strong>
+              </div>
             </div>
             <button class="summary-button" id="modelPoolButton" title="Open model pool overview" data-i18n-title="model_pool.open"><svg><use href="#i-database"/></svg></button>
             <button class="summary-button" id="tourHelpButton" title="Start feature tour" data-i18n-title="tour.help_button"><svg><use href="#i-help"/></svg></button>

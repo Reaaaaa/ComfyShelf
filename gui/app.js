@@ -757,6 +757,7 @@ function renderUnconfigured() {
   $('installationName').textContent = t('summary.not_configured');
   $('comfyPath').textContent = t('summary.choose_comfy');
   $('freeSpace').textContent = '—';
+  if ($('archiveFreeSpace')) $('archiveFreeSpace').textContent = '—';
   $('workflowList').innerHTML = `<div class="workflow-list-empty">${t('settings.title')}</div>`;
   $('loadingState').classList.add('hidden');
   $('detailView').classList.add('hidden');
@@ -768,6 +769,9 @@ function renderSummary() {
   $('installationName').textContent = installation.name;
   $('comfyPath').textContent = installation.comfy_root;
   $('freeSpace').textContent = formatBytes(validation?.comfy_free);
+  if ($('archiveFreeSpace')) {
+    $('archiveFreeSpace').textContent = formatBytes(validation?.archive_free);
+  }
 }
 
 const thumbnailCache = new Map();

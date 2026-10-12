@@ -57,6 +57,7 @@
   "summary.choose_comfy": "ComfyUI-Ordner wählen",
   "summary.not_configured": "Nicht eingerichtet",
   "summary.comfy_free": "ComfyUI frei",
+  "summary.archive_free": "Modellpool frei",
   "summary.refresh": "Speicher und Paketstatus aktualisieren",
   "empty.eyebrow": "Dein Workflow-Rack",
   "empty.title": "Große Workflows.<br>Nur dann lokal, wenn du sie brauchst.",

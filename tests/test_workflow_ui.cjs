@@ -1070,6 +1070,8 @@ async function run(language) {
   assert.ok(indexHtml.includes('id="workflowSortDropdown"'));
   assert.ok(indexHtml.includes('id="i-sort"'));
   assert.ok(indexHtml.includes('id="i-grip"'));
+  assert.ok(indexHtml.includes('id="archiveFreeSpace"'));
+  assert.ok(indexHtml.includes('id="archiveStorageReadout"'));
 
   const readmeMd = fs.readFileSync(path.join(root, '..', 'README.md'), 'utf8');
   assert.ok(readmeMd.includes('Python tests: 206 passed locally'));
@@ -1172,6 +1174,7 @@ async function run(language) {
       'sort.count_one',
       'sort.drag_grip',
       'sort.switched_manual',
+      'summary.archive_free',
     ]) {
       assert.ok(loc[key], `Missing key ${key} in ${lang}.json`);
     }
