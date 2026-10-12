@@ -294,6 +294,8 @@
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><path d="m3 7 4-4 4 4M7 3v14M21 17l-4 4-4-4M17 21V7"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5" fill="currentColor"/><circle cx="15" cy="6" r="1.5" fill="currentColor"/><circle cx="9" cy="12" r="1.5" fill="currentColor"/><circle cx="15" cy="12" r="1.5" fill="currentColor"/><circle cx="9" cy="18" r="1.5" fill="currentColor"/><circle cx="15" cy="18" r="1.5" fill="currentColor"/></symbol>
   </svg>
 
   <!-- Virtual Cinema Pointer -->
@@ -395,10 +397,22 @@
             <button class="filter-chip">Archived</button>
           </div>
 
+          <div class="workflow-list-toolbar">
+            <span class="workflow-list-count" id="demoWorkflowListCount">6 Workflows</span>
+            <div class="workflow-sort-container" id="demoWorkflowSortContainer">
+              <button type="button" class="workflow-sort-button" id="demoWorkflowSortButton" title="Sort order">
+                <svg><use href="#i-sort"/></svg>
+                <span id="demoWorkflowSortLabel">Manual</span>
+                <svg class="sort-chevron"><use href="#i-chevron"/></svg>
+              </button>
+            </div>
+          </div>
+
           <!-- Workflow List exactly matching user's screenshot -->
           <div class="workflow-list" id="demoWorkflowList">
             <!-- Item 1: MiniMax-H3_Ref2VA_2-Portraets_16GB (Active in screenshot) -->
             <button type="button" class="workflow-item active" id="itemMinimax" data-state="archived">
+              <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
                 <span class="workflow-name">MiniMax-H3_Ref2VA_2-P...</span>
@@ -411,6 +425,7 @@
 
             <!-- Item 2: MiniMax-H3_4070TiS_16GB -->
             <button type="button" class="workflow-item" id="itemMinimax4070" data-state="archived">
+              <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
                 <span class="workflow-name">MiniMax-H3_4070TiS_16...</span>
@@ -423,6 +438,7 @@
 
             <!-- Item 3: Qwen_Image_2512_3xLoRA -->
             <button type="button" class="workflow-item" id="itemQwenLora" data-state="archived">
+              <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
                 <span class="workflow-name">Qwen_Image_2512_3xLoRA</span>
@@ -438,6 +454,7 @@
 
             <!-- Item 4: Qwen_Image_Edit_2511_Illustrious (The one with missing model!) -->
             <button type="button" class="workflow-item" id="itemQwenEdit" data-state="partial">
+              <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
                 <span class="workflow-name">Qwen_Image_Edit_2511_I...</span>
@@ -453,6 +470,7 @@
 
             <!-- Item 5: Minimax Music 3 (Loaded in screenshot) -->
             <button type="button" class="workflow-item" id="itemMusic" data-state="loaded">
+              <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
                 <span class="workflow-name">Minimax Music 3</span>
@@ -465,6 +483,7 @@
 
             <!-- Item 6: RVC_Vocal_Training_Template -->
             <button type="button" class="workflow-item" id="itemRvc" data-state="archived">
+              <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
                 <span class="workflow-name">RVC_Vocal_Training_Tem...</span>

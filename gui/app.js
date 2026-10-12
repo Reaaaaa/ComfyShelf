@@ -2,6 +2,9 @@ const app = {
   state: null,
   selectedPath: null,
   filter: 'all',
+  sortMode: getStorage('comfyshelf_workflow_sort_mode', 'manual'),
+  isDraggingWorkflow: false,
+  draggedWorkflowPath: null,
   pendingConfirm: null,
   toastTimer: null,
   loadingTimer: null,
@@ -66,6 +69,9 @@ function applyTranslations() {
       renderTourStep(currentTourStep);
     }
   } catch (_) {}
+  try {
+    if (typeof updateSortDropdownUI === 'function') updateSortDropdownUI();
+  } catch (_) {}
 }
 
 function installLocale(payload) {
@@ -102,6 +108,129 @@ function searchableFilename(value) {
 
 function cleanCivitaiQuery(value) {
   return searchableFilename(value).replace(/\.(safetensors|ckpt|pt|pth|bin|onnx)$/i, '').trim();
+}
+
+function getWorkflowKey(itemOrPath) {
+  if (!itemOrPath) return '';
+  const path = typeof itemOrPath === 'string' ? itemOrPath : (itemOrPath.path || '');
+  return searchableFilename(path);
+}
+
+function getCustomWorkflowOrder() {
+  try {
+    const raw = getStorage('comfyshelf_workflow_order', '[]');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function setCustomWorkflowOrder(orderList) {
+  try {
+    setStorage('comfyshelf_workflow_order', JSON.stringify(orderList));
+  } catch (_) {}
+}
+
+function renameCustomWorkflowKey(oldPath, newPath) {
+  const oldKey = getWorkflowKey(oldPath);
+  const newKey = getWorkflowKey(newPath);
+  if (!oldKey || !newKey || oldKey === newKey) return;
+  const list = getCustomWorkflowOrder();
+  const idx = list.indexOf(oldKey);
+  if (idx !== -1) {
+    list[idx] = newKey;
+    setCustomWorkflowOrder(list);
+  }
+}
+
+function removeCustomWorkflowKey(path) {
+  const key = getWorkflowKey(path);
+  if (!key) return;
+  const list = getCustomWorkflowOrder();
+  const next = list.filter(k => k !== key);
+  if (next.length !== list.length) {
+    setCustomWorkflowOrder(next);
+  }
+}
+
+function getSortedPackages(packages = []) {
+  const list = [...packages];
+  const mode = app.sortMode || 'manual';
+  if (mode === 'name') {
+    const lang = app.language === 'de' ? 'de' : 'en';
+    return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', lang, { numeric: true, sensitivity: 'base' }));
+  }
+  if (mode === 'recent') {
+    return list.sort((a, b) => ((b.modified || 0) - (a.modified || 0)) || (a.name || '').localeCompare(b.name || ''));
+  }
+  // 'manual'
+  const order = getCustomWorkflowOrder();
+  return list.sort((a, b) => {
+    const keyA = searchableFilename(a.path);
+    const keyB = searchableFilename(b.path);
+    const indexA = order.indexOf(keyA);
+    const indexB = order.indexOf(keyB);
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    if (indexA !== -1 && indexB === -1) return 1;
+    if (indexA === -1 && indexB !== -1) return -1;
+    return ((b.modified || 0) - (a.modified || 0)) || (a.name || '').localeCompare(b.name || '');
+  });
+}
+
+function moveWorkflowInOrder(draggedPath, targetPath, position = 'before') {
+  const draggedKey = searchableFilename(draggedPath);
+  const targetKey = searchableFilename(targetPath);
+  if (!draggedKey || !targetKey || draggedKey === targetKey) return;
+
+  const currentSorted = getSortedPackages(app.state?.packages || []);
+  let orderedKeys = currentSorted.map(p => searchableFilename(p.path));
+
+  orderedKeys = orderedKeys.filter(k => k !== draggedKey);
+  const targetIndex = orderedKeys.indexOf(targetKey);
+  if (targetIndex === -1) return;
+
+  const insertIndex = position === 'after' ? targetIndex + 1 : targetIndex;
+  orderedKeys.splice(insertIndex, 0, draggedKey);
+
+  setCustomWorkflowOrder(orderedKeys);
+
+  if (app.sortMode !== 'manual') {
+    app.sortMode = 'manual';
+    setStorage('comfyshelf_workflow_sort_mode', 'manual');
+    updateSortDropdownUI();
+    toast(t('sort.switched_manual'));
+  }
+
+  renderLibrary();
+}
+
+function updateSortDropdownUI() {
+  const mode = app.sortMode || 'manual';
+  const label = $('workflowSortLabel');
+  if (label) {
+    const key = `sort.${mode}_short`;
+    label.setAttribute('data-i18n', key);
+    label.textContent = t(key);
+  }
+  document.querySelectorAll?.('.sort-option')?.forEach(option => {
+    const isSelected = option.dataset.sort === mode;
+    option.classList.toggle('selected', isSelected);
+  });
+}
+
+function toggleSortDropdown(show) {
+  const dropdown = $('workflowSortDropdown');
+  if (!dropdown) return;
+  const shouldOpen = show !== undefined ? Boolean(show) : dropdown.classList.contains('hidden');
+  dropdown.classList.toggle('hidden', !shouldOpen);
+}
+
+function closeSortDropdown() {
+  const dropdown = $('workflowSortDropdown');
+  if (dropdown && !dropdown.classList.contains('hidden')) {
+    dropdown.classList.add('hidden');
+  }
 }
 
 function missingFileHtml(item, compact = false) {
@@ -791,16 +920,28 @@ function renderLibrary() {
     return match.matches;
   });
 
-  const packages = packagesWithMatch.map(p => p.item);
+  const sortedPackages = getSortedPackages(packagesWithMatch.map(p => p.item));
+  const pkgToMatch = new Map(packagesWithMatch.map(p => [p.item.path, p.match]));
+  const sortedPackagesWithMatch = sortedPackages.map(item => ({
+    item,
+    match: pkgToMatch.get(item.path) || { matches: true, reason: null }
+  }));
+
+  const countEl = $('workflowListCount');
+  if (countEl) {
+    const total = sortedPackages.length;
+    countEl.textContent = total === 1 ? t('sort.count_one', {count: 1}) : t('sort.count', {count: total});
+  }
+
   const rows = [];
   if (app.state.loading) rows.push(`<div class="library-scan-status"><span class="loading-pulse"></span><span>${t('library.scanning')}</span></div>`);
-  if (!packages.length && !app.state.loading && !(app.state.scan_warnings || []).length) {
+  if (!sortedPackages.length && !app.state.loading && !(app.state.scan_warnings || []).length) {
     const emptyMsg = query
       ? t('library.search_empty', {query: escapeHtml((app.searchQuery || '').trim())})
       : (app.state.packages?.length ? t('library.filter_empty') : t('library.empty'));
     rows.push(`<div class="workflow-list-empty">${emptyMsg}</div>`);
   }
-  rows.push(...packagesWithMatch.map(({ item, match }) => {
+  rows.push(...sortedPackagesWithMatch.map(({ item, match }) => {
     const reason = match.reason;
     const matchHintHtml = reason ? `
       <div class="workflow-match-hint" title="${escapeHtml(reason.text)}">
@@ -809,7 +950,8 @@ function renderLibrary() {
         <span class="match-text">${escapeHtml(reason.text)}</span>
       </div>` : '';
     return `
-      <button class="workflow-item ${item.path === app.selectedPath ? 'active' : ''}" data-path="${escapeHtml(item.path)}" data-state="${item.state}">
+      <button class="workflow-item ${item.path === app.selectedPath ? 'active' : ''}" data-path="${escapeHtml(item.path)}" data-state="${item.state}" draggable="true">
+        <span class="workflow-item-grip" title="${escapeHtml(t('sort.drag_grip'))}" aria-hidden="true">${icon('grip')}</span>
         <div class="workflow-item-thumb">${renderItemThumbHtml(item)}</div>
         <div class="workflow-item-info">
           <div class="workflow-name-wrap">
@@ -824,11 +966,74 @@ function renderLibrary() {
   if (!query && (app.filter === 'all' || app.filter === 'archived')) rows.push(...(app.state.scan_warnings || []).map(item => `
     <div class="invalid-package" title="${t('errors.invalid_package')}"><strong>${escapeHtml(item.name)}</strong><span>${t('library.invalid')}</span></div>`));
   list.innerHTML = rows.join('');
-  list.querySelectorAll('.workflow-item').forEach(button => button.addEventListener('click', () => {
-    app.selectedPath = button.dataset.path;
-    renderLibrary();
-    renderDetail(app.state.packages.find(item => item.path === app.selectedPath));
-  }));
+  list.querySelectorAll('.workflow-item').forEach(button => {
+    button.addEventListener('click', () => {
+      app.selectedPath = button.dataset.path;
+      renderLibrary();
+      renderDetail(app.state.packages.find(item => item.path === app.selectedPath));
+    });
+
+    button.addEventListener('dragstart', event => {
+      app.isDraggingWorkflow = true;
+      app.draggedWorkflowPath = button.dataset.path;
+      button.classList.add('dragging');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', button.dataset.path);
+        event.dataTransfer.setData('application/x-comfyshelf-workflow', button.dataset.path);
+      }
+    });
+
+    button.addEventListener('dragend', () => {
+      app.isDraggingWorkflow = false;
+      app.draggedWorkflowPath = null;
+      button.classList.remove('dragging');
+      list.querySelectorAll('.workflow-item').forEach(el => {
+        el.classList.remove('drop-target-before', 'drop-target-after');
+      });
+    });
+
+    button.addEventListener('dragover', event => {
+      if (!app.isDraggingWorkflow || app.draggedWorkflowPath === button.dataset.path) return;
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move';
+      }
+      const rect = button.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      const isAfter = event.clientY > midY;
+      button.classList.toggle('drop-target-after', isAfter);
+      button.classList.toggle('drop-target-before', !isAfter);
+    });
+
+    button.addEventListener('dragleave', event => {
+      if (!button.contains(event.relatedTarget)) {
+        button.classList.remove('drop-target-before', 'drop-target-after');
+      }
+    });
+
+    button.addEventListener('drop', event => {
+      if (!app.isDraggingWorkflow || !app.draggedWorkflowPath) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const dragged = app.draggedWorkflowPath;
+      const target = button.dataset.path;
+      const isAfter = button.classList.contains('drop-target-after');
+      button.classList.remove('drop-target-before', 'drop-target-after');
+      if (dragged && target && dragged !== target) {
+        moveWorkflowInOrder(dragged, target, isAfter ? 'after' : 'before');
+      }
+    });
+  });
+
+  list?.addEventListener?.('dragover', event => {
+    if (!app.isDraggingWorkflow) return;
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  });
+
   loadVisibleThumbnails();
 }
 
@@ -2034,6 +2239,7 @@ async function saveRename() {
   showRenameError();
   try {
     const result = await callApi('rename_archive', pkg.path, newName);
+    renameCustomWorkflowKey(pkg.path, result.path);
     closeRename();
     await refreshState(result.path);
     toast(result.changed ? t('rename.done', {name: result.name}) : t('rename.unchanged'));
@@ -2112,6 +2318,7 @@ async function confirmDeleteArchive() {
   button.disabled = true;
   try {
     const result = await callApi('delete_archive', pkg.path, sendToTrash, deleteOrphans);
+    removeCustomWorkflowKey(pkg.path);
     closeDeleteModal();
     renderDetail(null);
     await refreshState();
@@ -2368,9 +2575,34 @@ function installEvents() {
     }
   });
 
+  $('workflowSortButton')?.addEventListener('click', event => {
+    event.stopPropagation();
+    toggleSortDropdown();
+  });
+  document.querySelectorAll('.sort-option').forEach(option => {
+    option.addEventListener('click', event => {
+      event.stopPropagation();
+      const nextMode = option.dataset.sort;
+      if (nextMode && nextMode !== app.sortMode) {
+        app.sortMode = nextMode;
+        setStorage('comfyshelf_workflow_sort_mode', nextMode);
+        updateSortDropdownUI();
+        renderLibrary();
+      }
+      closeSortDropdown();
+    });
+  });
+  document.addEventListener('click', event => {
+    if (!event.target.closest?.('#workflowSortContainer')) {
+      closeSortDropdown();
+    }
+  });
+  updateSortDropdownUI();
+
   let dragCounter = 0;
   const dropOverlay = $('dropOverlay');
   window.addEventListener('dragenter', event => {
+    if (app.isDraggingWorkflow || !event.dataTransfer?.types?.includes('Files')) return;
     event.preventDefault();
     dragCounter++;
     if (dropOverlay) {
@@ -2379,12 +2611,14 @@ function installEvents() {
     }
   });
   window.addEventListener('dragover', event => {
+    if (app.isDraggingWorkflow || !event.dataTransfer?.types?.includes('Files')) return;
     event.preventDefault();
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = 'copy';
     }
   });
   window.addEventListener('dragleave', event => {
+    if (app.isDraggingWorkflow || !event.dataTransfer?.types?.includes('Files')) return;
     event.preventDefault();
     dragCounter--;
     if (dragCounter <= 0) {
@@ -2396,6 +2630,12 @@ function installEvents() {
     }
   });
   window.addEventListener('drop', async event => {
+    if (app.isDraggingWorkflow) {
+      app.isDraggingWorkflow = false;
+      app.draggedWorkflowPath = null;
+      return;
+    }
+    if (!event.dataTransfer?.types?.includes('Files')) return;
     event.preventDefault();
     dragCounter = 0;
     if (dropOverlay) {

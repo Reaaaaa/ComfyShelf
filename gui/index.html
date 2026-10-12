@@ -41,6 +41,8 @@
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"/></symbol>
     <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -98,6 +100,31 @@
           <button class="filter-chip" data-filter="loaded" data-i18n="filter.loaded">Loaded</button>
           <button class="filter-chip" data-filter="archived" data-i18n="filter.archived">Archived</button>
           <button class="filter-chip" data-filter="hidden" data-i18n="filter.hidden">Hidden</button>
+        </div>
+
+        <div class="workflow-list-toolbar">
+          <span class="workflow-list-count" id="workflowListCount"></span>
+          <div class="workflow-sort-container" id="workflowSortContainer">
+            <button type="button" class="workflow-sort-button" id="workflowSortButton" title="Sort order" data-i18n-title="sort.title">
+              <svg><use href="#i-sort"/></svg>
+              <span id="workflowSortLabel" data-i18n="sort.manual_short">Manual</span>
+              <svg class="sort-chevron"><use href="#i-chevron"/></svg>
+            </button>
+            <div class="workflow-sort-dropdown hidden" id="workflowSortDropdown">
+              <button type="button" class="sort-option" data-sort="manual">
+                <svg class="sort-check"><use href="#i-check"/></svg>
+                <span data-i18n="sort.manual">Manual (Drag &amp; drop)</span>
+              </button>
+              <button type="button" class="sort-option" data-sort="recent">
+                <svg class="sort-check"><use href="#i-check"/></svg>
+                <span data-i18n="sort.recent">Recently modified</span>
+              </button>
+              <button type="button" class="sort-option" data-sort="name">
+                <svg class="sort-check"><use href="#i-check"/></svg>
+                <span data-i18n="sort.name">Name (A–Z)</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="workflow-list" id="workflowList"></div>

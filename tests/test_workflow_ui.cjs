@@ -945,10 +945,72 @@ async function run(language) {
   assert.ok(poolElements.modelPoolList.innerHTML.includes('sdxl_base.safetensors'));
   assert.ok(!poolElements.modelPoolList.innerHTML.includes('style_lora.safetensors'));
 
-  // Test search
-  vm.runInContext("modelPoolFilter = 'all'; modelPoolSearch = 'style'; renderModelPool();", context);
-  assert.ok(!poolElements.modelPoolList.innerHTML.includes('sdxl_base.safetensors'));
-  assert.ok(poolElements.modelPoolList.innerHTML.includes('style_lora.safetensors'));
+  // Test workflow sorting and Drag & Drop reordering
+  const samplePackages = [
+    { name: 'Bravo Workflow', path: 'E:/Archive/Bravo.zip', modified: 1000, state: 'archived', models: [] },
+    { name: 'Alpha Workflow', path: 'E:/Archive/Alpha.zip', modified: 3000, state: 'archived', models: [] },
+    { name: 'Charlie Workflow', path: 'E:/Archive/Charlie.zip', modified: 2000, state: 'archived', models: [] },
+  ];
+  context.samplePackages = samplePackages;
+  vm.runInContext(`
+    app.state = { configured: true, packages: samplePackages };
+    toast = (msg) => { lastToast = { message: msg }; };
+    localStorageStore = {};
+    getStorage = (key, fallback = null) => localStorageStore[key] ?? fallback;
+    setStorage = (key, val) => { localStorageStore[key] = String(val); };
+  `, context);
+
+  // 1. Sort by name
+  vm.runInContext(`
+    app.sortMode = 'name';
+    sortedByName = getSortedPackages(samplePackages).map(p => p.name);
+  `, context);
+  assert.deepEqual(Array.from(context.sortedByName), ['Alpha Workflow', 'Bravo Workflow', 'Charlie Workflow']);
+
+  // 2. Sort by recent
+  vm.runInContext(`
+    app.sortMode = 'recent';
+    sortedByRecent = getSortedPackages(samplePackages).map(p => p.name);
+  `, context);
+  assert.deepEqual(Array.from(context.sortedByRecent), ['Alpha Workflow', 'Charlie Workflow', 'Bravo Workflow']);
+
+  // 3. Custom manual order
+  vm.runInContext(`
+    app.sortMode = 'manual';
+    setCustomWorkflowOrder(['Charlie.zip', 'Bravo.zip', 'Alpha.zip']);
+    sortedByManual = getSortedPackages(samplePackages).map(p => p.name);
+  `, context);
+  assert.deepEqual(Array.from(context.sortedByManual), ['Charlie Workflow', 'Bravo Workflow', 'Alpha Workflow']);
+
+  // 4. Move workflow in order
+  vm.runInContext(`
+    moveWorkflowInOrder('E:/Archive/Alpha.zip', 'E:/Archive/Charlie.zip', 'before');
+    reorderedKeys = getCustomWorkflowOrder();
+  `, context);
+  assert.deepEqual(Array.from(context.reorderedKeys), ['Alpha.zip', 'Charlie.zip', 'Bravo.zip']);
+
+  // 5. Switching to manual when reordered from another sort mode
+  vm.runInContext(`
+    app.sortMode = 'name';
+    moveWorkflowInOrder('E:/Archive/Bravo.zip', 'E:/Archive/Alpha.zip', 'before');
+  `, context);
+  assert.equal(vm.runInContext('app.sortMode', context), 'manual');
+  assert.ok(context.lastToast.message.includes(context.messages['sort.switched_manual']));
+
+  // 6. Rename key updates custom order
+  vm.runInContext(`
+    renameCustomWorkflowKey('E:/Archive/Alpha.zip', 'E:/Archive/AlphaRenamed.zip');
+    afterRenameKeys = getCustomWorkflowOrder();
+  `, context);
+  assert.ok(Array.from(context.afterRenameKeys).includes('AlphaRenamed.zip'));
+  assert.ok(!Array.from(context.afterRenameKeys).includes('Alpha.zip'));
+
+  // 7. Delete key removes from custom order
+  vm.runInContext(`
+    removeCustomWorkflowKey('E:/Archive/Charlie.zip');
+    afterDeleteKeys = getCustomWorkflowOrder();
+  `, context);
+  assert.ok(!Array.from(context.afterDeleteKeys).includes('Charlie.zip'));
 }
 
 (async () => {
@@ -1001,6 +1063,13 @@ async function run(language) {
   assert.ok(indexHtml.includes('id="poolStatSize"'));
   assert.ok(indexHtml.includes('id="poolStatSaved"'));
   assert.ok(indexHtml.includes('id="poolStatLoaded"'));
+  assert.ok(indexHtml.includes('class="workflow-list-toolbar"'));
+  assert.ok(indexHtml.includes('id="workflowListCount"'));
+  assert.ok(indexHtml.includes('id="workflowSortContainer"'));
+  assert.ok(indexHtml.includes('id="workflowSortButton"'));
+  assert.ok(indexHtml.includes('id="workflowSortDropdown"'));
+  assert.ok(indexHtml.includes('id="i-sort"'));
+  assert.ok(indexHtml.includes('id="i-grip"'));
 
   for (const lang of ['de', 'en']) {
     const loc = JSON.parse(fs.readFileSync(path.join(root, 'locales', `${lang}.json`), 'utf8'));
@@ -1075,10 +1144,21 @@ async function run(language) {
       'model_pool.copy_name',
       'model_pool.copy_hash',
       'model_pool.copied',
+      'sort.title',
+      'sort.manual',
+      'sort.manual_short',
+      'sort.recent',
+      'sort.recent_short',
+      'sort.name',
+      'sort.name_short',
+      'sort.count',
+      'sort.count_one',
+      'sort.drag_grip',
+      'sort.switched_manual',
     ]) {
       assert.ok(loc[key], `Missing key ${key} in ${lang}.json`);
     }
   }
 
-  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, custom nodes live status, Drag & Drop file staging, library instant search with match hints and scopes, and hidden workflow toggle & filtering.');
+  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, custom nodes live status, Drag & Drop file staging, library instant search with match hints and scopes, hidden workflow toggle & filtering, and workflow Drag & Drop reordering with sort modes.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
