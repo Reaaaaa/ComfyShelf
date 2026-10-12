@@ -71,31 +71,37 @@ class ModelDownloaderTests(unittest.TestCase):
         models_api_resp = json.dumps([{"id": "OnomaAIResearch/Illustrious-XL-v2.0"}]).encode("utf-8")
         tree_api_resp = json.dumps([
             {
-                "path": "Illustrious-XL-v2.0.safetensors",
+                "path": "vae/Illustrious-XL-v2.0.safetensors",
                 "size": 6938040674,
                 "lfs": {"oid": "c2a1a3eaa13d4c107dc7e00c3fe830cab427aa026362740ea094745b3422a331"},
             }
         ]).encode("utf-8")
 
-        mock_context1 = MagicMock()
-        mock_context1.read.return_value = models_api_resp
-        mock_context1.__enter__.return_value = mock_context1
+        def fake_urlopen(req, *args, **kwargs):
+            url = req.full_url if hasattr(req, "full_url") else str(req)
+            m = MagicMock()
+            if "/tree/" in url:
+                m.read.return_value = tree_api_resp
+            else:
+                m.read.return_value = models_api_resp
+            m.__enter__.return_value = m
+            return m
 
-        mock_context2 = MagicMock()
-        mock_context2.read.return_value = tree_api_resp
-        mock_context2.__enter__.return_value = mock_context2
+        mock_urlopen.side_effect = fake_urlopen
 
-        mock_urlopen.side_effect = [mock_context1, mock_context2]
+        terms = downloader.generate_search_terms("qwen_image_2.1_vae_bf16.safetensors")
+        self.assertIn("qwen_image_2.1_vae_bf16", terms)
+        self.assertIn("qwen_image_2.1", terms)
 
         results = downloader.search_huggingface_model("Illustrious-XL-v2.0.safetensors")
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["repo_id"], "OnomaAIResearch/Illustrious-XL-v2.0")
-        self.assertEqual(results[0]["path"], "Illustrious-XL-v2.0.safetensors")
+        self.assertEqual(results[0]["path"], "vae/Illustrious-XL-v2.0.safetensors")
         self.assertEqual(results[0]["size"], 6938040674)
         self.assertEqual(results[0]["sha256"], "c2a1a3eaa13d4c107dc7e00c3fe830cab427aa026362740ea094745b3422a331")
         self.assertEqual(
             results[0]["download_url"],
-            "https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0/resolve/main/Illustrious-XL-v2.0.safetensors",
+            "https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0/resolve/main/vae/Illustrious-XL-v2.0.safetensors",
         )
 
     @patch("urllib.request.urlopen")

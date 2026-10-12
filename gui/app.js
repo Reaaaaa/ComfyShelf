@@ -243,6 +243,9 @@ function missingFileHtml(item, compact = false) {
   const civitaiQuery = cleanCivitaiQuery(filename);
   const civitaiUrl = `https://civitai.com/models?query=${encodeURIComponent(civitaiQuery)}`;
   const civitaiLabel = t('missing.open_civitai_search', {name: civitaiQuery});
+  const googleQuery = `${filename} huggingface`;
+  const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(googleQuery)}`;
+  const googleLabel = t('missing.open_google_search', {name: filename});
   return `<div class="${compact ? 'notice-missing-item' : 'missing-item'} missing-file-row">
     ${compact ? '' : icon('alert')}
     <span class="missing-file-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
@@ -250,6 +253,7 @@ function missingFileHtml(item, compact = false) {
     <span class="missing-file-actions">
       ${filename ? `<button type="button" class="filename-web-button" data-open-url="${escapeHtml(searchUrl)}" title="${escapeHtml(searchLabel)}" aria-label="${escapeHtml(searchLabel)}">${icon('external')}</button>` : ''}
       ${filename ? `<button type="button" class="filename-civitai-button" data-open-url="${escapeHtml(civitaiUrl)}" title="${escapeHtml(civitaiLabel)}" aria-label="${escapeHtml(civitaiLabel)}"><span class="civitai-icon">C</span></button>` : ''}
+      ${filename ? `<button type="button" class="filename-google-button" data-open-url="${escapeHtml(googleUrl)}" title="${escapeHtml(googleLabel)}" aria-label="${escapeHtml(googleLabel)}"><span class="google-icon">G</span></button>` : ''}
       ${filename ? `<button type="button" class="filename-download-button" data-download-filename="${escapeHtml(name)}" data-download-kind="${escapeHtml(item.kind || '')}" title="${escapeHtml(downloadLabel)}" aria-label="${escapeHtml(downloadLabel)}">${icon('download')}</button>` : ''}
       ${filename ? `<button type="button" class="filename-copy-button" data-copy-filename="${escapeHtml(filename)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${icon('copy')}</button>` : ''}
     </span>
@@ -361,6 +365,7 @@ async function openDownloadModal(filename, kind = '', archivePath = '') {
   };
   const searchUrl = `https://huggingface.co/models?search=${encodeURIComponent(searchableFilename(filename))}`;
   const civitaiUrl = `https://civitai.com/models?query=${encodeURIComponent(cleanCivitaiQuery(filename))}`;
+  const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(searchableFilename(filename) + ' huggingface')}`;
   $('downloadModelName').textContent = filename;
   $('downloadTargetPath').textContent = `models/${defaultModelFolder(kind)}/${searchableFilename(filename)}`;
   $('downloadSourceInput').value = '';
@@ -380,6 +385,12 @@ async function openDownloadModal(filename, kind = '', archivePath = '') {
   }
   if ($('downloadFallbackCivitaiBtn')) {
     $('downloadFallbackCivitaiBtn').dataset.openUrl = civitaiUrl;
+  }
+  if ($('downloadGoogleBtn')) {
+    $('downloadGoogleBtn').dataset.openUrl = googleUrl;
+  }
+  if ($('downloadFallbackGoogleBtn')) {
+    $('downloadFallbackGoogleBtn').dataset.openUrl = googleUrl;
   }
   $('downloadModal').classList.remove('hidden');
 

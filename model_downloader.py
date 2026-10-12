@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
+import re
 import shutil
 import tempfile
 import threading
@@ -96,42 +97,113 @@ def normalize_download_url(url_or_repo: str, filename: str = "") -> str:
     raise ValueError(f"Ungültige Download-URL oder Hugging Face Repo-ID: {url_or_repo}")
 
 
+def generate_search_terms(filename: str) -> list[str]:
+    """Generate intelligent search terms for Hugging Face Hub from a model filename."""
+    clean_name = PurePosixPath(filename.strip().replace("\\", "/")).name
+    if not clean_name:
+        return []
+
+    stem = PurePosixPath(clean_name).stem
+    terms: list[str] = [stem]
+
+    # 1. Strip precision / quantization / fine-tune suffixes
+    cleaned = re.sub(
+        r"[-_](?:bf16|fp16|fp8[a-z0-9_]*|fp32|int8|int4|w4a8|convrot|scaled|abliterated|pruned|clean|fixed?|turbo|lightning|distill(?:ed)?)",
+        "",
+        stem,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"[-_]+$", "", cleaned)
+    if cleaned and cleaned != stem:
+        terms.append(cleaned)
+
+    # 2. Strip model category keywords (vae, lora, clip, text_encoder, unet, diffusion_model, etc.)
+    base = re.sub(
+        r"[-_](?:vae|loras?|clip|text[-_]?encoders?|unet|diffusion[-_]?models?|checkpoints?)",
+        "",
+        cleaned or stem,
+        flags=re.IGNORECASE,
+    )
+    base = re.sub(r"[-_]+$", "", base)
+    if base and base != cleaned and base != stem:
+        terms.append(base)
+
+    # 3. Add separator variations (spaces and dashes for HF search engine)
+    for t in list(terms):
+        terms.append(t.replace("_", " "))
+        terms.append(t.replace("_", "-"))
+        terms.append(t.replace("-", " "))
+
+    seen = set()
+    result: list[str] = []
+    for t in terms:
+        t_clean = " ".join(t.split()).strip()
+        if t_clean and t_clean.lower() not in seen and len(t_clean) >= 3:
+            seen.add(t_clean.lower())
+            result.append(t_clean)
+    return result
+
+
 def search_huggingface_model(filename: str, timeout: float = 6.0) -> list[dict[str, Any]]:
     """Search Hugging Face Hub for candidate repositories containing the requested model file."""
     clean_name = PurePosixPath(filename.strip().replace("\\", "/")).name
     if not clean_name:
         return []
 
-    stem = PurePosixPath(clean_name).stem
-    search_term = stem.split("_")[0].split("-")[0]
-    if len(search_term) < 3:
-        search_term = stem
+    lower_wanted = clean_name.lower()
+    stem_lower = PurePosixPath(clean_name).stem.lower()
+    search_terms = generate_search_terms(clean_name)
+    if not search_terms:
+        search_terms = [clean_name]
 
-    api_url = f"https://huggingface.co/api/models?search={urllib.parse.quote(search_term)}&limit=10"
     headers = {"User-Agent": "ComfyShelf/1.0.0"}
-    req = urllib.request.Request(api_url, headers=headers)
-    candidates: list[dict[str, Any]] = []
+    seen_repos: set[str] = set()
+    candidate_repos: list[dict[str, Any]] = []
 
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            models_data = json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:
-        LOGGER.debug("Hugging Face model search failed or timed out: %s", exc)
+    for term in search_terms[:4]:
+        api_url = f"https://huggingface.co/api/models?search={urllib.parse.quote(term)}&limit=15"
+        try:
+            req = urllib.request.Request(api_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                models_data = json.loads(resp.read().decode("utf-8"))
+                for item in models_data:
+                    repo_id = item.get("id")
+                    if repo_id and "/" in repo_id and repo_id not in seen_repos:
+                        seen_repos.add(repo_id)
+                        candidate_repos.append(item)
+        except Exception as exc:
+            LOGGER.debug("Hugging Face model search query '%s' failed: %s", term, exc)
+            continue
+        if len(candidate_repos) >= 12:
+            break
+
+    if not candidate_repos:
         return []
 
-    lower_wanted = clean_name.lower()
-    for item in models_data[:6]:
+    def repo_priority(item: dict[str, Any]) -> tuple:
+        r_id = item.get("id", "").lower()
+        exact_repo_match = (stem_lower in r_id) or any(t.lower() in r_id for t in search_terms[:2])
+        is_comfy_org = r_id.startswith("comfy-org/")
+        downloads = item.get("downloads", 0)
+        likes = item.get("likes", 0)
+        return (exact_repo_match, is_comfy_org, downloads, likes)
+
+    candidate_repos.sort(key=repo_priority, reverse=True)
+
+    candidates: list[dict[str, Any]] = []
+    for item in candidate_repos[:16]:
         repo_id = item.get("id")
         if not repo_id or "/" not in repo_id:
             continue
-        tree_url = f"https://huggingface.co/api/models/{repo_id}/tree/main"
+        tree_url = f"https://huggingface.co/api/models/{repo_id}/tree/main?recursive=true"
         tree_req = urllib.request.Request(tree_url, headers=headers)
         try:
             with urllib.request.urlopen(tree_req, timeout=timeout) as tree_resp:
                 tree_data = json.loads(tree_resp.read().decode("utf-8"))
             for entry in tree_data:
                 entry_path = entry.get("path", "")
-                if entry_path.lower() == lower_wanted or PurePosixPath(entry_path).name.lower() == lower_wanted:
+                entry_basename = PurePosixPath(entry_path).name.lower()
+                if entry_path.lower() == lower_wanted or entry_basename == lower_wanted:
                     oid = (entry.get("lfs") or {}).get("oid")
                     candidates.append({
                         "repo_id": repo_id,
@@ -147,6 +219,8 @@ def search_huggingface_model(filename: str, timeout: float = 6.0) -> list[dict[s
 
     candidates.sort(
         key=lambda c: (
+            c["repo_id"].lower().startswith("comfy-org/"),
+            PurePosixPath(c["path"]).name.lower() == lower_wanted,
             c["path"].lower() == lower_wanted,
             c.get("downloads", 0),
             c.get("likes", 0),
