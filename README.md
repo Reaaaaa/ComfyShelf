@@ -26,12 +26,12 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 
 ## Core Features
 
-- **Zero Red Outlines in ComfyUI (All Dependencies Linked in Place)**  
-  No missing-model crashes or red-boxed node graphs when opening a workflow. ComfyShelf verifies that every checkpoint, LoRA, VAE, and text encoder is linked exactly where ComfyUI expects it before you hit generate.
-
 - **Instant Loading via Symlinks & Hardlinks (No File Copy Delay)**  
   Restoring a 50 GB workflow back into ComfyUI shouldn't keep you waiting for huge files to copy. With **Instant Link** mode, ComfyShelf uses NTFS Hardlinks (on the same drive) or Windows Symlinks to make models available in ComfyUI in milliseconds — consuming 0 additional bytes of disk space. Prefer traditional standalone files instead of links? You can easily switch the loading method to full physical copying at any time in the settings. Visual status badges (`⚡ Hardlink`, `🔗 Symlink`, `📁 Copy`) show the active loading method in the detail view, with automatic fallback to physical copies if needed.  
   *100% Transparent to Third-Party Apps:* Because NTFS links are resolved at the operating system level, external tools that integrate with ComfyUI (such as Krita, Photoshop, Blender plugins, SwarmUI, or PyTorch automation scripts) read linked models completely seamlessly just like standard local files.
+
+- **Zero Red Outlines in ComfyUI (All Dependencies Linked in Place)**  
+  No missing-model crashes or red-boxed node graphs when opening a workflow. ComfyShelf verifies that every checkpoint, LoRA, VAE, and text encoder is linked exactly where ComfyUI expects it before you hit generate.
 
 - **Instant Canvas Paste (`Ctrl + V` Workflow Clipboard)**  
   Zero tab clutter and zero reload delays. ComfyShelf copies the entire workflow node tree directly into your clipboard — either automatically when loading a workflow or via 1-click `[Copy workflow · Ctrl+V]`. Switch to your open ComfyUI browser tab, press `Ctrl + V`, and the complete node graph drops right onto your canvas ready to generate.

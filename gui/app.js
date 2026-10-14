@@ -1350,10 +1350,23 @@ async function inspectAndPackWorkflow(path) {
     eyebrow: t('pack.eyebrow'), title: t(missing.length ? 'pack.title_incomplete' : 'pack.title'),
     copy, danger: false, proceedLabel: t(missing.length ? 'pack.proceed_incomplete' : 'pack.proceed'),
     showIncomplete: missing.length > 0,
-    action: async () => {
+    showClipboard: true,
+    defaultClipboard: false,
+    action: async (flags = {}) => {
       showBusy(t('pack.running'), t('pack.running_detail'));
       const result = await callApi('pack_workflow', path, missing.length > 0, exists);
-      hideBusy(); toast(t('pack.done', {name: report.workflow})); await refreshState(result.output_path);
+      hideBusy();
+      await refreshState(result.output_path);
+      if (flags.copyToClipboard) {
+        try {
+          await copySelectedWorkflowJson({silent: true});
+          toast(t('toast.packed_and_copied', {name: report.workflow}));
+        } catch (_) {
+          toast(t('pack.done', {name: report.workflow}));
+        }
+      } else {
+        toast(t('pack.done', {name: report.workflow}));
+      }
     }
   });
 }
@@ -1420,8 +1433,10 @@ async function inspectAndImportArchive(path) {
     wide: true,
     proceedLabel: t(missing.length ? 'import.proceed_incomplete' : 'import.proceed'),
     showIncomplete: missing.length > 0,
+    showClipboard: true,
+    defaultClipboard: false,
     disabled: !report.archive_space_sufficient,
-    action: async () => {
+    action: async (flags = {}) => {
       const destination = document.querySelector('input[name="importDestination"]:checked')?.value || 'archive';
       const loadAfterImport = destination === 'load';
       showBusy(
@@ -1432,8 +1447,17 @@ async function inspectAndImportArchive(path) {
         'import_archive', path, missing.length > 0, report.target_exists, loadAfterImport
       );
       hideBusy();
-      toast(t(loadAfterImport ? 'import.done_load' : 'import.done', {name: result.package}));
       await refreshState(result.output_path);
+      if (flags.copyToClipboard) {
+        try {
+          await copySelectedWorkflowJson({silent: true});
+          toast(t(loadAfterImport ? 'toast.restored_and_copied' : 'toast.packed_and_copied', {name: result.package}));
+        } catch (_) {
+          toast(t(loadAfterImport ? 'import.done_load' : 'import.done', {name: result.package}));
+        }
+      } else {
+        toast(t(loadAfterImport ? 'import.done_load' : 'import.done', {name: result.package}));
+      }
     }
   });
   document.querySelectorAll('input[name="importDestination"]').forEach(option => {
@@ -1911,13 +1935,14 @@ async function previewPackageAction(actionName) {
       title: t(isRestore ? 'restore.title' : 'restore.unload_title'),
       copy, danger: !isRestore, proceedLabel: t(isRestore ? 'restore.proceed' : 'restore.unload_proceed', {count}),
       showIncomplete: !pkg.complete, showShared: shared, wide: shared,
+      showClipboard: isRestore,
+      defaultClipboard: getStorage('comfyshelf_auto_copy') !== 'false',
       disabled: conflictCount > 0 || !!preview.removal_issues?.length,
-      action: async ({allowIncomplete, allowShared}) => {
+      action: async ({allowIncomplete, allowShared, copyToClipboard}) => {
         showBusy(t(isRestore ? 'restore.running' : 'restore.unload_running'), t(isRestore ? 'restore.running_detail' : 'restore.unload_running_detail'));
         await callApi('execute_action', actionName, pkg.path, allowIncomplete, allowShared);
         hideBusy();
-        const autoCopy = getStorage('comfyshelf_auto_copy') !== 'false';
-        if (isRestore && autoCopy) {
+        if (isRestore && copyToClipboard) {
           try {
             await copySelectedWorkflowJson({silent: true});
             toast(t('toast.restored_and_copied'));
@@ -1958,13 +1983,14 @@ async function previewWorkflowSwitch() {
       eyebrow: t('switch.eyebrow'), title: t('switch.title'), copy,
       danger: false, proceedLabel: t('switch.proceed'),
       showIncomplete: !pkg.complete, showShared: shared, wide: shared,
+      showClipboard: true,
+      defaultClipboard: getStorage('comfyshelf_auto_copy') !== 'false',
       disabled: conflictCount > 0 || hardBlockers.length > 0,
-      action: async ({allowIncomplete, allowShared}) => {
+      action: async ({allowIncomplete, allowShared, copyToClipboard}) => {
         showBusy(t('switch.running'), t('switch.running_detail'));
         const result = await callApi('execute_switch', pkg.path, allowIncomplete, allowShared);
         hideBusy();
-        const autoCopy = getStorage('comfyshelf_auto_copy') !== 'false';
-        if (autoCopy) {
+        if (copyToClipboard) {
           try {
             await copySelectedWorkflowJson({silent: true});
             toast(t('toast.switched_and_copied', {name: result.package}));
@@ -2377,8 +2403,14 @@ function openConfirm(options) {
   $('confirmProceedButton').disabled = !!options.disabled;
   $('incompleteOption').classList.toggle('hidden', !options.showIncomplete);
   $('sharedOption').classList.toggle('hidden', !options.showShared);
+  $('clipboardOption')?.classList.toggle('hidden', !options.showClipboard);
   $('allowIncompleteCheckbox').checked = false;
   $('allowSharedCheckbox').checked = false;
+  if ($('copyToClipboardCheckbox')) {
+    $('copyToClipboardCheckbox').checked = options.defaultClipboard !== undefined
+      ? !!options.defaultClipboard
+      : (getStorage('comfyshelf_auto_copy') !== 'false');
+  }
   $('confirmModal').classList.remove('hidden');
 }
 function closeConfirm() { $('confirmModal').classList.add('hidden'); app.pendingConfirm = null; }
@@ -2391,7 +2423,11 @@ async function proceedConfirm() {
     toast(t('confirm.shared_required'), true); return;
   }
   const action = app.pendingConfirm.action;
-  const flags = {allowIncomplete: $('allowIncompleteCheckbox').checked, allowShared: $('allowSharedCheckbox').checked};
+  const flags = {
+    allowIncomplete: $('allowIncompleteCheckbox').checked,
+    allowShared: $('allowSharedCheckbox').checked,
+    copyToClipboard: $('copyToClipboardCheckbox')?.checked || false
+  };
   closeConfirm();
   try { await action(flags); } catch (error) { hideBusy(); operationError(error); }
 }

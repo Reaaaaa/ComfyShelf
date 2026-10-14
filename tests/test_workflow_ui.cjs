@@ -272,23 +272,30 @@ async function run(language) {
 
   // Expanding references never replaces explicit consent to remove shared files.
   const consent = {checked:false};
+  const clipConsent = {checked:false};
   context.document.getElementById = id => {
-    assert.ok(['allowSharedCheckbox', 'allowIncompleteCheckbox'].includes(id));
-    return id === 'allowSharedCheckbox' ? consent : {checked:false};
+    assert.ok(['allowSharedCheckbox', 'allowIncompleteCheckbox', 'copyToClipboardCheckbox'].includes(id));
+    if (id === 'allowSharedCheckbox') return consent;
+    if (id === 'copyToClipboardCheckbox') return clipConsent;
+    return {checked:false};
   };
   vm.runInContext(`
     var sharedActions = 0;
+    var clipboardPassed = false;
     closeConfirm = () => { app.pendingConfirm = null; };
     app.pendingConfirm = {showShared:true, action:async flags => {
       if (flags.allowShared) sharedActions++;
+      clipboardPassed = !!flags.copyToClipboard;
     }};
   `, context);
   await vm.runInContext('proceedConfirm()', context);
   assert.equal(context.sharedActions, 0);
   assert.equal(context.lastToast.message, context.messages['confirm.shared_required']);
   consent.checked = true;
+  clipConsent.checked = true;
   await vm.runInContext('proceedConfirm()', context);
   assert.equal(context.sharedActions, 1);
+  assert.equal(context.clipboardPassed, true);
 
   // The displayed check comes from persisted backend state, not a session Map.
   const integrityLabel = {};
@@ -761,6 +768,8 @@ async function run(language) {
   await vm.runInContext("handleDroppedFile({name: 'flux_dev.png', path: 'D:/flux_dev.png'})", context);
   assert.equal(inspectPackPath, 'D:/flux_dev.png');
   assert.ok(context.confirmation.proceedLabel.includes(context.messages['pack.proceed']));
+  assert.equal(context.confirmation.showClipboard, true);
+  assert.equal(context.confirmation.defaultClipboard, false);
 
   // Dropping .zip with path directly inspects for import
   await vm.runInContext("handleDroppedFile({name: 'bundle.zip', path: 'D:/bundle.zip'})", context);
@@ -1077,6 +1086,8 @@ async function run(language) {
   assert.ok(indexHtml.includes('id="i-grip"'));
   assert.ok(indexHtml.includes('id="archiveFreeSpace"'));
   assert.ok(indexHtml.includes('id="archiveStorageReadout"'));
+  assert.ok(indexHtml.includes('id="clipboardOption"'));
+  assert.ok(indexHtml.includes('id="copyToClipboardCheckbox"'));
 
   const readmeMd = fs.readFileSync(path.join(root, '..', 'README.md'), 'utf8');
   assert.ok(readmeMd.includes('Python tests: 206 passed locally'));
@@ -1182,6 +1193,9 @@ async function run(language) {
       'sort.drag_grip',
       'sort.switched_manual',
       'summary.archive_free',
+      'confirm.copy_to_clipboard',
+      'confirm.copy_to_clipboard_hint',
+      'toast.packed_and_copied',
     ]) {
       assert.ok(loc[key], `Missing key ${key} in ${lang}.json`);
     }
