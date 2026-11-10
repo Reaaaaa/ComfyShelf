@@ -26,6 +26,179 @@ let currentTourStep = 0;
 const $ = (id) => document.getElementById(id);
 const icon = (name) => `<svg><use href="#i-${name}"/></svg>`;
 
+const UI_MODAL_STACK_ORDER = [
+  'lightboxModal',
+  'tourModal',
+  'loadPoolModelModal',
+  'unloadPoolModelModal',
+  'downloadModal',
+  'deleteModal',
+  'renameModal',
+  'confirmModal',
+  'historyModal',
+  'modelPoolModal',
+  'settingsModal',
+  'workflowSortDropdown',
+];
+
+const PACKAGE_ACTION_SPECS = {
+  unload: { id: 'unload', icon: 'upload', labelKey: 'actions.unload', kind: 'unload' },
+  load: { id: 'load', icon: 'download', labelKey: 'actions.load', kind: 'restore' },
+  switch: { id: 'switch', icon: 'switch', labelKey: 'actions.switch', kind: 'switch' },
+  load_additional: { id: 'load_additional', icon: 'download', labelKey: 'actions.load_additional', kind: 'restore' },
+  load_missing: { id: 'load_missing', icon: 'download', labelKey: 'actions.load_missing', kind: 'restore' },
+  unload_present: { id: 'unload_present', icon: 'upload', labelKey: 'actions.unload_present', kind: 'unload' },
+};
+
+const STATE_MACHINES = {
+  bootstrapStages: ['uninitialized', 'bridge-ready', 'bootstrap-started', 'frontend-ready', 'bootstrap-failed'],
+  launcherStates: ['unconfigured', 'stopped', 'starting', 'running', 'stopping'],
+  scanStages: ['configuration', 'drives', 'archive', 'package'],
+  packageLoadStates: ['archived', 'partial', 'loaded'],
+  verificationStates: ['unknown', 'verified', 'invalid', 'stale'],
+  mainViewStates: ['unconfigured', 'loading', 'empty_library', 'detail'],
+  dragDropModes: ['idle', 'internal_card_reorder', 'external_file_hover', 'staging_dropped_file'],
+  modalStackOrder: UI_MODAL_STACK_ORDER,
+};
+
+function resolvePackageActions(pkgState, otherActive) {
+  if (pkgState === 'loaded') {
+    return { primary: 'unload', secondary: null, tertiary: null };
+  }
+  if (pkgState === 'archived') {
+    return otherActive
+      ? { primary: 'switch', secondary: 'load_additional', tertiary: null }
+      : { primary: 'load', secondary: null, tertiary: null };
+  }
+  return otherActive
+    ? { primary: 'switch', secondary: 'load_missing', tertiary: 'unload_present' }
+    : { primary: 'load_missing', secondary: 'unload_present', tertiary: null };
+}
+
+function deriveLauncherState(status = {}, hasVariants = true) {
+  if (status?.stopping || status?.state === 'stopping') return 'stopping';
+  if (status?.running || status?.state === 'running') return 'running';
+  if (status?.starting || status?.state === 'starting') return 'starting';
+  if (!hasVariants) return 'unconfigured';
+  return 'stopped';
+}
+
+function isOverlayOpen(id) {
+  const el = $(id);
+  if (!el || !el.classList || typeof el.classList.contains !== 'function') return false;
+  return !el.classList.contains('hidden');
+}
+
+function isSettingsClosable() {
+  if (!app.state?.configured) return false;
+  const closeBtn = $('settingsCloseButton');
+  if (closeBtn?.classList && typeof closeBtn.classList.contains === 'function') {
+    return !closeBtn.classList.contains('hidden');
+  }
+  return true;
+}
+
+function getActiveModalStack() {
+  const active = [];
+  if (isOverlayOpen('busyOverlay')) active.push('busyOverlay');
+  for (const id of UI_MODAL_STACK_ORDER) {
+    if (isOverlayOpen(id)) active.push(id);
+  }
+  return active;
+}
+
+function closeTopActiveOverlay() {
+  if (isOverlayOpen('busyOverlay')) return null;
+  for (const id of UI_MODAL_STACK_ORDER) {
+    if (!isOverlayOpen(id)) continue;
+    switch (id) {
+      case 'lightboxModal':
+        closeLightbox();
+        return id;
+      case 'tourModal':
+        closeTour();
+        return id;
+      case 'loadPoolModelModal':
+        closeLoadPoolModel();
+        return id;
+      case 'unloadPoolModelModal':
+        closeUnloadPoolModel();
+        return id;
+      case 'downloadModal':
+        closeDownloadModal();
+        return id;
+      case 'deleteModal':
+        closeDeleteModal();
+        return id;
+      case 'renameModal':
+        closeRename();
+        return id;
+      case 'confirmModal':
+        closeConfirm();
+        return id;
+      case 'historyModal':
+        closeHistory();
+        return id;
+      case 'modelPoolModal':
+        closeModelPool();
+        return id;
+      case 'settingsModal':
+        if (!isSettingsClosable()) return null;
+        closeSettings();
+        return id;
+      case 'workflowSortDropdown':
+        closeSortDropdown();
+        return id;
+      default:
+        break;
+    }
+  }
+  return null;
+}
+
+function getFrontendStateSnapshot() {
+  const pkg = typeof selectedPackage === 'function' ? selectedPackage() : null;
+  const otherActive = Boolean(
+    pkg && (app.state?.packages || []).some(
+      item => item.path !== pkg.path && (item.state === 'loaded' || item.state === 'partial')
+    )
+  );
+  let mainViewState = 'loading';
+  if (app.state) {
+    if (!app.state.configured) mainViewState = 'unconfigured';
+    else if (app.state.loading && !(app.state.packages || []).length) mainViewState = 'loading';
+    else if (pkg) mainViewState = 'detail';
+    else mainViewState = 'empty_library';
+  }
+  const stack = getActiveModalStack();
+  return {
+    bootstrapState: app.bootstrapCompleted
+      ? 'frontend-ready'
+      : (app.bootstrapStarted ? 'bootstrap-started' : (nativeApiReady() ? 'bridge-ready' : 'uninitialized')),
+    mainViewState,
+    launcherState: deriveLauncherState(app.launcher?.status || {}, Boolean(app.launcher?.variants?.length)),
+    libraryScanState: !app.state
+      ? 'idle'
+      : (!app.state.configured ? 'unconfigured' : (app.state.loading ? 'scanning' : (app.state.scan_error ? 'error' : 'ready'))),
+    scanProgressStage: app.scanProgress?.stage || null,
+    activeModalStack: stack,
+    topActiveOverlay: stack[0] || null,
+    busyOverlayActive: isOverlayOpen('busyOverlay'),
+    confirmDialogState: app.pendingConfirm ? (app.pendingConfirm.disabled ? 'blocked' : 'awaiting_confirmation') : 'idle',
+    dragDropMode: app.isDraggingWorkflow
+      ? 'internal_card_reorder'
+      : (isOverlayOpen('dropOverlay') ? 'external_file_hover' : 'idle'),
+    selectedPackage: pkg
+      ? {
+          name: pkg.name,
+          state: pkg.state,
+          hidden: Boolean(pkg.hidden),
+          actions: resolvePackageActions(pkg.state, otherActive),
+        }
+      : null,
+  };
+}
+
 function t(key, variables = {}) {
   let value = app.messages[key] ?? key;
   for (const [name, replacement] of Object.entries(variables)) value = value.replaceAll(`{${name}}`, String(replacement));
@@ -1228,44 +1401,23 @@ function renderDetail(pkg) {
   const otherActive = (app.state.packages || []).some(item =>
     item.path !== pkg.path && (item.state === 'loaded' || item.state === 'partial')
   );
-  if (tertiary) tertiary.classList.add('hidden');
-
-  if (pkg.state === 'loaded') {
-    primary.innerHTML = `${icon('upload')}${t('actions.unload')}`;
-    primary.onclick = () => previewPackageAction('unload');
-    secondary.classList.add('hidden');
-  } else if (pkg.state === 'archived') {
-    if (otherActive) {
-      primary.innerHTML = `${icon('switch')}${t('actions.switch')}`;
-      primary.onclick = previewWorkflowSwitch;
-      secondary.innerHTML = `${icon('download')}${t('actions.load_additional')}`;
-      secondary.onclick = () => previewPackageAction('restore');
-      secondary.classList.remove('hidden');
-    } else {
-      primary.innerHTML = `${icon('download')}${t('actions.load')}`;
-      primary.onclick = () => previewPackageAction('restore');
-      secondary.classList.add('hidden');
+  const actionSlots = resolvePackageActions(pkg.state, otherActive);
+  const applySlot = (button, actionId, isPrimary = false) => {
+    if (!button) return;
+    const spec = actionId ? PACKAGE_ACTION_SPECS[actionId] : null;
+    if (!spec) {
+      if (!isPrimary) button.classList.add('hidden');
+      return;
     }
-  } else {
-    if (otherActive) {
-      primary.innerHTML = `${icon('switch')}${t('actions.switch')}`;
-      primary.onclick = previewWorkflowSwitch;
-      secondary.innerHTML = `${icon('download')}${t('actions.load_missing')}`;
-      secondary.onclick = () => previewPackageAction('restore');
-      secondary.classList.remove('hidden');
-      if (tertiary) {
-        tertiary.innerHTML = `${icon('upload')}${t('actions.unload_present')}`;
-        tertiary.onclick = () => previewPackageAction('unload');
-        tertiary.classList.remove('hidden');
-      }
-    } else {
-      primary.innerHTML = `${icon('download')}${t('actions.load_missing')}`;
-      primary.onclick = () => previewPackageAction('restore');
-      secondary.innerHTML = `${icon('upload')}${t('actions.unload_present')}`;
-      secondary.onclick = () => previewPackageAction('unload');
-      secondary.classList.remove('hidden');
-    }
-  }
+    button.innerHTML = `${icon(spec.icon)}${t(spec.labelKey)}`;
+    button.onclick = spec.kind === 'switch'
+      ? previewWorkflowSwitch
+      : () => previewPackageAction(spec.kind);
+    if (!isPrimary) button.classList.remove('hidden');
+  };
+  applySlot(primary, actionSlots.primary, true);
+  applySlot(secondary, actionSlots.secondary, false);
+  applySlot(tertiary, actionSlots.tertiary, false);
 }
 
 function openSettings(required = false) {
@@ -1714,18 +1866,21 @@ function renderComfyLauncher() {
   updateLauncherStatus(launcher.status || {});
 }
 
-function updateLauncherStatus(status) {
+function updateLauncherStatus(status = {}) {
   const pill = $('comfyStatusPill');
   const text = $('comfyStatusText');
   const startBtn = $('comfyStartButton');
   const stopBtn = $('comfyStopButton');
   const restartBtn = $('comfyRestartButton');
-  if (!pill) return;
-
-  const running = Boolean(status.running);
-  const starting = Boolean(status.starting);
-  const stopping = Boolean(status.stopping);
   const hasVariants = Boolean(app.launcher?.variants?.length);
+  const state = deriveLauncherState(status, hasVariants);
+  const running = state === 'running';
+  const starting = state === 'starting';
+  const stopping = state === 'stopping';
+  if (app.launcher) {
+    app.launcher.status = { ...(app.launcher.status || {}), ...status, running, starting, stopping, state };
+  }
+  if (!pill) return;
 
   pill.classList.remove('running', 'starting', 'stopped');
 
@@ -1847,9 +2002,12 @@ async function onComfyVariantChange(e) {
 }
 
 function onComfyStatusPillClick() {
-  if (app.launcher?.status?.running) {
+  const state = deriveLauncherState(app.launcher?.status || {}, Boolean(app.launcher?.variants?.length));
+  if (state === 'running') {
     openComfyWebUi();
-  } else if (!app.launcher?.variants?.length) {
+  } else if (state === 'starting' || state === 'stopping') {
+    return;
+  } else if (state === 'unconfigured') {
     openSettings(false);
   } else {
     startComfyUI();
@@ -2895,14 +3053,8 @@ function installEvents() {
     if (event.target === $('tourModal')) closeTour();
   });
   window.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !$('lightboxModal')?.classList.contains('hidden')) {
-      closeLightbox();
-    }
-    if (event.key === 'Escape' && !$('tourModal')?.classList.contains('hidden')) {
-      closeTour();
-    }
-    if (event.key === 'Escape' && !$('modelPoolModal')?.classList.contains('hidden')) {
-      closeModelPool();
+    if (event.key === 'Escape') {
+      closeTopActiveOverlay();
     }
   });
   $('settingsButton').addEventListener('click', () => openSettings(false));
@@ -2947,11 +3099,6 @@ function installEvents() {
       $('downloadOpenWebText').textContent = t('download.view_model_card');
     }
     $('downloadStartButton').disabled = false;
-  });
-  window.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !$('downloadModal')?.classList.contains('hidden')) {
-      closeDownloadModal();
-    }
   });
   document.body.addEventListener('click', event => {
     const button = event.target.closest?.('[data-open-url]');

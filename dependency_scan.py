@@ -16,6 +16,7 @@ import uuid
 import zipfile
 
 import comfy_archive as engine
+import state_machines
 import verification_cache as cache
 
 LOGGER = logging.getLogger("comfyshelf.dependencies")
@@ -257,9 +258,10 @@ def complete_dependencies(archive, comfy_root, archive_root, token, progress=Non
             missing_keys.add(key)
     manifest["complete"] = not manifest["missing"]
     manifest["schema_version"] = max(2, manifest.get("schema_version", 1))
-    manifest["storage_mode"] = "shared-object-pool" if all(
-        entry.get("storage") == engine.SHARED_OBJECT_STORAGE for entry in manifest["files"]
-        if entry.get("role") == "model") else "mixed"
+    manifest["storage_mode"] = state_machines.derive_package_storage_mode(
+        manifest.get("files", []),
+        default_mode=state_machines.PackageStorageMode.SHARED_OBJECT_POOL.value,
+    ).value
     manifest["dependencies_updated_at"] = datetime.now(timezone.utc).isoformat()
     manifest["parser_warnings"] = report["parser_warnings"]
     temporary, backup = None, None

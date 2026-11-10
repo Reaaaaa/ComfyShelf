@@ -1053,6 +1053,60 @@ async function run(language) {
   assert.equal(vm.runInContext("getStorage('comfyshelf_sidebar_width')", context), '450');
   assert.equal(vm.runInContext('applySidebarWidth(null, true)', context), null);
   assert.equal(workspaceProps['--sidebar-width'], undefined);
+
+  // 9. Explicit frontend state machines: package action matrix, launcher state, and modal z-stack
+  assert.deepEqual(
+    JSON.parse(vm.runInContext("JSON.stringify(resolvePackageActions('loaded', false))", context)),
+    { primary: 'unload', secondary: null, tertiary: null }
+  );
+  assert.deepEqual(
+    JSON.parse(vm.runInContext("JSON.stringify(resolvePackageActions('archived', true))", context)),
+    { primary: 'switch', secondary: 'load_additional', tertiary: null }
+  );
+  assert.deepEqual(
+    JSON.parse(vm.runInContext("JSON.stringify(resolvePackageActions('partial', true))", context)),
+    { primary: 'switch', secondary: 'load_missing', tertiary: 'unload_present' }
+  );
+  assert.equal(vm.runInContext("deriveLauncherState({running: true, stopping: true}, true)", context), 'stopping');
+  assert.equal(vm.runInContext("deriveLauncherState({running: false, starting: false}, false)", context), 'unconfigured');
+
+  // Test modal stack priority: subdialog (loadPoolModelModal) closes before parent (modelPoolModal),
+  // and busyOverlay blocks Escape dismissal.
+  const modalOpenMap = {
+    modelPoolModal: true,
+    loadPoolModelModal: true,
+    busyOverlay: true,
+  };
+  const prevGetElForModals = context.document.getElementById;
+  context.document.getElementById = id => ({
+    classList: {
+      add(cls) { if (cls === 'hidden') modalOpenMap[id] = false; },
+      remove(cls) { if (cls === 'hidden') modalOpenMap[id] = true; },
+      toggle() {},
+      contains(cls) { return cls === 'hidden' ? !modalOpenMap[id] : false; },
+    },
+    addEventListener() {},
+    setAttribute() {},
+  });
+  // While busyOverlay is open, closeTopActiveOverlay returns null and leaves modals open
+  assert.equal(vm.runInContext('closeTopActiveOverlay()', context), null);
+  assert.equal(modalOpenMap.loadPoolModelModal, true);
+  assert.equal(modalOpenMap.modelPoolModal, true);
+
+  // Once busyOverlay closes, first Escape closes loadPoolModelModal, keeping modelPoolModal open
+  modalOpenMap.busyOverlay = false;
+  assert.equal(vm.runInContext('closeTopActiveOverlay()', context), 'loadPoolModelModal');
+  assert.equal(modalOpenMap.loadPoolModelModal, false);
+  assert.equal(modalOpenMap.modelPoolModal, true);
+
+  // Next Escape closes modelPoolModal
+  assert.equal(vm.runInContext('closeTopActiveOverlay()', context), 'modelPoolModal');
+  assert.equal(modalOpenMap.modelPoolModal, false);
+
+  const snapshot = JSON.parse(vm.runInContext('JSON.stringify(getFrontendStateSnapshot())', context));
+  assert.equal(snapshot.libraryScanState, 'ready');
+  assert.equal(snapshot.busyOverlayActive, false);
+  context.document.getElementById = prevGetElForModals;
 }
 
 (async () => {

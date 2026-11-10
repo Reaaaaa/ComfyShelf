@@ -798,6 +798,33 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
                 self.assertTrue(stop_res["ok"])
                 self.assertTrue(stop_res["data"]["stopped"])
 
+    def test_comfy_stopping_state_prevents_running_flicker_during_stop(self):
+        api = GUI.WorkflowSwitcherApi()
+        api._comfy_stopping = True
+        with patch.object(api, "_is_port_in_use", return_value=True):
+            status_res = api.get_comfy_status()
+            self.assertTrue(status_res["ok"])
+            self.assertFalse(status_res["data"]["running"])
+            self.assertFalse(status_res["data"]["starting"])
+            self.assertTrue(status_res["data"]["stopping"])
+            self.assertEqual(status_res["data"]["state"], "stopping")
+        api._comfy_stopping = False
+
+    def test_get_state_machines_introspection_api(self):
+        api = GUI.WorkflowSwitcherApi()
+        api.report_startup_stage("bridge-ready", "test")
+        with patch.object(api, "_is_port_in_use", return_value=False):
+            res = api.get_state_machines()
+        self.assertTrue(res["ok"])
+        data = res["data"]
+        self.assertEqual(data["catalog"]["count"], 12)
+        self.assertIn("launcher", data["catalog"]["machines"])
+        self.assertIn("ui_modal_stack", data["catalog"]["machines"])
+        self.assertEqual(data["live"]["bootstrap_stage"], "bridge-ready")
+        self.assertEqual(data["live"]["launcher_state"], "stopped")
+        self.assertEqual(data["live"]["library_scan_state"], "idle")
+        self.assertEqual(data["live"]["operation_state"], "idle")
+
 
 if __name__ == "__main__":
     unittest.main()

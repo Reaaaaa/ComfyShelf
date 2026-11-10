@@ -72,6 +72,7 @@ except ImportError:
     raise SystemExit(2)
 
 import comfy_archive as engine
+import state_machines
 import verification_cache
 import dependency_scan
 import workflow_file
@@ -174,10 +175,16 @@ class WorkflowSwitcherApi:
         self._state_cache: dict[str, Any] | None = None
         self._scan_thread: threading.Thread | None = None
         self._frontend_ready = threading.Event()
+        self._bootstrap_stage: str = state_machines.BootstrapStage.UNINITIALIZED.value
         self._last_export_dir: Path | None = None
         self._comfy_process: subprocess.Popen[Any] | None = None
         self._comfy_starting: bool = False
+        self._comfy_stopping: bool = False
         self._comfy_start_time: float = 0.0
+        self._operation_active: bool = False
+        self._operation_phase: str | None = None
+        self._operation_cancellable: bool = True
+        self._operation_outcome: str | None = None
 
     def _attach_window(self, window: Any) -> None:
         self._window = window
@@ -187,31 +194,28 @@ class WorkflowSwitcherApi:
 
     def report_startup_stage(self, stage: str, detail: str = "") -> dict[str, Any]:
         """Record fixed-English startup diagnostics from the web frontend."""
-        allowed_stages = {
-            "bridge-ready",
-            "bootstrap-started",
-            "frontend-ready",
-            "bootstrap-failed",
-        }
-        safe_stage = str(stage).strip().casefold()
-        if safe_stage not in allowed_stages:
-            safe_stage = "unknown"
+        safe_stage = state_machines.normalize_bootstrap_stage(stage)
+        self._bootstrap_stage = state_machines.next_bootstrap_stage(
+            self._bootstrap_stage, safe_stage
+        )
         safe_detail = str(detail).replace("\r", " ").replace("\n", " ").strip()[:240]
         LOGGER.info(
             "Frontend startup stage: %s%s",
             safe_stage,
             f" | {safe_detail}" if safe_detail else "",
         )
-        if safe_stage == "frontend-ready":
+        if safe_stage == state_machines.BootstrapStage.FRONTEND_READY.value:
             self._frontend_ready.set()
         return {"ok": True, "data": True}
 
     def _progress(self, event: dict[str, Any]) -> None:
-        if (
-            self._cancel_event.is_set()
-            and event.get("phase") != "complete"
-            and event.get("cancellable", True)
-        ):
+        phase = str(event.get("phase") or "") or None
+        cancellable = state_machines.is_phase_cancellable(
+            phase, bool(event.get("cancellable", True))
+        )
+        self._operation_phase = phase or self._operation_phase
+        self._operation_cancellable = cancellable
+        if self._cancel_event.is_set() and cancellable:
             raise engine.OperationCancelled("Vorgang wurde sicher abgebrochen.")
         if not self._window:
             return
@@ -254,12 +258,18 @@ class WorkflowSwitcherApi:
 
     def _operation(self, action: Callable[[], Any]) -> dict[str, Any]:
         self._cancel_event.clear()
+        self._operation_active = True
+        self._operation_phase = state_machines.OperationPhase.PREPARING.value
+        self._operation_cancellable = True
+        self._operation_outcome = None
         started = time.perf_counter()
         try:
             result = action()
+            self._operation_outcome = "completed"
             LOGGER.info("Operation completed (%.2fs)", time.perf_counter() - started)
             return {"ok": True, "data": result}
         except engine.RemovalIncompleteError as exc:
+            self._operation_outcome = "partial_removal"
             details = exc.result
             LOGGER.warning("Model removal stopped (%.2fs): %s | %s",
                            time.perf_counter() - started, exc, json.dumps(details, ensure_ascii=False))
@@ -270,12 +280,15 @@ class WorkflowSwitcherApi:
             )
             return {"ok": False, "error_code": "removal_incomplete", "error": str(exc), "details": details}
         except engine.OperationCancelled as exc:
+            self._operation_outcome = "cancelled"
             LOGGER.info("Operation cancelled safely (%.2fs)", time.perf_counter() - started)
             return {"ok": False, "cancelled": True, "error_code": "cancelled", "error": str(exc)}
         except Exception as exc:
+            self._operation_outcome = "failed"
             LOGGER.exception("Operation failed after %.2fs: %s", time.perf_counter() - started, exc)
             return {"ok": False, "error_code": self._error_code(exc), "error": str(exc)}
         finally:
+            self._operation_active = False
             self._cancel_event.clear()
 
     def cancel_operation(self) -> bool:
@@ -677,19 +690,37 @@ class WorkflowSwitcherApi:
                 else:
                     self._comfy_process = None
 
-            if port_active:
-                self._comfy_starting = False
-            elif self._comfy_starting:
-                # As long as the launched process is alive, stay in starting state!
-                if proc_alive:
-                    pass
-                elif (now - self._comfy_start_time) > 300.0 or not self._comfy_process:
+            if self._comfy_stopping:
+                running = False
+                starting = False
+                stopping = True
+            else:
+                stopping = False
+                if port_active:
                     self._comfy_starting = False
+                elif self._comfy_starting:
+                    # As long as the launched process is alive, stay in starting state!
+                    if proc_alive:
+                        pass
+                    elif (now - self._comfy_start_time) > 300.0 or not self._comfy_process:
+                        self._comfy_starting = False
+                running = port_active
+                starting = self._comfy_starting
+
+            launcher_state = state_machines.derive_launcher_state(
+                configured=True,
+                has_variants=True,
+                running=running,
+                starting=starting,
+                stopping=stopping,
+            )
 
             return {
-                "running": port_active,
-                "starting": self._comfy_starting,
-                "elapsed": round(now - self._comfy_start_time) if self._comfy_starting else 0,
+                "running": running,
+                "starting": starting,
+                "stopping": stopping,
+                "state": launcher_state.value,
+                "elapsed": round(now - self._comfy_start_time) if starting else 0,
                 "port": 8188,
                 "url": "http://127.0.0.1:8188",
             }
@@ -699,6 +730,7 @@ class WorkflowSwitcherApi:
     def start_comfy(self, variant: str = "") -> dict[str, Any]:
         def action() -> dict[str, Any]:
             if self._is_port_in_use(8188):
+                self._comfy_stopping = False
                 return {
                     "started": False,
                     "already_running": True,
@@ -737,6 +769,7 @@ class WorkflowSwitcherApi:
                 creationflags=creation_flags,
             )
             self._comfy_process = proc
+            self._comfy_stopping = False
             self._comfy_starting = True
             self._comfy_start_time = time.monotonic()
 
@@ -750,75 +783,36 @@ class WorkflowSwitcherApi:
 
     def stop_comfy(self) -> dict[str, Any]:
         def action() -> dict[str, Any]:
+            self._comfy_stopping = True
+            self._comfy_starting = False
             no_window = 0x08000000 if os.name == "nt" else 0
             killed_pids: set[int] = set()
-
-            # 1. Kill tracked process tree if active
-            if self._comfy_process:
-                pid = self._comfy_process.pid
-                LOGGER.info("Stopping tracked ComfyUI process PID %s", pid)
-                try:
-                    subprocess.run(
-                        ["taskkill", "/PID", str(pid), "/T", "/F"],
-                        capture_output=True,
-                        creationflags=no_window,
-                        check=False,
-                    )
-                    killed_pids.add(pid)
-                except Exception as exc:
-                    LOGGER.warning("Failed to taskkill PID %s: %s", pid, exc)
-                self._comfy_process = None
-
-            # 2. Discover any running ComfyUI processes (even if ComfyShelf was restarted)
-            if os.name == "nt":
-                pids_to_kill: set[int] = set()
-
-                # A. PowerShell connection check for port 8188
-                try:
-                    ps_cmd = "(Get-NetTCPConnection -LocalPort 8188 -State Listen -ErrorAction SilentlyContinue).OwningProcess"
-                    out = subprocess.check_output(
-                        ["powershell", "-NoProfile", "-Command", ps_cmd],
-                        text=True,
-                        creationflags=no_window,
-                    ).strip()
-                    for line in out.splitlines():
-                        clean = line.strip()
-                        if clean.isdigit() and int(clean) > 0:
-                            pids_to_kill.add(int(clean))
-                except Exception:
-                    pass
-
-                # B. Language-independent netstat check (supports German ABHÖREN, English LISTENING, etc.)
-                try:
-                    out = subprocess.check_output(
-                        ["netstat", "-ano", "-p", "tcp"],
-                        text=True,
-                        errors="ignore",
-                        creationflags=no_window,
-                    )
-                    for line in out.splitlines():
-                        clean = line.strip()
-                        if ":8188" in clean:
-                            parts = clean.split()
-                            if len(parts) >= 5:
-                                local_addr = parts[1]
-                                remote_addr = parts[2]
-                                state = parts[3].upper()
-                                pid = parts[-1]
-                                if local_addr.endswith(":8188") and (remote_addr.endswith(":0") or "ABH" in state or "LISTEN" in state):
-                                    if pid.isdigit() and int(pid) > 0:
-                                        pids_to_kill.add(int(pid))
-                except Exception:
-                    pass
-
-                # C. Check processes running main.py in ComfyUI or from easy_install_path
-                folder = self._get_easy_install_path()
-                if folder and folder.is_dir():
+            try:
+                # 1. Kill tracked process tree if active
+                if self._comfy_process:
+                    pid = self._comfy_process.pid
+                    LOGGER.info("Stopping tracked ComfyUI process PID %s", pid)
                     try:
-                        folder_pattern = str(folder).replace("\\", "\\\\")
-                        ps_find = f"Get-CimInstance Win32_Process | Where-Object {{ ($_.ExecutablePath -like '*{folder_pattern}*') -or ($_.CommandLine -like '*main.py*') }} | Select-Object -ExpandProperty ProcessId"
+                        subprocess.run(
+                            ["taskkill", "/PID", str(pid), "/T", "/F"],
+                            capture_output=True,
+                            creationflags=no_window,
+                            check=False,
+                        )
+                        killed_pids.add(pid)
+                    except Exception as exc:
+                        LOGGER.warning("Failed to taskkill PID %s: %s", pid, exc)
+                    self._comfy_process = None
+
+                # 2. Discover any running ComfyUI processes (even if ComfyShelf was restarted)
+                if os.name == "nt":
+                    pids_to_kill: set[int] = set()
+
+                    # A. PowerShell connection check for port 8188
+                    try:
+                        ps_cmd = "(Get-NetTCPConnection -LocalPort 8188 -State Listen -ErrorAction SilentlyContinue).OwningProcess"
                         out = subprocess.check_output(
-                            ["powershell", "-NoProfile", "-Command", ps_find],
+                            ["powershell", "-NoProfile", "-Command", ps_cmd],
                             text=True,
                             creationflags=no_window,
                         ).strip()
@@ -829,52 +823,100 @@ class WorkflowSwitcherApi:
                     except Exception:
                         pass
 
-                # D. For all discovered processes, also find their parent (the cmd.exe holding the pause statement)
-                parents_to_kill: set[int] = set()
-                for pid in pids_to_kill:
+                    # B. Language-independent netstat check (supports German ABHÖREN, English LISTENING, etc.)
                     try:
-                        ps_parent = f"(Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}').ParentProcessId"
                         out = subprocess.check_output(
-                            ["powershell", "-NoProfile", "-Command", ps_parent],
+                            ["netstat", "-ano", "-p", "tcp"],
                             text=True,
+                            errors="ignore",
                             creationflags=no_window,
-                        ).strip()
-                        if out.isdigit() and int(out) > 0:
-                            parents_to_kill.add(int(out))
+                        )
+                        for line in out.splitlines():
+                            clean = line.strip()
+                            if ":8188" in clean:
+                                parts = clean.split()
+                                if len(parts) >= 5:
+                                    local_addr = parts[1]
+                                    remote_addr = parts[2]
+                                    state = parts[3].upper()
+                                    pid = parts[-1]
+                                    if local_addr.endswith(":8188") and (remote_addr.endswith(":0") or "ABH" in state or "LISTEN" in state):
+                                        if pid.isdigit() and int(pid) > 0:
+                                            pids_to_kill.add(int(pid))
                     except Exception:
                         pass
 
-                all_targets = parents_to_kill | pids_to_kill
-                for target_pid in all_targets:
-                    LOGGER.info("Stopping ComfyUI target PID %s", target_pid)
-                    try:
-                        subprocess.run(
-                            ["taskkill", "/PID", str(target_pid), "/T", "/F"],
-                            capture_output=True,
-                            creationflags=no_window,
-                            check=False,
-                        )
-                        killed_pids.add(target_pid)
-                    except Exception as exc:
-                        LOGGER.warning("Failed to taskkill PID %s: %s", target_pid, exc)
+                    # C. Check processes running main.py in ComfyUI or from easy_install_path
+                    folder = self._get_easy_install_path()
+                    if folder and folder.is_dir():
+                        try:
+                            folder_pattern = str(folder).replace("\\", "\\\\")
+                            ps_find = f"Get-CimInstance Win32_Process | Where-Object {{ ($_.ExecutablePath -like '*{folder_pattern}*') -or ($_.CommandLine -like '*main.py*') }} | Select-Object -ExpandProperty ProcessId"
+                            out = subprocess.check_output(
+                                ["powershell", "-NoProfile", "-Command", ps_find],
+                                text=True,
+                                creationflags=no_window,
+                            ).strip()
+                            for line in out.splitlines():
+                                clean = line.strip()
+                                if clean.isdigit() and int(clean) > 0:
+                                    pids_to_kill.add(int(clean))
+                        except Exception:
+                            pass
 
-            self._comfy_starting = False
+                    # D. For all discovered processes, also find their parent (the cmd.exe holding the pause statement)
+                    parents_to_kill: set[int] = set()
+                    for pid in pids_to_kill:
+                        try:
+                            ps_parent = f"(Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}').ParentProcessId"
+                            out = subprocess.check_output(
+                                ["powershell", "-NoProfile", "-Command", ps_parent],
+                                text=True,
+                                creationflags=no_window,
+                            ).strip()
+                            if out.isdigit() and int(out) > 0:
+                                parents_to_kill.add(int(out))
+                        except Exception:
+                            pass
 
-            # Wait briefly for port to close
-            start = time.monotonic()
-            while time.monotonic() - start < 3.0:
-                if not self._is_port_in_use(8188):
-                    break
-                time.sleep(0.2)
+                    all_targets = parents_to_kill | pids_to_kill
+                    for target_pid in all_targets:
+                        LOGGER.info("Stopping ComfyUI target PID %s", target_pid)
+                        try:
+                            subprocess.run(
+                                ["taskkill", "/PID", str(target_pid), "/T", "/F"],
+                                capture_output=True,
+                                creationflags=no_window,
+                                check=False,
+                            )
+                            killed_pids.add(target_pid)
+                        except Exception as exc:
+                            LOGGER.warning("Failed to taskkill PID %s: %s", target_pid, exc)
 
-            return {"stopped": True, "killed": bool(killed_pids)}
+                self._comfy_starting = False
+
+                # Wait briefly for port to close
+                start = time.monotonic()
+                while time.monotonic() - start < 3.0:
+                    if not self._is_port_in_use(8188):
+                        break
+                    time.sleep(0.2)
+
+                return {"stopped": True, "killed": bool(killed_pids)}
+            finally:
+                self._comfy_stopping = False
 
         return self._result(action)
 
     def restart_comfy(self, variant: str = "") -> dict[str, Any]:
         def action() -> dict[str, Any]:
-            self.stop_comfy()
-            time.sleep(1.0)
+            self._comfy_stopping = True
+            try:
+                self.stop_comfy()
+                self._comfy_stopping = True
+                time.sleep(1.0)
+            finally:
+                self._comfy_stopping = False
             return self.start_comfy(variant)["data"]
 
         return self._result(action)
@@ -1053,12 +1095,7 @@ class WorkflowSwitcherApi:
                         "link_type": link_type,
                     }
                 )
-            if not model_files or present == len(model_files):
-                state = "loaded"
-            elif present == 0:
-                state = "archived"
-            else:
-                state = "partial"
+            state = state_machines.derive_package_load_state(present, len(model_files)).value
             packages.append(
                 {
                     # The ZIP name is the portable, user-controlled display name.
@@ -1069,7 +1106,11 @@ class WorkflowSwitcherApi:
                     "modified": archive_path.stat().st_mtime,
                     "complete": bool(manifest.get("complete")),
                     "state": state,
-                    "hidden": archive_path.name.casefold() in hidden_keys and state == "archived",
+                    "hidden": state_machines.is_package_hidden(
+                        archive_filename=archive_path.name,
+                        hidden_keys=hidden_keys,
+                        load_state=state,
+                    ),
                     "present_models": present,
                     "model_count": len(model_files),
                     "model_bytes": sum(int(item.get("size", 0)) for item in model_files),
@@ -1184,7 +1225,7 @@ class WorkflowSwitcherApi:
                 if self._state_cache and "packages" in self._state_cache:
                     for pkg in self._state_cache["packages"]:
                         if Path(pkg["path"]).resolve() == target_path:
-                            if pkg.get("state") in {"loaded", "partial"}:
+                            if not state_machines.can_hide_package(str(pkg.get("state", "archived"))):
                                 is_active = True
                             break
 
@@ -1202,7 +1243,9 @@ class WorkflowSwitcherApi:
                             target = engine._safe_model_target(comfy_root, str(entry["path"]))
                             if target.is_file() and target.stat().st_size == int(entry.get("size", -1)):
                                 present += 1
-                        if model_files and present > 0:
+                        if model_files and not state_machines.can_hide_package(
+                            state_machines.derive_package_load_state(present, len(model_files)).value
+                        ):
                             is_active = True
                     except Exception:
                         pass
@@ -1858,6 +1901,51 @@ class WorkflowSwitcherApi:
             raw_bytes = base64.b64decode(content_base64)
             target.write_bytes(raw_bytes)
             return str(target.resolve())
+
+        return self._result(action)
+
+    def get_state_machines(self) -> dict[str, Any]:
+        """Return the explicit state machine catalog and current live runtime states."""
+
+        def action() -> dict[str, Any]:
+            with self._state_lock:
+                cache = dict(self._state_cache) if isinstance(self._state_cache, dict) else None
+                scan_alive = bool(self._scan_thread is not None and self._scan_thread.is_alive())
+            scan_state = state_machines.derive_library_scan_state(cache, scan_alive).value
+            comfy_status = self.get_comfy_status().get("data", {})
+            op_state = state_machines.derive_operation_lifecycle_state(
+                active=self._operation_active,
+                phase=self._operation_phase,
+                cancellable=self._operation_cancellable,
+                outcome=self._operation_outcome,
+            ).value
+            packages = (cache or {}).get("packages", [])
+            package_counts = {
+                state_machines.PackageLoadState.LOADED.value: sum(
+                    1 for pkg in packages if pkg.get("state") == state_machines.PackageLoadState.LOADED.value
+                ),
+                state_machines.PackageLoadState.PARTIAL.value: sum(
+                    1 for pkg in packages if pkg.get("state") == state_machines.PackageLoadState.PARTIAL.value
+                ),
+                state_machines.PackageLoadState.ARCHIVED.value: sum(
+                    1 for pkg in packages if pkg.get("state") == state_machines.PackageLoadState.ARCHIVED.value
+                ),
+                "hidden": sum(1 for pkg in packages if pkg.get("hidden")),
+            }
+            return {
+                "catalog": state_machines.get_state_machine_catalog(),
+                "live": {
+                    "bootstrap_stage": self._bootstrap_stage,
+                    "frontend_ready": self._frontend_ready.is_set(),
+                    "launcher_state": comfy_status.get("state", state_machines.LauncherState.STOPPED.value),
+                    "launcher_status": comfy_status,
+                    "library_scan_state": scan_state,
+                    "operation_state": op_state,
+                    "operation_phase": self._operation_phase,
+                    "operation_cancellable": self._operation_cancellable,
+                    "package_counts": package_counts,
+                },
+            }
 
         return self._result(action)
 

@@ -13,6 +13,8 @@ from pathlib import Path
 import stat
 import tempfile
 
+import state_machines
+
 LOGGER = logging.getLogger("comfyshelf.verification")
 STAMP_FIELDS = ("st_size", "st_mtime_ns", "st_ctime_ns", "st_dev", "st_ino")
 
@@ -121,9 +123,13 @@ def read_record(archive):
 def status(archive, manifest, stamps=None):
     record = read_record(archive)
     if record is None:
-        return {"state": "unknown", "checked_at": None}
+        return {"state": state_machines.VerificationState.UNKNOWN.value, "checked_at": None}
     current = safe_snapshot(archive, manifest, stamps)
-    state = record["state"] if current is not None and current == record["snapshot"] else "stale"
+    state = (
+        record["state"]
+        if current is not None and current == record["snapshot"]
+        else state_machines.VerificationState.STALE.value
+    )
     return {"state": state, "checked_at": record["checked_at"], "persisted": True}
 
 

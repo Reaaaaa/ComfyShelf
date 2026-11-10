@@ -19,6 +19,7 @@ from typing import Any, Callable
 import zipfile
 
 import comfy_archive as engine
+import state_machines
 import verification_cache as cache
 
 LOGGER = logging.getLogger("comfyshelf.downloader")
@@ -481,6 +482,13 @@ def _integrate_downloaded_model(
             "size": size,
             "sha256": sha256,
         })
+
+    if store_in_pool:
+        manifest["schema_version"] = max(2, int(manifest.get("schema_version", 1)))
+    manifest["storage_mode"] = state_machines.derive_package_storage_mode(
+        manifest.get("files", []),
+        default_mode=str(manifest.get("storage_mode") or state_machines.PackageStorageMode.EMBEDDED_PORTABLE.value),
+    ).value
 
     temp_zip: Path | None = None
     try:
