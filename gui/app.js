@@ -1738,7 +1738,8 @@ function updateLauncherStatus(status) {
     comfyPollInterval = 3000;
   } else if (starting) {
     pill.classList.add('starting');
-    if (text) text.textContent = t('launcher.starting');
+    const seconds = status.elapsed && status.elapsed > 2 ? ` (${status.elapsed}s)` : '';
+    if (text) text.textContent = t('launcher.starting') + seconds;
     if (startBtn) startBtn.disabled = true;
     if (stopBtn) stopBtn.disabled = false;
     if (restartBtn) restartBtn.disabled = true;
@@ -1788,7 +1789,7 @@ async function startComfyUI() {
     return;
   }
   const variant = $('comfyVariantSelect')?.value || app.launcher.selected_variant || '';
-  updateLauncherStatus({ starting: true, running: false });
+  updateLauncherStatus({ starting: true, running: false, elapsed: 0 });
   try {
     const res = await callApi('start_comfy', variant);
     if (res?.already_running) {
@@ -1824,7 +1825,7 @@ async function restartComfyUI() {
     return;
   }
   const variant = $('comfyVariantSelect')?.value || app.launcher.selected_variant || '';
-  updateLauncherStatus({ starting: true, running: false });
+  updateLauncherStatus({ starting: true, running: false, elapsed: 0 });
   try {
     const selectedObj = app.launcher.variants.find(v => v.id === variant);
     const label = selectedObj ? selectedObj.name : variant;

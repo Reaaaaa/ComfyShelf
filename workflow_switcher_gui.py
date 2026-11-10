@@ -669,19 +669,27 @@ class WorkflowSwitcherApi:
         def action() -> dict[str, Any]:
             port_active = self._is_port_in_use(8188)
             now = time.monotonic()
-            if self._comfy_starting and port_active:
-                self._comfy_starting = False
-            elif self._comfy_starting and (now - self._comfy_start_time > 60.0):
-                self._comfy_starting = False
 
-            if self._comfy_process and self._comfy_process.poll() is not None:
-                self._comfy_process = None
-                if not port_active:
+            proc_alive = False
+            if self._comfy_process:
+                if self._comfy_process.poll() is None:
+                    proc_alive = True
+                else:
+                    self._comfy_process = None
+
+            if port_active:
+                self._comfy_starting = False
+            elif self._comfy_starting:
+                # As long as the launched process is alive, stay in starting state!
+                if proc_alive:
+                    pass
+                elif (now - self._comfy_start_time) > 300.0 or not self._comfy_process:
                     self._comfy_starting = False
 
             return {
                 "running": port_active,
                 "starting": self._comfy_starting,
+                "elapsed": round(now - self._comfy_start_time) if self._comfy_starting else 0,
                 "port": 8188,
                 "url": "http://127.0.0.1:8188",
             }
