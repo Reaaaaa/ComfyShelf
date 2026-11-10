@@ -809,6 +809,8 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
             self.assertTrue(status_res["data"]["stopping"])
             self.assertEqual(status_res["data"]["state"], "stopping")
         api._comfy_stopping = False
+        api._close_comfy_windows(set())
+        api._close_comfy_windows({999999})
 
     def test_get_state_machines_introspection_api(self):
         api = GUI.WorkflowSwitcherApi()

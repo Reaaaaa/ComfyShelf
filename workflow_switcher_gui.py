@@ -781,6 +781,76 @@ class WorkflowSwitcherApi:
 
         return self._result(action)
 
+    @staticmethod
+    def _close_comfy_windows(target_pids: set[int]) -> None:
+        """Close console and terminal windows associated with ComfyUI processes via Win32 WM_CLOSE."""
+        if os.name != "nt" or not target_pids:
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+            WM_CLOSE = 0x0010
+            valid_pids = {int(p) for p in target_pids if int(p) > 0}
+            console_exes = {
+                "cmd.exe",
+                "conhost.exe",
+                "openconsole.exe",
+                "python.exe",
+                "pythonw.exe",
+                "windowsterminal.exe",
+            }
+
+            def get_proc_name(pid: int) -> str:
+                h = kernel32.OpenProcess(0x1000, False, pid)
+                if not h:
+                    return ""
+                try:
+                    buf = ctypes.create_unicode_buffer(1024)
+                    size = wintypes.DWORD(1024)
+                    if kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                        return Path(buf.value).name.lower()
+                finally:
+                    kernel32.CloseHandle(h)
+                return ""
+
+            def enum_wnd(hwnd: Any, _: Any) -> bool:
+                if not user32.IsWindow(hwnd) or not user32.IsWindowVisible(hwnd):
+                    return True
+                proc_id = wintypes.DWORD()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(proc_id))
+                pid_val = proc_id.value
+                if not pid_val:
+                    return True
+
+                pname = get_proc_name(pid_val)
+                if pname not in console_exes:
+                    return True
+
+                should_close = False
+                if pid_val in valid_pids:
+                    should_close = True
+                else:
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        buf = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(hwnd, buf, length + 1)
+                        title = buf.value.lower()
+                        if any(term in title for term in ("comfyui", "kitchenattention", "sageattention", "flashattention")):
+                            should_close = True
+
+                if should_close:
+                    LOGGER.info("Sending WM_CLOSE to console window handle %s (PID %s: %s)", hwnd, pid_val, pname)
+                    user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+                return True
+
+            WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+            user32.EnumWindows(WNDENUMPROC(enum_wnd), 0)
+        except Exception as exc:
+            LOGGER.warning("Could not close ComfyUI windows: %s", exc)
+
     def stop_comfy(self) -> dict[str, Any]:
         def action() -> dict[str, Any]:
             self._comfy_stopping = True
@@ -788,23 +858,11 @@ class WorkflowSwitcherApi:
             no_window = 0x08000000 if os.name == "nt" else 0
             killed_pids: set[int] = set()
             try:
-                # 1. Kill tracked process tree if active
+                all_targets: set[int] = set()
                 if self._comfy_process:
-                    pid = self._comfy_process.pid
-                    LOGGER.info("Stopping tracked ComfyUI process PID %s", pid)
-                    try:
-                        subprocess.run(
-                            ["taskkill", "/PID", str(pid), "/T", "/F"],
-                            capture_output=True,
-                            creationflags=no_window,
-                            check=False,
-                        )
-                        killed_pids.add(pid)
-                    except Exception as exc:
-                        LOGGER.warning("Failed to taskkill PID %s: %s", pid, exc)
-                    self._comfy_process = None
+                    all_targets.add(self._comfy_process.pid)
 
-                # 2. Discover any running ComfyUI processes (even if ComfyShelf was restarted)
+                # Discover any running ComfyUI processes (even if ComfyShelf was restarted)
                 if os.name == "nt":
                     pids_to_kill: set[int] = set()
 
@@ -866,7 +924,7 @@ class WorkflowSwitcherApi:
 
                     # D. For all discovered processes, also find their parent (the cmd.exe holding the pause statement)
                     parents_to_kill: set[int] = set()
-                    for pid in pids_to_kill:
+                    for pid in (pids_to_kill | all_targets):
                         try:
                             ps_parent = f"(Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}').ParentProcessId"
                             out = subprocess.check_output(
@@ -879,7 +937,13 @@ class WorkflowSwitcherApi:
                         except Exception:
                             pass
 
-                    all_targets = parents_to_kill | pids_to_kill
+                    all_targets |= parents_to_kill | pids_to_kill
+
+                    # 1. Gracefully close console and terminal windows before forced termination
+                    self._close_comfy_windows(all_targets)
+                    time.sleep(0.25)
+
+                    # 2. Terminate all remaining target processes in tree
                     for target_pid in all_targets:
                         LOGGER.info("Stopping ComfyUI target PID %s", target_pid)
                         try:
@@ -892,6 +956,16 @@ class WorkflowSwitcherApi:
                             killed_pids.add(target_pid)
                         except Exception as exc:
                             LOGGER.warning("Failed to taskkill PID %s: %s", target_pid, exc)
+
+                elif self._comfy_process:
+                    # Non-Windows fallback
+                    try:
+                        self._comfy_process.terminate()
+                        killed_pids.add(self._comfy_process.pid)
+                    except Exception as exc:
+                        LOGGER.warning("Failed to terminate comfy process: %s", exc)
+
+                self._comfy_process = None
 
                 self._comfy_starting = False
 
