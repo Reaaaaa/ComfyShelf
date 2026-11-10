@@ -1141,10 +1141,13 @@ class WorkflowSwitcherApi:
         if not self._window:
             return
         payload = json.dumps(data, ensure_ascii=False)
-        try:
-            self._window.evaluate_js(f"{function_name}({payload})")
-        except Exception:
-            LOGGER.debug("Could not send UI status", exc_info=True)
+        def _send() -> None:
+            try:
+                self._window.evaluate_js(f"{function_name}({payload})")
+            except Exception:
+                LOGGER.debug("Could not send UI status", exc_info=True)
+
+        threading.Thread(target=_send, daemon=True, name="emit-js").start()
 
     def rename_archive(self, archive_path: str, new_name: str) -> dict[str, Any]:
         def action() -> dict[str, Any]:
@@ -1908,8 +1911,14 @@ def _apply_window_icon(window: Any) -> None:
                 WM_SETICON = 0x0080
                 ICON_SMALL = 0
                 ICON_BIG = 1
-                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, h_icon)
-                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, h_icon)
+                SMTO_ABORTIFHUNG = 0x0002
+                result = ctypes.c_ulong()
+                ctypes.windll.user32.SendMessageTimeoutW(
+                    hwnd, WM_SETICON, ICON_SMALL, h_icon, SMTO_ABORTIFHUNG, 250, ctypes.byref(result)
+                )
+                ctypes.windll.user32.SendMessageTimeoutW(
+                    hwnd, WM_SETICON, ICON_BIG, h_icon, SMTO_ABORTIFHUNG, 250, ctypes.byref(result)
+                )
     except Exception as exc:
         LOGGER.warning("Could not set window icon via Win32: %s", exc)
 
@@ -1917,7 +1926,12 @@ def _apply_window_icon(window: Any) -> None:
         native = getattr(window, "native", None)
         if native:
             from System.Drawing import Icon
-            native.Icon = Icon(str(icon_path))
+            ico = Icon(str(icon_path))
+            if hasattr(native, "BeginInvoke"):
+                from System import Action
+                native.BeginInvoke(Action(lambda: setattr(native, "Icon", ico)))
+            else:
+                native.Icon = ico
     except Exception as exc:
         LOGGER.debug("Could not set WinForms Form.Icon: %s", exc)
 
