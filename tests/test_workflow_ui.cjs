@@ -1189,9 +1189,6 @@ async function run(language) {
   const contributingMd = fs.readFileSync(path.join(root, '..', 'CONTRIBUTING.md'), 'utf8');
   assert.ok(!contributingMd.includes('development draft'));
 
-  const releaseChecklistMd = fs.readFileSync(path.join(root, '..', 'docs', 'release-checklist.md'), 'utf8');
-  assert.ok(!releaseChecklistMd.includes('Private draft'));
-
   for (const lang of ['de', 'en']) {
     const loc = JSON.parse(fs.readFileSync(path.join(root, 'locales', `${lang}.json`), 'utf8'));
     for (const key of [

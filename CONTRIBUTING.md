@@ -95,4 +95,4 @@ Review every file in `git status`, including new files. `.gitignore` helps keep
 local state, model data and archives out, but does not sanitize source text or
 files already tracked by Git. Use fictional paths in examples and redact any
 screenshots or diagnostic attachments. Do not commit credentials or real workflow
-prompts. See [the release checklist](docs/release-checklist.md).
+prompts.

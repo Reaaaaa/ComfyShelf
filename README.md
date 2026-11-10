@@ -150,7 +150,6 @@ Normal use does not require the command line. Additional documentation:
 - [Technische Referenz (Deutsch)](docs/reference.de.md)
 - [Safety and limitations](docs/safety.md)
 - [Development and tests](CONTRIBUTING.md)
-- [Release checklist](docs/release-checklist.md)
 
 ---
 
