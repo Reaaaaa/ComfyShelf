@@ -750,7 +750,10 @@ class WorkflowSwitcherApi:
 
     def stop_comfy(self) -> dict[str, Any]:
         def action() -> dict[str, Any]:
-            killed = False
+            no_window = 0x08000000 if os.name == "nt" else 0
+            killed_pids: set[int] = set()
+
+            # 1. Kill tracked process tree if active
             if self._comfy_process:
                 pid = self._comfy_process.pid
                 LOGGER.info("Stopping tracked ComfyUI process PID %s", pid)
@@ -758,35 +761,102 @@ class WorkflowSwitcherApi:
                     subprocess.run(
                         ["taskkill", "/PID", str(pid), "/T", "/F"],
                         capture_output=True,
+                        creationflags=no_window,
                         check=False,
                     )
-                    killed = True
+                    killed_pids.add(pid)
                 except Exception as exc:
                     LOGGER.warning("Failed to taskkill PID %s: %s", pid, exc)
                 self._comfy_process = None
 
+            # 2. Discover any running ComfyUI processes (even if ComfyShelf was restarted)
             if os.name == "nt":
+                pids_to_kill: set[int] = set()
+
+                # A. PowerShell connection check for port 8188
+                try:
+                    ps_cmd = "(Get-NetTCPConnection -LocalPort 8188 -State Listen -ErrorAction SilentlyContinue).OwningProcess"
+                    out = subprocess.check_output(
+                        ["powershell", "-NoProfile", "-Command", ps_cmd],
+                        text=True,
+                        creationflags=no_window,
+                    ).strip()
+                    for line in out.splitlines():
+                        clean = line.strip()
+                        if clean.isdigit() and int(clean) > 0:
+                            pids_to_kill.add(int(clean))
+                except Exception:
+                    pass
+
+                # B. Language-independent netstat check (supports German ABHÖREN, English LISTENING, etc.)
                 try:
                     out = subprocess.check_output(
                         ["netstat", "-ano", "-p", "tcp"],
                         text=True,
                         errors="ignore",
+                        creationflags=no_window,
                     )
                     for line in out.splitlines():
-                        if ":8188" in line and "LISTENING" in line:
-                            parts = line.strip().split()
-                            if parts:
-                                port_pid = parts[-1]
-                                if port_pid.isdigit() and int(port_pid) > 0:
-                                    LOGGER.info("Stopping process %s listening on port 8188", port_pid)
-                                    subprocess.run(
-                                        ["taskkill", "/PID", port_pid, "/T", "/F"],
-                                        capture_output=True,
-                                        check=False,
-                                    )
-                                    killed = True
-                except Exception as exc:
-                    LOGGER.warning("Netstat check during stop failed: %s", exc)
+                        clean = line.strip()
+                        if ":8188" in clean:
+                            parts = clean.split()
+                            if len(parts) >= 5:
+                                local_addr = parts[1]
+                                remote_addr = parts[2]
+                                state = parts[3].upper()
+                                pid = parts[-1]
+                                if local_addr.endswith(":8188") and (remote_addr.endswith(":0") or "ABH" in state or "LISTEN" in state):
+                                    if pid.isdigit() and int(pid) > 0:
+                                        pids_to_kill.add(int(pid))
+                except Exception:
+                    pass
+
+                # C. Check processes running main.py in ComfyUI or from easy_install_path
+                folder = self._get_easy_install_path()
+                if folder and folder.is_dir():
+                    try:
+                        folder_pattern = str(folder).replace("\\", "\\\\")
+                        ps_find = f"Get-CimInstance Win32_Process | Where-Object {{ ($_.ExecutablePath -like '*{folder_pattern}*') -or ($_.CommandLine -like '*main.py*') }} | Select-Object -ExpandProperty ProcessId"
+                        out = subprocess.check_output(
+                            ["powershell", "-NoProfile", "-Command", ps_find],
+                            text=True,
+                            creationflags=no_window,
+                        ).strip()
+                        for line in out.splitlines():
+                            clean = line.strip()
+                            if clean.isdigit() and int(clean) > 0:
+                                pids_to_kill.add(int(clean))
+                    except Exception:
+                        pass
+
+                # D. For all discovered processes, also find their parent (the cmd.exe holding the pause statement)
+                parents_to_kill: set[int] = set()
+                for pid in pids_to_kill:
+                    try:
+                        ps_parent = f"(Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}').ParentProcessId"
+                        out = subprocess.check_output(
+                            ["powershell", "-NoProfile", "-Command", ps_parent],
+                            text=True,
+                            creationflags=no_window,
+                        ).strip()
+                        if out.isdigit() and int(out) > 0:
+                            parents_to_kill.add(int(out))
+                    except Exception:
+                        pass
+
+                all_targets = parents_to_kill | pids_to_kill
+                for target_pid in all_targets:
+                    LOGGER.info("Stopping ComfyUI target PID %s", target_pid)
+                    try:
+                        subprocess.run(
+                            ["taskkill", "/PID", str(target_pid), "/T", "/F"],
+                            capture_output=True,
+                            creationflags=no_window,
+                            check=False,
+                        )
+                        killed_pids.add(target_pid)
+                    except Exception as exc:
+                        LOGGER.warning("Failed to taskkill PID %s: %s", target_pid, exc)
 
             self._comfy_starting = False
 
@@ -797,7 +867,7 @@ class WorkflowSwitcherApi:
                     break
                 time.sleep(0.2)
 
-            return {"stopped": True, "killed": killed}
+            return {"stopped": True, "killed": bool(killed_pids)}
 
         return self._result(action)
 
