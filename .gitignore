@@ -60,6 +60,7 @@ work/
 edge-*/
 *.tmp
 *.bak
+*.odt
 Thumbs.db
 Desktop.ini
 .DS_Store

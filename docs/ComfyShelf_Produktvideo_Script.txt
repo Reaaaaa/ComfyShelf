@@ -1,0 +1,140 @@
+================================================================================
+VIDEO-SCRIPT: COMFYSHELF — DAS SMARTE REGAL FÜR COMFYUI
+================================================================================
+
+Format:        Screen-Recording / Demo + Voiceover
+Ziel-Laufzeit: ca. 90 bis 120 Sekunden
+Fokus:         SSD-Speicher sparen, Instant Hardlinks, 1-Klick Model-Downloader, 
+               Drag & Drop, Strg+V Canvas Paste
+
+================================================================================
+TEIL 1: INTRO & HOOK (Das ComfyUI-Problem) [0:00 - 0:18]
+================================================================================
+
+[VISUELL / SCREEN]
+- Schnitt auf ComfyUI im Browser: Ein riesiger Node-Graph mit rot umrandeten Nodes
+  (Missing Models / fehlende Checkpoints & LoRAs).
+- Kurzer Schnitt zum Windows Explorer: Die schnelle NVMe-SSD ist rot und 
+  meldet "Noch 1,2 GB frei".
+- Dynamischer Schnitt auf das Hauptfenster von ComfyShelf: Dunkles, aufgeräumtes
+  Design, Cover-Kacheln der Workflows, Status-Badges.
+
+[VOICEOVER / SPRECHER]
+"Jeder, der mit ComfyUI arbeitet, kennt dieses Problem: Du willst einen neuen 
+SDXL- oder Flux-Workflow testen, öffnest ihn – und überall rote Rahmen, weil 
+Checkpoints oder LoRAs fehlen. 
+Und deine schnelle SSD? Ist nach zwei Wochen komplett voll mit 300 Gigabyte 
+an Modellen.
+
+Genau dafür gibt es ComfyShelf – deinen visuellen Workflow- und 
+Modell-Manager für ComfyUI."
+
+
+================================================================================
+TEIL 2: VISUELLES REGAL & DRAG & DROP [0:18 - 0:38]
+================================================================================
+
+[VISUELL / SCREEN]
+- Mauscursor schnappt sich ein mit ComfyUI generiertes PNG-Bild vom Desktop
+  und zieht es per Drag & Drop direkt in das Fenster von ComfyShelf.
+- ComfyShelf liest die eingebetteten Metadaten in Sekundenbruchteilen aus.
+- Das Bild wird zum Cover im Regal (mit Lightbox-Vollbildzoom), und rechts 
+  erscheint die Liste aller im Graph erkannten Checkpoints, LoRAs und VAEs.
+
+[VOICEOVER / SPRECHER]
+"Das Herzstück ist das Regal: Du musst dich nicht durch endlose kryptische 
+JSON-Dateien wühlen. Schnapp dir einfach ein fertiges PNG-Bild und zieh es 
+per Drag & Drop rein.
+
+ComfyShelf liest den Workflow-Graphen direkt aus den Metadaten des Bildes, 
+generiert ein Cover-Thumbnail und analysiert sofort alle benötigten Modelle 
+und Custom Nodes."
+
+
+================================================================================
+TEIL 3: INSTANT LOADING (Hardlinks & 0 B SSD-Verschwendung) [0:38 - 1:00]
+================================================================================
+
+[VISUELL / SCREEN]
+- Klick auf einen 30-GB-Workflow (z. B. FLUX oder Qwen).
+- Klick auf den Button "Workflow laden".
+- Das Status-Badge springt in unter 1 Sekunde von 'Archived' auf 
+  '⚡ Hardlink · LOADED'.
+- Zoom auf die Speicheranzeige im Detailpanel: "0 B extra drive space".
+
+[VOICEOVER / SPRECHER]
+"Und jetzt das Beste: Wenn du einen 40-GB-Workflow laden willst, musst du nicht 
+minutenlang Gigabytes hin- und herkopieren. Dank 'Instant Link' nutzt ComfyShelf 
+NTFS-Hardlinks oder Windows-Symlinks.
+
+Deine Modelle sind in Millisekunden in ComfyUI verfügbar – und belegen 0 Byte 
+zusätzlichen Speicherplatz auf deiner schnellen SSD. Du kannst sogar mehrere 
+riesige Setups parallel aktiv halten."
+
+
+================================================================================
+TEIL 4: KEINE ROTEN NODES & 1-KLICK MODEL-DOWNLOADER [1:00 - 1:22]
+================================================================================
+
+[VISUELL / SCREEN]
+- Klick auf einen Workflow mit fehlendem Checkpoint (Status: 'MISSING (1)' in Amber).
+- Cursor bewegt sich über die Schnellsuche-Buttons für Civitai und Hugging Face.
+- Klick auf "Download": Der Resolver öffnet sich, der Download startet.
+- Live-Streaming-Fortschrittsbalken (52 MB/s, ETA, SHA-256 Integritätsprüfung).
+- Nach Abschluss springt das Modell-Badge sofort auf 'Ready'.
+
+[VOICEOVER / SPRECHER]
+"Fehlt dir mal ein Modell aus einem fremden Workflow? Kein blindes Googeln 
+mehr nach Dateinamen.
+
+Mit einem Klick suchst du direkt auf Civitai oder Hugging Face – oder lädst 
+das Modell direkt im Hintergrund über den integrierten Downloader herunter, 
+inklusive automatischem SHA-256-Hashcheck."
+
+
+================================================================================
+TEIL 5: NAHTLOSER WORKFLOW (Strg+V) & SICHERER MODELLPOOL [1:22 - 1:42]
+================================================================================
+
+[VISUELL / SCREEN]
+- Klick auf den Button "Workflow kopieren (Strg+V)".
+- Schneller Tab-Wechsel zu ComfyUI im Browser.
+- Tastendruck Strg+V: Der komplette Node-Graph landet direkt einsatzbereit auf dem Canvas!
+- Zurück zu ComfyShelf: Klick auf "Modellpool" (zeigt Deduplikations-Einsparungen)
+  und danach auf "Workflow entladen".
+- Bestätigungsdialog zeigt die geschützten, geteilten Dateien.
+
+[VOICEOVER / SPRECHER]
+"Workflow geladen? Klick einfach auf Kopieren, wechsle in deinen ComfyUI-Tab 
+im Browser, drücke Strg + V – und der komplette Node-Graph liegt sofort auf 
+deinem Canvas. Keine Ladezeiten, kein Tab-Chaos.
+
+Und wenn du Platz brauchst? Workflow entladen. ComfyShelf dedupliziert deinen 
+Modellpool und löscht lokale Dateien erst, wenn per Checksumme garantiert ist, 
+dass sie sicher im Backup liegen."
+
+
+================================================================================
+TEIL 6: OUTRO & CALL-TO-ACTION [1:42 - 2:00]
+================================================================================
+
+[VISUELL / SCREEN]
+- Schnelle Montage von Zusatzfeatures:
+  * "Export Portable ZIP..." (für autarke Pakete für Freunde)
+  * Custom-Node Live-Diagnose (GitHub-Links / Manager-Suche)
+  * Schnelle Echtzeit-Suche (Strg+F) mit Scope-Filtern.
+- Einblendung der GitHub-Releases-Seite mit Logo und Download-Buttons
+  (.exe Setup & portable .zip).
+
+[VOICEOVER / SPRECHER]
+"Dazu gibt es 1-Klick-Exporte für portable ZIPs, Custom-Node-Checks und 
+Echtzeit-Filter.
+
+100 Prozent lokal, komplett offline, Open Source und als Installer oder portable 
+EXE sofort startklar. 
+Den Link zum Download findest du in der Beschreibung. 
+Hol dir deinen Festplattenplatz zurück!"
+
+================================================================================
+ENDE DES SKRIPTS
+================================================================================
