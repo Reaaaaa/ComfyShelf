@@ -16,7 +16,7 @@ ComfyUI workflows and modern generative models (SDXL, Flux, Pony, SD1.5, etc.) q
 
 Park unused workflows on secondary storage, free up SSD space with confidence, and bring full setups back with a single click.
 
-[User guide (English)](docs/guide.en.md) · [Deutsche Anleitung](docs/guide.de.md)
+[User guide (English)](docs/guide.en.md) · [Deutsche Anleitung](docs/guide.de.md) · [Architecture & State Machines](docs/state-machines.md)
 
 <p align="center">
   <img src="demo.gif" alt="ComfyShelf demo — workflow switching, missing model resolution, and instant loading" width="100%">
@@ -81,6 +81,9 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 - **Interactive 7-Step Guided Tour**  
   New to ComfyShelf? An interactive, step-by-step tour highlights the titlebar launcher, workflow library, deduplicated model pool, instant symlink/hardlink loading, and automated safety verifications. Can be restarted at any time from the Help dialog.
 
+- **Deterministic Architecture & 12 Formal State Machines (Zero Deadlocks or UI Flicker)**  
+  ComfyShelf is engineered on 12 explicit, mathematically defined state machines with zero-runtime dependencies ([`state_machines.py`](state_machines.py)). Every lifecycle transition — from ComfyUI process tracking and non-blocking library scans to atomic package deduplication, two-phase tokens, and z-ordered modal stacks — is formalized and verified by 113 automated regression tests. Explore the complete [Architecture & State Machine Specification](docs/state-machines.md).
+
 ---
 
 ## How It Works in 3 Simple Steps
@@ -142,6 +145,7 @@ Both user guides explain these details and everyday operations in depth:
 
 Normal use does not require the command line. Additional documentation:
 
+- [State machine architecture and specification](docs/state-machines.md)
 - [English CLI reference](docs/reference.en.md#command-line-reference)
 - [Technische Referenz (Deutsch)](docs/reference.de.md)
 - [Safety and limitations](docs/safety.md)

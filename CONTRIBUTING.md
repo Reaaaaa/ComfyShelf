@@ -19,6 +19,7 @@ Do not apply ComfyShelf's license to users' models or workflow contents.
 comfy_archive.py           Parsing, packages, pool storage and safe file operations
 dependency_scan.py         Workflow dependency scanner and missing model completion
 model_downloader.py        Hugging Face model search and streaming background downloader
+state_machines.py          Formal 12 domain and UI state machines, transitions, and catalog
 workflow_switcher_gui.py   Desktop bridge, logging and library state
 verification_cache.py      Historical check results and metadata-based invalidation
 workflow_file.py           Workflow JSON lookup and safe JSON-only recovery

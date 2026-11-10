@@ -1,6 +1,6 @@
 # ComfyShelf – Technische Referenz
 
-[Deutsche Anleitung](guide.de.md) · [Technical reference (English)](reference.en.md)
+[Deutsche Anleitung](guide.de.md) · [Technical reference (English)](reference.en.md) · [Architektur & State Machines](state-machines.md)
 
 Diese Referenz ist optional. Für die normale Bedienung reicht die grafische
 Oberfläche. Alle Befehle werden im App-Ordner ausgeführt; die Beispielpfade sind

@@ -1,6 +1,6 @@
 # ComfyShelf technical reference
 
-[User guide](guide.en.md) · [Technische Referenz (Deutsch)](reference.de.md)
+[User guide](guide.en.md) · [Technische Referenz (Deutsch)](reference.de.md) · [Architecture & State Machines](state-machines.md)
 
 This reference is optional. For normal use, follow the user guide and use the
 desktop interface. Commands below run from the app folder; example paths are
