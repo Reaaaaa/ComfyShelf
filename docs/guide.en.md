@@ -18,7 +18,7 @@ edit configuration files or type PowerShell commands.
 - Internet access during initial setup to download the app's extra Python
   components, and enough free space for the app and archived files.
 
-Starting with version **v1.0.0**, ComfyShelf provides an automated **Windows Setup Installer (`.exe`)**
+Starting with version **v1.1.0**, ComfyShelf provides an automated **Windows Setup Installer (`.exe`)**
 as well as a **Portable Standalone Version (`.zip`)**, both of which run directly without requiring a manual
 Python installation. For developers or custom environments, the classic `Setup_ComfyShelf.cmd` setup script
 remains fully supported; non-Windows systems are not yet supported.
@@ -70,11 +70,50 @@ Choose these two locations when prompted, or in **Settings**:
   Select this folder, not `models` itself or an outer portable-installation folder.
 - **Archive folder:** where you want to keep files you are not currently using.
   Prefer a different drive with plenty of free space.
+- **ComfyUI-Easy-Install folder (Optional):** If you use the all-in-one
+  [ComfyUI-Easy-Install](https://github.com/Tavris1/ComfyUI-Easy-Install) package,
+  you can specify its root directory in Settings. ComfyShelf will automatically detect
+  its runner and enable direct launcher control.
 
 Keep these folders separate: neither may be inside the other. ComfyShelf can
 create the archive folder. Archiving may need temporary space as well as space
 for the final files. FAT32 drives cannot be used as the archive destination;
 if warned, choose another suitable drive instead of formatting one blindly.
+
+### Interactive Feature Tour
+
+On your first launch, ComfyShelf presents an interactive 7-step guided tour
+highlighting all core features directly within the interface: from titlebar controls
+and the workflow shelf to the shared model pool, instant linking options, and safety
+verifications. You can restart the tour at any time via the Help (**?**) button
+in the footer or skip it whenever you like.
+
+### Control ComfyUI from the Titlebar (Launcher)
+
+The top titlebar of ComfyShelf gives you real-time visibility and control over your
+ComfyUI server without needing to manage command prompts or batch files:
+
+- **Start:** Click the Start button to boot ComfyUI in the background. A live timer
+  tracks startup progress. Once port 8188 is listening, the indicator turns into an
+  interactive green status pill (**Running: 8188**) — clicking it opens the ComfyUI
+  web interface directly in your default browser.
+- **Stop & Restart:** While ComfyUI is active, click **Stop** to gracefully terminate
+  the background process tree, or **Restart** (e.g. after installing new custom nodes)
+  to reboot the server with a single click.
+- **Attention Variants:** Use the dropdown menu next to the Start button to select
+  your preferred attention backend:
+  - **KitchenAttention (Default):** High-performance, modern attention implementation.
+  - **SageAttention:** Optimized for compatible modern NVIDIA architectures.
+  - **FlashAttention:** Classic FlashAttention acceleration.
+  - **Standard:** Default PyTorch backend without extra attention flags.
+
+> [!NOTE]
+> **Understanding Model Management vs. Server State:**  
+> *Loading* or *unloading* a workflow makes model files available (via instant links
+> or copies) inside ComfyUI's disk folders. *Starting* ComfyUI launches the actual
+> Python web server. You can freely manage and switch workflows whether ComfyUI is
+> currently running or stopped. Just ensure that active image generations finish
+> before unloading models.
 
 ## 4. Archive your first workflow
 

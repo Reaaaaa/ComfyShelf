@@ -4,7 +4,7 @@
 
 # ComfyShelf
 
-[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 206 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v1.0.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
+[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 222 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v1.1.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
 
 <sub>Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.</sub>
 
@@ -25,6 +25,9 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 ---
 
 ## Core Features
+
+- **Integrated ComfyUI Launcher & Attention Presets (Titlebar Controls)**  
+  Start, stop, and restart ComfyUI directly from the window titlebar with zero console clutter or terminal windows. Switch Attention implementations on the fly (**KitchenAttention** as high-performance default, **SageAttention**, **FlashAttention**, or **Standard**). A live status indicator tracks process boot progress second-by-second and turns into a 1-click status pill opening `http://127.0.0.1:8188` in your default browser. Includes dedicated support and path configuration for **[ComfyUI-Easy-Install](https://github.com/Tavris1/ComfyUI-Easy-Install)**.
 
 - **Instant Loading via Symlinks & Hardlinks (No File Copy Delay)**  
   Restoring a 50 GB workflow back into ComfyUI shouldn't keep you waiting for huge files to copy. With **Instant Link** mode, ComfyShelf uses NTFS Hardlinks (on the same drive) or Windows Symlinks to make models available in ComfyUI in milliseconds — consuming 0 additional bytes of disk space. Prefer traditional standalone files instead of links? You can easily switch the loading method to full physical copying at any time in the settings. Visual status badges (`⚡ Hardlink`, `🔗 Symlink`, `📁 Copy`) show the active loading method in the detail view, with automatic fallback to physical copies if needed.  
@@ -75,6 +78,9 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 - **100% Local, Offline & Safe by Design**  
   Supports the Windows Recycle Bin for safe deletion. ComfyShelf never alters ComfyUI's core code, settings, or Python environment. Runs 100% locally with zero telemetry, full offline capability, and a clean bilingual interface (English and German).
 
+- **Interactive 7-Step Guided Tour**  
+  New to ComfyShelf? An interactive, step-by-step tour highlights the titlebar launcher, workflow library, deduplicated model pool, instant symlink/hardlink loading, and automated safety verifications. Can be restarted at any time from the Help dialog.
+
 ---
 
 ## How It Works in 3 Simple Steps
@@ -87,15 +93,15 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 
 ## Get started on Windows
 
-**ComfyShelf v1.0.0** is available in three convenient ways:
+**ComfyShelf v1.1.0** is available in three convenient ways:
 
 ### Option 1: Windows Setup Installer (`.exe`) — *Recommended*
-1. Download **`ComfyShelf-v1.0.0-windows-setup.exe`** from the [Releases](https://github.com/Reaaaaa/ComfyShelf/releases) page.
+1. Download **`ComfyShelf-v1.1.0-windows-setup.exe`** from the [Releases](https://github.com/Reaaaaa/ComfyShelf/releases) page.
 2. Run the installer. It installs per-user into `%LOCALAPPDATA%\Programs\ComfyShelf` — **no administrator privileges required**, no system modifications.
 3. Launch ComfyShelf directly from your Start Menu or Desktop shortcut.
 
 ### Option 2: Portable Version (`.zip`)
-1. Download **`ComfyShelf-v1.0.0-windows-portable.zip`**.
+1. Download **`ComfyShelf-v1.1.0-windows-portable.zip`**.
 2. Extract the folder anywhere you like (e.g. on your desktop, secondary drive, or USB drive).
 3. Double-click **`ComfyShelf.exe`** to run immediately — no installation, no extra runtime setup.
 
@@ -109,7 +115,7 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 > Because ComfyShelf is an open-source project and unsigned binaries do not purchase expensive commercial code-signing certificates, Windows SmartScreen may show an informational prompt (*"Windows protected your PC"*). Click **"More info"** (*"Weitere Informationen"*) and then **"Run anyway"** (*"Trotzdem ausführen"*). All code and build pipelines are 100% open-source and auditable.
 
 ### First-Time Configuration
-1. When starting ComfyShelf for the first time, select your **ComfyUI directory** (standard git, official portable standalone, or one-click setups like **[ComfyUI-Easy-Install](https://github.com/Tavris1/ComfyUI-Easy-Install)**).
+1. When starting ComfyShelf for the first time, select your **ComfyUI directory** (standard git, official portable standalone, or one-click setups like **[ComfyUI-Easy-Install](https://github.com/Tavris1/ComfyUI-Easy-Install)**). If you use ComfyUI-Easy-Install, you can also set its dedicated root directory in Settings so ComfyShelf can directly launch and manage the ComfyUI runner.
 2. Choose a separate **archive directory** (preferably on a secondary drive with ample storage space).
 3. In the settings dialog, choose your preferred **Model Loading Method** (Instant Link via Hardlink/Symlink or Full Copy).
 

@@ -21,7 +21,7 @@ import time
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_VERSION = "1.0.0"
+DEFAULT_VERSION = "1.1.0"
 
 
 def find_iscc() -> Path | None:

@@ -3,11 +3,11 @@
 The README test badges describe the local checks recorded here, **not a live
 GitHub Actions result**. They do not update automatically when code changes.
 
-Snapshot date: **2026-10-12**. Environment: Windows, Python 3.11.9 and Node.js 24.14.0.
+Snapshot date: **2026-11-10**. Environment: Windows, Python 3.11.9 and Node.js 24.14.0.
 
 | Check | Result |
 | --- | --- |
-| Python unit and regression suite | 206 passed, no failures or skips |
+| Python unit and regression suite | 222 passed, no failures or skips |
 | JavaScript frontend tests | Passed for English and German |
 | Frontend JavaScript syntax | Passed |
 | Python module compilation | Passed |
@@ -16,6 +16,7 @@ These suites cover workflow parsing (JSON and PNG embedded metadata), placeholde
 archive deletion (Recycle Bin, permanent delete and orphaned pool cleanup),
 safety checks, the desktop API, setup helpers, source documentation, and frontend
 flows such as missing-file copying, export confirmation and shared-file warnings.
+The suite additionally covers the ComfyUI Titlebar Launcher lifecycle (state derivation, process tree polling, silent termination, port availability detection, ComfyUI-Easy-Install detection, attention variant arguments), the formalization of 12 explicit domain state machines (in `state_machines.py` and `test_state_machines.py` with 113 subtests covering all valid transitions and illegal state rejection), frontend Z-order modal and sub-dialog stack navigation, and native Windows taskbar icon/AppUserModelID branding.
 Sharing checks cover metadata-only indexing, renamed models, duplicate references,
 escaped filenames and continued explicit consent before removing shared files.
 Persistent verification tests cover a fresh Python process, API restart and rename,
@@ -72,7 +73,7 @@ Run from the project root in a development environment with Python and Node.js:
 python -m unittest discover -s tests -p "test_*.py"
 node tests/test_workflow_ui.cjs
 node --check gui/app.js
-python -m py_compile comfy_archive.py workflow_switcher_gui.py setup_comfyshelf.py verification_cache.py dependency_scan.py workflow_file.py model_downloader.py
+python -m py_compile comfy_archive.py workflow_switcher_gui.py setup_comfyshelf.py verification_cache.py dependency_scan.py workflow_file.py model_downloader.py state_machines.py
 ```
 
 See [development setup and checks](../CONTRIBUTING.md#checks) if you need to prepare

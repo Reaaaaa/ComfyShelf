@@ -19,7 +19,7 @@ noch Konfigurationsdateien bearbeiten oder PowerShell-Befehle eingeben.
 - Internet bei der ersten Einrichtung für zusätzliche Python-Komponenten und
   ausreichend freien Platz für die App und deine archivierten Dateien.
 
-Ab Version **v1.0.0** bietet ComfyShelf einen bequemen **Windows-Installer (`.exe`)** sowie eine
+Ab Version **v1.1.0** bietet ComfyShelf einen bequemen **Windows-Installer (`.exe`)** sowie eine
 **Portable Standalone-Version (`.zip`)**, die beide direkt ohne manuelle Python-Installation startklar sind.
 Für Entwickler oder bestehende Setups bleibt das bewährte Skript `Setup_ComfyShelf.cmd` weiterhin
 vollwertig erhalten; andere Betriebssysteme als Windows sind bislang nicht geprüft.
@@ -76,12 +76,51 @@ Wähle beim ersten Start oder unter **Einstellungen** diese zwei Orte:
   portablen Installation auswählen.
 - **Auslagerungsordner:** hier bleiben Dateien, die du gerade nicht brauchst.
   Am besten auf einem anderen Laufwerk mit ausreichend freiem Platz.
+- **ComfyUI-Easy-Install-Ordner (Optional):** Nutzt du das Komplettpaket
+  [ComfyUI-Easy-Install](https://github.com/Tavris1/ComfyUI-Easy-Install), kannst
+  du dessen Stammverzeichnis in den Einstellungen angeben. ComfyShelf erkennt den
+  integrierten Runner automatisch und schaltet die Steuerung direkt frei.
 
 Die beiden Ordner dürfen nicht ineinander liegen. ComfyShelf kann den
 Auslagerungsordner anlegen. Beim Archivieren kann zusätzlich vorübergehend
 Speicher benötigt werden. FAT32-Laufwerke sind als Auslagerungsziel ungeeignet;
 wähle bei einer entsprechenden Meldung ein anderes geeignetes Laufwerk, statt
 vorschnell eines zu formatieren.
+
+### Interaktive Feature-Tour
+
+Beim ersten Start begrüßt dich ComfyShelf mit einer interaktiven 7-Schritte-Tour,
+die alle wichtigen Bereiche direkt im Fenster vorstellt: von der Titelleisten-Steuerung
+über die Workflow-Bibliothek und den Modellpool bis hin zu Ladeoptionen und
+Integritätsprüfungen. Du kannst die Tour jederzeit über das Hilfe-Symbol (**?**)
+in der Fußleiste erneut öffnen oder überspringen.
+
+### ComfyUI direkt aus der Titelleiste steuern (Launcher)
+
+In der oberen Titelleiste von ComfyShelf hast du den Zustand deines ComfyUI-Servers
+jederzeit im Blick und kannst ihn steuern, ohne Konsole oder `.bat`-Dateien öffnen zu müssen:
+
+- **Starten:** Ein Klick auf den Start-Button fährt ComfyUI im Hintergrund hoch.
+  Während des Bootvorgangs zeigt ein Timer die Startsekunden an. Sobald Port 8188
+  bereit ist, wird die Status-Pille grün (**Läuft: 8188**). Ein Klick auf die Pille
+  öffnet die Weboberfläche direkt in deinem Standard-Browser.
+- **Stoppen & Neustarten:** Ist ComfyUI aktiv, kannst du es über **Stoppen** sauber
+  beenden oder mit **Neustarten** (z. B. nach der Installation neuer Custom Nodes)
+  mit einem Klick neu initialisieren.
+- **Attention-Varianten:** Über das Dropdown-Menü neben dem Start-Button kannst du
+  festlegen, mit welcher Optimierung ComfyUI gestartet werden soll:
+  - **KitchenAttention (Standard):** Modernes, schnelles Attention-Backend mit hervorragender Geschwindigkeit.
+  - **SageAttention:** Speziell optimierte Variante für moderne NVIDIA-Architekturen.
+  - **FlashAttention:** Klassische FlashAttention-Beschleunigung.
+  - **Standard:** Standardmäßiges PyTorch-Backend ohne zusätzliche Flags.
+
+> [!NOTE]
+> **Unterschied zwischen Modellverwaltung und Server-Status:**  
+> Das *Laden* oder *Entladen* von Workflows stellt Modelldateien (via Symlink/Hardlink
+> oder Kopie) im ComfyUI-Ordner bereit. Das *Starten* von ComfyUI führt den eigentlichen
+> Python-Server aus. Du kannst deine Workflows jederzeit umschalten, egal ob ComfyUI
+> gerade läuft oder gestoppt ist. Vor dem Entladen aktiver Modelle solltest du lediglich
+> laufende Generierungen kurz beenden.
 
 ## 4. Den ersten Workflow archivieren
 

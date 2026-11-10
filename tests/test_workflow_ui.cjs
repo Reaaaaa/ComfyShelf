@@ -1176,15 +1176,15 @@ async function run(language) {
   assert.ok(indexHtml.includes('class="sidebar-resizer"'));
 
   const readmeMd = fs.readFileSync(path.join(root, '..', 'README.md'), 'utf8');
-  assert.ok(readmeMd.includes('Python tests: 206 passed locally'));
-  assert.ok(!readmeMd.includes('200 passed'));
+  assert.ok(readmeMd.includes('Python tests: 222 passed locally'));
+  assert.ok(!readmeMd.includes('206 passed'));
 
   const testStatusMd = fs.readFileSync(path.join(root, '..', 'docs', 'test-status.md'), 'utf8');
-  assert.ok(testStatusMd.includes('206 passed, no failures or skips'));
+  assert.ok(testStatusMd.includes('222 passed, no failures or skips'));
 
   const pythonBadgeSvg = fs.readFileSync(path.join(root, '..', 'docs', 'assets', 'python-tests.svg'), 'utf8');
-  assert.ok(pythonBadgeSvg.includes('206 passed'));
-  assert.ok(!pythonBadgeSvg.includes('200 passed'));
+  assert.ok(pythonBadgeSvg.includes('222 passed'));
+  assert.ok(!pythonBadgeSvg.includes('206 passed'));
 
   const contributingMd = fs.readFileSync(path.join(root, '..', 'CONTRIBUTING.md'), 'utf8');
   assert.ok(!contributingMd.includes('development draft'));
