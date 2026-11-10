@@ -233,7 +233,7 @@
   "tour.step1_highlight": "Archivieren statt Löschen: Halte dein System schlank, ohne auf deine Workflow-Sammlung zu verzichten.",
   "tour.step2_title": "Deduplizierter Modell-Pool",
   "tour.step2_copy": "Checkpoints, LoRAs und VAEs, die in mehreren Workflows vorkommen, werden automatisch dedupliziert und existieren physisch nur einmal auf deiner Festplatte.",
-  "tour.step2_highlight": "Klicke oben auf „Modelle“, um den Modell-Pool zu durchsuchen, Speicherfresser zu finden und Modelle einzeln bereitzustellen.",
+  "tour.step2_highlight": "Klicke unten links auf „Modell-Pool“, um den gemeinsamen Pool zu durchsuchen, Speicherfresser zu finden und Modelle einzeln bereitzustellen.",
   "tour.step3_title": "Sofort geladen (0 B extra Speicher)",
   "tour.step3_copy": "Mit einem Klick auf „Laden“ verlinkt ComfyShelf alle benötigten Modelle per NTFS-Hardlink oder Windows-Symlink in Millisekunden nach ComfyUI.",
   "tour.step3_highlight": "Keine Wartezeiten beim Kopieren, null doppelter SSD-Verbrauch und nahtlos für alle Drittanwendungen nutzbar.",

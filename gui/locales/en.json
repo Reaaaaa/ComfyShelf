@@ -233,7 +233,7 @@
   "tour.step1_highlight": "Archive instead of deleting: Keep your system lean without sacrificing your workflow library.",
   "tour.step2_title": "Deduplicated Model Pool",
   "tour.step2_copy": "Checkpoints, LoRAs, and VAEs used across multiple workflows are automatically deduplicated and exist physically only once on disk.",
-  "tour.step2_highlight": "Click 'Models' in the top bar to inspect the shared pool, spot storage hogs, and deploy individual models.",
+  "tour.step2_highlight": "Click 'Model Pool' below your workflow list to inspect the shared pool, spot storage hogs, and deploy individual models.",
   "tour.step3_title": "Instant Loading (0 B Extra Space)",
   "tour.step3_copy": "With a single click on 'Load', ComfyShelf links all required models via NTFS hardlinks or Windows symlinks into ComfyUI in milliseconds.",
   "tour.step3_highlight": "Zero file-copy transfer delays, zero duplicate SSD consumption, and completely seamless for third-party tools.",
