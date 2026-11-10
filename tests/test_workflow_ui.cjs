@@ -691,7 +691,7 @@ async function run(language) {
   const tourNextButton = {textContent: ''};
   const tourIcon = {querySelector: () => ({setAttribute(){}})};
   const tourHighlightIcon = {querySelector: () => ({setAttribute(){}})};
-  const tourDots = {children: [{classList: {toggle(){}}}, {classList: {toggle(){}}}, {classList: {toggle(){}}}, {classList: {toggle(){}}}]};
+  const tourDots = {children: Array.from({length: 7}, () => ({classList: {toggle(){}}}) )};
 
   const tourElements = {
     tourModal, tourStepBadge, tourTitle, tourCopy, tourHighlightText,
@@ -714,9 +714,9 @@ async function run(language) {
   await vm.runInContext('prevTourStep()', context);
   assert.ok(tourStepBadge.textContent.includes('1'));
 
-  await vm.runInContext('nextTourStep(); nextTourStep(); nextTourStep();', context);
-  assert.ok(tourStepBadge.textContent.includes('4'));
-  assert.equal(tourTitle.textContent, context.messages['tour.step4_title']);
+  await vm.runInContext('for (let i = 0; i < 6; i++) nextTourStep();', context);
+  assert.ok(tourStepBadge.textContent.includes('7'));
+  assert.equal(tourTitle.textContent, context.messages['tour.step7_title']);
   assert.equal(tourNextButton.textContent, context.messages['tour.finish']);
 
   await vm.runInContext('nextTourStep()', context);
