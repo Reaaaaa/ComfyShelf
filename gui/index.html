@@ -43,6 +43,8 @@
     <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
     <symbol id="i-sort" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></symbol>
     <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -52,6 +54,30 @@
         <div class="brand-copy">
           <span class="brand-name">ComfyShelf</span>
           <span class="brand-subtitle">Workflow &amp; Model Shelf</span>
+        </div>
+      </div>
+      <div class="comfy-launcher-controls pywebview-no-drag" id="comfyLauncherControls">
+        <button type="button" class="comfy-status-pill stopped" id="comfyStatusPill" title="ComfyUI WebUI öffnen (127.0.0.1:8188)" data-i18n-title="launcher.open_web">
+          <span class="comfy-status-dot"></span>
+          <span class="comfy-status-text" id="comfyStatusText" data-i18n="launcher.offline">Offline</span>
+        </button>
+        <div class="comfy-variant-picker">
+          <select id="comfyVariantSelect" class="comfy-variant-select" title="Start-Variante wählen" data-i18n-title="launcher.select_variant">
+            <option value="" data-i18n="launcher.no_variants">Easy-Install Ordner wählen…</option>
+          </select>
+        </div>
+        <div class="comfy-launcher-buttons">
+          <button type="button" class="launcher-btn launcher-start" id="comfyStartButton" title="ComfyUI starten" data-i18n-title="launcher.start">
+            <svg><use href="#i-play"/></svg>
+            <span data-i18n="launcher.start_label">Start</span>
+          </button>
+          <button type="button" class="launcher-btn launcher-stop" id="comfyStopButton" title="ComfyUI stoppen" data-i18n-title="launcher.stop" disabled>
+            <svg><use href="#i-stop"/></svg>
+            <span data-i18n="launcher.stop_label">Stop</span>
+          </button>
+          <button type="button" class="launcher-btn launcher-restart icon-only" id="comfyRestartButton" title="ComfyUI neu starten" data-i18n-title="launcher.restart" disabled>
+            <svg><use href="#i-refresh"/></svg>
+          </button>
         </div>
       </div>
       <div class="window-controls">
@@ -134,6 +160,7 @@
           <button class="footer-action" id="openArchiveButton"><svg><use href="#i-folder"/></svg><span data-i18n="library.open_archive">Open archive</span></button>
           <button class="footer-action" id="settingsButton"><svg><use href="#i-settings"/></svg><span data-i18n="settings.button">Settings</span></button>
         </div>
+        <div class="sidebar-resizer" id="sidebarResizer" role="separator" aria-orientation="vertical" title="Drag to resize workflow list width (double-click to auto-fit)" aria-label="Drag to resize workflow list width (double-click to auto-fit)" data-i18n-title="library.resize_sidebar" data-i18n-aria="library.resize_sidebar"></div>
       </aside>
 
       <main class="content">
@@ -291,6 +318,12 @@
         <span data-i18n="settings.archive_root">Archive folder</span>
         <div class="path-input-row"><input id="archiveRootInput" placeholder="E:\WorkflowArchive"><button class="browse-button" id="browseArchiveButton"><svg><use href="#i-folder"/></svg></button></div>
         <small data-i18n="settings.archive_hint">Portable workflow ZIPs are stored here.</small>
+      </label>
+
+      <label class="path-field">
+        <span data-i18n="settings.easy_install_path">ComfyUI Easy-Install folder</span>
+        <div class="path-input-row"><input id="easyInstallPathInput" placeholder="J:\ComfyUI-Easy-Install"><button class="browse-button" id="browseEasyInstallButton"><svg><use href="#i-folder"/></svg></button></div>
+        <small data-i18n="settings.easy_install_hint">Contains the startup scripts (.bat files like KitchenAttention, SageAttention).</small>
       </label>
 
       <div class="link-mode-setting">
@@ -589,6 +622,78 @@
         <div class="modal-actions">
           <button class="secondary-button" id="modelPoolDoneButton" data-i18n="common.close">Close</button>
         </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop hidden modal-subdialog" id="loadPoolModelModal">
+    <section class="modal load-pool-model-modal" role="dialog" aria-modal="true" aria-labelledby="loadPoolModelTitle">
+      <div class="modal-heading">
+        <div>
+          <span class="eyebrow" data-i18n="model_pool.load_modal_eyebrow">ComfyUI Deployment</span>
+          <h2 id="loadPoolModelTitle" data-i18n="model_pool.load_modal_title">Load Model into ComfyUI</h2>
+        </div>
+        <button class="icon-button modal-close" id="loadPoolModelCloseButton" aria-label="Close dialog" data-i18n-aria="common.close_dialog"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <p class="modal-intro" data-i18n="model_pool.load_modal_intro">Select destination folder and link method for this model.</p>
+
+      <div class="download-info-card">
+        <div class="download-info-row">
+          <span class="download-info-label" data-i18n="model_pool.model_label">Model</span>
+          <strong id="loadPoolModelName" class="download-info-value"></strong>
+        </div>
+        <div class="download-info-row">
+          <span class="download-info-label" data-i18n="model_pool.size_label">Size</span>
+          <span id="loadPoolModelSize" class="download-info-value"></span>
+        </div>
+      </div>
+
+      <div class="load-pool-form">
+        <label class="path-field" for="loadPoolModelTargetPath" style="margin-top: 12px; display: block;">
+          <span data-i18n="model_pool.target_path_label">Target path in ComfyUI:</span>
+          <div class="download-input-row" style="margin-top: 6px;">
+            <input id="loadPoolModelTargetPath" type="text" autocomplete="off" spellcheck="false" placeholder="models/checkpoints/..." data-i18n-placeholder="model_pool.target_path_placeholder">
+          </div>
+          <small data-i18n="model_pool.target_path_hint">Relative path inside your ComfyUI directory (e.g. models/checkpoints/...).</small>
+        </label>
+
+        <label class="path-field" for="loadPoolModelMethodSelect" style="margin-top: 14px; display: block;">
+          <span data-i18n="model_pool.link_method_label">Method:</span>
+          <select id="loadPoolModelMethodSelect" class="settings-select" style="width: 100%; margin-top: 6px; padding: 7px 10px; background: var(--ink-750); color: var(--text-main); border: 1px solid var(--line-soft); border-radius: 6px;">
+            <option value="auto" selected data-i18n="model_pool.link_auto">Auto (Hardlink/Symlink with fallback)</option>
+            <option value="symlink" data-i18n="model_pool.link_symlink">Symlink (Symbolic link)</option>
+            <option value="hardlink" data-i18n="model_pool.link_hardlink">Hardlink (Hard link)</option>
+            <option value="copy" data-i18n="model_pool.link_copy">Copy (Full file copy)</option>
+          </select>
+          <small data-i18n="model_pool.method_hint_auto">Auto chooses the fastest and most space-efficient linking method.</small>
+        </label>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 22px;">
+        <button class="text-button" id="loadPoolModelCancelButton" data-i18n="common.cancel">Cancel</button>
+        <button class="primary-button" id="loadPoolModelSubmitButton">
+          <svg><use href="#i-drive"/></svg>
+          <span data-i18n="model_pool.load_confirm">Load into ComfyUI</span>
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop hidden modal-subdialog" id="unloadPoolModelModal">
+    <section class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="unloadPoolModelTitle">
+      <div class="confirm-icon"><svg><use href="#i-trash"/></svg></div>
+      <span class="eyebrow" data-i18n="model_pool.unload_modal_eyebrow">ComfyUI Cleanup</span>
+      <h2 id="unloadPoolModelTitle" data-i18n="model_pool.unload_modal_title">Remove Model from ComfyUI</h2>
+      <div class="confirm-copy">
+        <p id="unloadPoolModelMessage" data-i18n="model_pool.unload_modal_confirm">Are you sure you want to remove this model from your ComfyUI directory?</p>
+        <p class="muted" style="font-size: 12px; margin-top: 8px;" data-i18n="model_pool.unload_modal_safety_hint">The model file will remain completely intact in the storage pool and can be reloaded at any time.</p>
+      </div>
+      <div class="modal-actions">
+        <button class="text-button" id="unloadPoolModelCancelButton" data-i18n="common.cancel">Cancel</button>
+        <button class="primary-button danger" id="unloadPoolModelSubmitButton">
+          <svg><use href="#i-trash"/></svg>
+          <span data-i18n="model_pool.unload_confirm_btn">Remove from ComfyUI</span>
+        </button>
       </div>
     </section>
   </div>

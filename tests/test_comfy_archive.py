@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 import os
@@ -1259,6 +1260,126 @@ class ParserTests(unittest.TestCase):
             self.assertIsNone(enriched[1]["git_url"])
             self.assertIsNone(enriched[1]["repository_url"])
             self.assertIn("missing-pack", enriched[1]["search_url"])
+
+    def test_deploy_and_undeploy_pool_model(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy_root = base / "ComfyUI"
+            archive_root = base / "Archive"
+            (comfy_root / "models").mkdir(parents=True)
+            archive_root.mkdir()
+
+            model_bytes = b"my-special-checkpoint-content"
+            sha = hashlib.sha256(model_bytes).hexdigest()
+
+            # Store in pool
+            obj_path = MODULE._shared_object_path(archive_root, sha)
+            obj_path.parent.mkdir(parents=True, exist_ok=True)
+            obj_path.write_bytes(model_bytes)
+
+            # Deploy as copy
+            res = MODULE.deploy_pool_model(
+                archive_root,
+                comfy_root,
+                sha256=sha,
+                target_rel_path="models/checkpoints/my_checkpoint.safetensors",
+                link_mode="copy",
+            )
+            self.assertTrue(res["success"])
+            self.assertEqual(res["method"], "copy")
+            target = comfy_root / "models" / "checkpoints" / "my_checkpoint.safetensors"
+            self.assertTrue(target.is_file())
+            self.assertEqual(target.read_bytes(), model_bytes)
+
+            # Re-deploying when already present returns already_present=True
+            res2 = MODULE.deploy_pool_model(
+                archive_root,
+                comfy_root,
+                sha256=sha,
+                target_rel_path="models/checkpoints/my_checkpoint.safetensors",
+                link_mode="auto",
+            )
+            self.assertTrue(res2["success"])
+            self.assertTrue(res2["already_present"])
+
+            # Deploying with conflicting target raises ValueError
+            target.write_bytes(b"corrupted-different-data")
+            with self.assertRaises(ValueError):
+                MODULE.deploy_pool_model(
+                    archive_root,
+                    comfy_root,
+                    sha256=sha,
+                    target_rel_path="models/checkpoints/my_checkpoint.safetensors",
+                )
+
+            # Deploying unsafe path raises ValueError
+            with self.assertRaises(ValueError):
+                MODULE.deploy_pool_model(
+                    archive_root,
+                    comfy_root,
+                    sha256=sha,
+                    target_rel_path="../escaped.safetensors",
+                )
+
+            # Undeploying with wrong expected hash raises ValueError
+            with self.assertRaises(ValueError):
+                MODULE.undeploy_pool_model(
+                    comfy_root,
+                    target_rel_path="models/checkpoints/my_checkpoint.safetensors",
+                    expected_sha256="0" * 64,
+                )
+
+            # Undeploying successfully
+            res_un = MODULE.undeploy_pool_model(
+                comfy_root,
+                target_rel_path="models/checkpoints/my_checkpoint.safetensors",
+            )
+            self.assertTrue(res_un["success"])
+            self.assertFalse(target.exists())
+
+    def test_deploy_pool_model_from_archive_zip(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy_root = base / "ComfyUI"
+            archive_root = base / "Archive"
+            (comfy_root / "models" / "loras").mkdir(parents=True)
+            workflows = comfy_root / "user" / "default" / "workflows"
+            workflows.mkdir(parents=True)
+            archive_root.mkdir()
+
+            lora = comfy_root / "models" / "loras" / "test_lora.safetensors"
+            lora_bytes = b"embedded-lora-bytes"
+            lora.write_bytes(lora_bytes)
+            sha = hashlib.sha256(lora_bytes).hexdigest()
+
+            wf = workflows / "wf.json"
+            wf.write_text(json.dumps({
+                "nodes": [{"id": 1, "type": "LoraLoader", "widgets_values": [lora.name]}]
+            }), encoding="utf-8")
+
+            # Build package without shared pool (embedded)
+            pkg_path = archive_root / "Package.zip"
+            MODULE.build_package(wf, comfy_root, pkg_path, False, False, shared_pool=False)
+
+            # Remove local lora from comfy_root
+            lora.unlink()
+
+            # Ensure not in pool initially
+            obj_path = MODULE._shared_object_path(archive_root, sha)
+            self.assertFalse(obj_path.exists())
+
+            # Deploy should extract from Package.zip into pool and deploy to ComfyUI
+            res = MODULE.deploy_pool_model(
+                archive_root,
+                comfy_root,
+                sha256=sha,
+                target_rel_path="loras/test_lora.safetensors",
+                link_mode="auto",
+            )
+            self.assertTrue(res["success"])
+            self.assertTrue(lora.is_file())
+            self.assertEqual(lora.read_bytes(), lora_bytes)
+            self.assertTrue(obj_path.is_file())
 
 
 if __name__ == "__main__":

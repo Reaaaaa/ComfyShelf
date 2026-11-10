@@ -578,6 +578,35 @@ def infer_model_kind(raw_kind: str = "", path: str | Path = "", filename: str = 
     return "model"
 
 
+KIND_TO_FOLDER: dict[str, str] = {
+    "checkpoint": "checkpoints",
+    "diffusion_model": "diffusion_models",
+    "lora": "loras",
+    "vae": "vae",
+    "text_encoder": "text_encoders",
+    "controlnet": "controlnet",
+    "clip_vision": "clip_vision",
+    "upscale_model": "upscale_models",
+    "style_model": "style_models",
+    "photomaker": "photomaker",
+    "embedding": "embeddings",
+    "gligen": "gligen",
+    "hypernetwork": "hypernetworks",
+    "model": "checkpoints",
+}
+
+
+def default_category_for_kind(kind: str = "", filename: str = "") -> str:
+    """Return the default ComfyUI models subfolder for a given asset kind."""
+    clean_kind = str(kind or "").strip().lower()
+    if not clean_kind or clean_kind in ("model", "unknown", "other"):
+        if filename:
+            inferred = infer_model_kind(clean_kind, filename=filename)
+            if inferred != "model":
+                clean_kind = inferred
+    return KIND_TO_FOLDER.get(clean_kind, "checkpoints")
+
+
 def _generic_kind(node_type: str, field: str = "", filename: str = "") -> tuple[str, tuple[str, ...]]:
     key = f"{node_type} {field}".lower()
     guesses = (
@@ -1903,6 +1932,11 @@ def inspect_import_package(
                 "workflow_format": fmt,
                 "archive_size": source_path.stat().st_size,
                 "assets": asset_rows,
+                "model_bytes": sum(
+                    int(asset.get("size") or 0)
+                    for asset in asset_rows
+                    if asset["status"] == "included"
+                ),
                 "matched_count": len(asset_rows) - len(missing),
                 "missing": missing,
                 "extra_models": extra_models,
@@ -2165,7 +2199,8 @@ def _shared_object_path(archive_path: Path, digest: str) -> Path:
     normalized = str(digest).casefold()
     if len(normalized) != 64 or any(character not in "0123456789abcdef" for character in normalized):
         raise ValueError(f"Ungültiger SHA-256-Objektschlüssel: {digest}")
-    return archive_path.parent / ".comfyshelf" / "objects" / "sha256" / normalized[:2] / normalized
+    base = archive_path if archive_path.is_dir() else archive_path.parent
+    return base / ".comfyshelf" / "objects" / "sha256" / normalized[:2] / normalized
 
 
 def _copy_stream(
@@ -2459,6 +2494,7 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
                 sz = int(asset.get("size") or 0)
                 kind = infer_model_kind(asset.get("kind", "model"), asset.get("archive_path") or "", fn)
                 key = sha if len(sha) == 64 else f"{kind}:{fn.casefold()}"
+                rel_path = asset.get("archive_path") or f"models/{default_category_for_kind(kind, fn)}/{fn}"
                 if key not in models_by_key:
                     models_by_key[key] = {
                         "id": key,
@@ -2472,6 +2508,7 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
                         "present_in_comfy": False,
                         "link_type": None,
                         "comfy_path": None,
+                        "relative_path": rel_path,
                         "workflows": [],
                         "detection": asset.get("detection"),
                         "resolution": asset.get("resolution"),
@@ -2480,6 +2517,7 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
                     "name": archive_path.stem,
                     "archive_path": str(archive_path.resolve()),
                     "storage": "embedded",
+                    "path": rel_path,
                 })
             continue
 
@@ -2533,6 +2571,7 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
                     "present_in_comfy": exists_in_comfy,
                     "link_type": link_type,
                     "comfy_path": comfy_target_str if exists_in_comfy else None,
+                    "relative_path": raw_path,
                     "workflows": [],
                     "detection": asset.get("detection"),
                     "resolution": asset.get("resolution"),
@@ -2543,6 +2582,8 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
                     existing["kind"] = kind
                 if str(existing.get("filename", "")).startswith("object_") and not str(fn).startswith("object_"):
                     existing["filename"] = fn
+                if not existing.get("relative_path") or existing.get("relative_path", "").startswith("models/checkpoints/object_"):
+                    existing["relative_path"] = raw_path
                 if not existing.get("present_in_comfy") and exists_in_comfy:
                     existing["present_in_comfy"] = True
                     existing["link_type"] = link_type
@@ -2556,6 +2597,7 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
                 "name": archive_path.stem,
                 "archive_path": str(archive_path.resolve()),
                 "storage": storage_mode,
+                "path": raw_path,
             }
             if not any(w["archive_path"] == wf_entry["archive_path"] for w in models_by_key[key]["workflows"]):
                 models_by_key[key]["workflows"].append(wf_entry)
@@ -2589,6 +2631,7 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
                                         "present_in_comfy": False,
                                         "link_type": None,
                                         "comfy_path": None,
+                                        "relative_path": f"models/checkpoints/object_{obj_sha[:10]}",
                                         "workflows": [],
                                         "detection": "pool-storage",
                                         "resolution": "orphaned-object",
@@ -2599,6 +2642,15 @@ def inspect_model_pool(archive_root: Path, comfy_root: Path | None = None) -> di
     model_list = list(models_by_key.values())
     for item in model_list:
         item["workflow_count"] = len(item["workflows"])
+        if not item.get("relative_path"):
+            item["relative_path"] = f"models/{default_category_for_kind(item.get('kind', 'model'), item.get('filename', ''))}/{item.get('filename')}"
+        if not item.get("comfy_path") and comfy_root:
+            try:
+                item["suggested_target_path"] = str(_safe_model_target(comfy_root, item["relative_path"]))
+            except (OSError, ValueError):
+                item["suggested_target_path"] = None
+        else:
+            item["suggested_target_path"] = item.get("comfy_path")
     model_list.sort(key=lambda m: (-m["workflow_count"], -m["size"], m["filename"].casefold()))
 
     total_models = len(model_list)
@@ -2680,6 +2732,275 @@ def optimize_library(
         "optimized_count": len(optimized),
         "new_object_bytes": sum(int(item.get("new_object_bytes", 0)) for item in optimized),
         "reused_object_bytes": sum(int(item.get("reused_object_bytes", 0)) for item in optimized),
+    }
+
+
+def _extract_model_to_pool(
+    archive_root: Path,
+    sha256: str,
+    progress: ProgressCallback = None,
+) -> Path | None:
+    """Find a model in any archive package in archive_root and extract it to the shared object pool."""
+    root = archive_root if archive_root.is_dir() else archive_root.parent
+    clean_sha = sha256.casefold()
+    target = _shared_object_path(root, clean_sha)
+    if target.is_file():
+        return target
+
+    if not root.is_dir():
+        return None
+
+    for archive_path in sorted(root.glob("*.zip"), key=lambda p: p.name.casefold()):
+        try:
+            manifest = load_package_manifest(archive_path)
+        except (OSError, ValueError):
+            continue
+
+        matching_file = None
+        for f in manifest.get("files", []):
+            if (f.get("sha256") or "").casefold() == clean_sha or (f.get("object_sha256") or "").casefold() == clean_sha:
+                matching_file = f
+                break
+
+        if matching_file and matching_file.get("path"):
+            try:
+                with zipfile.ZipFile(archive_path, "r") as archive:
+                    pool_file, _ = _store_zip_member_as_object(archive_path, archive, matching_file, progress)
+                    if pool_file.is_file():
+                        return pool_file
+            except Exception:
+                pass
+
+    return None
+
+
+def deploy_pool_model(
+    archive_root: Path,
+    comfy_root: Path,
+    sha256: str,
+    target_rel_path: str,
+    link_mode: str = "auto",
+    progress: ProgressCallback = None,
+) -> dict[str, Any]:
+    """Manually deploy or link a model from the pool or an archive package into ComfyUI."""
+    if link_mode not in {"copy", "auto", "hardlink", "symlink"}:
+        raise ValueError(f"Ungültiger Lademodus: {link_mode}")
+
+    root = archive_root.resolve()
+    comfy = comfy_root.resolve()
+    clean_sha = str(sha256).strip().casefold()
+    clean_target = target_rel_path.strip().replace("\\", "/").lstrip("/")
+    if not clean_target.lower().startswith("models/"):
+        clean_target = f"models/{clean_target}"
+
+    target = _safe_model_target(comfy, clean_target)
+
+    # 1. Locate the source file in the object pool or archive packages
+    source_obj = _shared_object_path(root, clean_sha)
+    if not source_obj.is_file():
+        source_obj = _extract_model_to_pool(root, clean_sha, progress)
+
+    if not source_obj or not source_obj.is_file():
+        raise FileNotFoundError(f"Modell mit SHA-256 {clean_sha} wurde weder im Pool noch in Paketen gefunden.")
+
+    expected_size = source_obj.stat().st_size
+
+    # 2. Check if already present at target
+    if target.is_file() or target.is_symlink():
+        try:
+            is_same = False
+            if target.is_file() and os.path.samefile(target, source_obj):
+                is_same = True
+            elif target.is_file() and target.stat().st_size == expected_size:
+                if sha256_file(target) == clean_sha:
+                    is_same = True
+
+            if is_same:
+                is_sym = target.is_symlink()
+                is_hard = not is_sym and getattr(target.stat(), "st_nlink", 1) > 1
+                method = "symlink" if is_sym else ("hardlink" if is_hard else "copy")
+                return {
+                    "success": True,
+                    "already_present": True,
+                    "sha256": clean_sha,
+                    "target_path": str(target),
+                    "relative_path": clean_target,
+                    "method": method,
+                    "size": expected_size,
+                }
+            else:
+                raise ValueError(f"Zieldatei existiert bereits und unterscheidet sich vom Modell: {target}")
+        except OSError as exc:
+            raise ValueError(f"Zieldatei existiert bereits und kann nicht überprüft werden: {exc}")
+
+    # 3. Deploy using link or copy
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp_link = target.parent / f".{target.name}.{uuid.uuid4().hex[:8]}.deploy-tmp"
+    link_method_used = None
+
+    try:
+        if link_mode in {"hardlink", "auto"}:
+            same_volume = (
+                source_obj.anchor.casefold() == target.parent.anchor.casefold()
+                if (source_obj.anchor and target.parent.anchor)
+                else True
+            )
+            if same_volume or link_mode == "hardlink":
+                try:
+                    os.link(source_obj, temp_link)
+                    link_method_used = "hardlink"
+                except OSError:
+                    if link_mode == "hardlink":
+                        raise
+
+        if not link_method_used and link_mode in {"symlink", "auto"}:
+            try:
+                os.symlink(source_obj, temp_link)
+                link_method_used = "symlink"
+            except OSError:
+                if link_mode == "symlink":
+                    raise
+
+        if not link_method_used and link_mode in {"copy", "auto"}:
+            _emit_progress(
+                progress,
+                phase="deploy-copy",
+                message=f"Kopiere {target.name} nach ComfyUI...",
+                current=0,
+                total=expected_size,
+                file=target.name,
+                log=True,
+            )
+            with open(source_obj, "rb") as src, open(temp_link, "wb") as dst:
+                copied = 0
+                while True:
+                    chunk = src.read(8 * 1024 * 1024)
+                    if not chunk:
+                        break
+                    dst.write(chunk)
+                    copied += len(chunk)
+                    if progress and expected_size > 0:
+                        _emit_progress(
+                            progress,
+                            phase="deploy-copy",
+                            message=f"Kopiere {target.name} ({human_size(copied)} / {human_size(expected_size)})",
+                            current=copied,
+                            total=expected_size,
+                            file=target.name,
+                        )
+            link_method_used = "copy"
+
+        if not link_method_used:
+            raise RuntimeError(f"Konnte Modell {target.name} mit Modus '{link_mode}' nicht bereitstellen.")
+
+        if temp_link.stat().st_size != expected_size:
+            raise ValueError(f"Bereitgestelltes Modell hat unerwartete Größe: {temp_link.stat().st_size} != {expected_size}")
+
+        if target.exists():
+            raise ValueError(f"Zieldatei erschien unerwartet während der Bereitstellung: {target}")
+
+        os.replace(temp_link, target)
+
+    except Exception:
+        if temp_link.exists() or temp_link.is_symlink():
+            try:
+                temp_link.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
+
+    _emit_progress(
+        progress,
+        phase="complete",
+        message=f"Modell {target.name} erfolgreich als {link_method_used} bereitgestellt",
+        current=expected_size,
+        total=expected_size,
+        file=target.name,
+        level="success",
+        log=True,
+    )
+
+    return {
+        "success": True,
+        "already_present": False,
+        "sha256": clean_sha,
+        "target_path": str(target),
+        "relative_path": clean_target,
+        "method": link_method_used,
+        "size": expected_size,
+    }
+
+
+def undeploy_pool_model(
+    comfy_root: Path,
+    target_rel_path: str,
+    expected_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Remove a deployed model or symlink/hardlink from ComfyUI."""
+    comfy = comfy_root.resolve()
+    clean_target = target_rel_path.strip().replace("\\", "/").lstrip("/")
+    if not clean_target.lower().startswith("models/"):
+        clean_target = f"models/{clean_target}"
+
+    target = _safe_model_target(comfy, clean_target)
+
+    if not target.is_file() and not target.is_symlink():
+        return {
+            "success": True,
+            "already_removed": True,
+            "target_path": str(target),
+            "relative_path": clean_target,
+            "freed_bytes": 0,
+        }
+
+    is_sym = target.is_symlink()
+    try:
+        st = target.stat()
+        size = st.st_size
+        is_hard = not is_sym and getattr(st, "st_nlink", 1) > 1
+    except OSError:
+        size = 0
+        is_hard = False
+
+    link_type = "symlink" if is_sym else ("hardlink" if is_hard else "copy")
+
+    if expected_sha256:
+        clean_expected = expected_sha256.strip().casefold()
+        if len(clean_expected) == 64 and target.is_file() and not is_sym:
+            actual_hash = sha256_file(target)
+            if actual_hash != clean_expected:
+                raise ValueError(
+                    f"Lokale Modelldatei weicht vom erwarteten Hash ab ({actual_hash[:10]} != {clean_expected[:10]}). "
+                    "Aus Sicherheitsgründen wird die Datei nicht gelöscht."
+                )
+
+    issue = _deletion_access_issue(target)
+    if issue:
+        reason = issue.get("reason", issue) if isinstance(issue, dict) else str(issue)
+        raise PermissionError(f"Modelldatei kann nicht entfernt werden: {reason}")
+
+    target.unlink()
+
+    # Clean up empty parent directories within models/
+    models_root = (comfy / "models").resolve()
+    parent = target.parent
+    while parent != models_root and _is_relative_to(parent, models_root):
+        try:
+            if not any(parent.iterdir()):
+                parent.rmdir()
+                parent = parent.parent
+            else:
+                break
+        except OSError:
+            break
+
+    return {
+        "success": True,
+        "already_removed": False,
+        "target_path": str(target),
+        "relative_path": clean_target,
+        "method": link_type,
+        "freed_bytes": size if link_type == "copy" else 0,
     }
 
 

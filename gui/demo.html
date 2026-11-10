@@ -296,6 +296,8 @@
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></symbol>
     <symbol id="i-sort" viewBox="0 0 24 24"><path d="m3 7 4-4 4 4M7 3v14M21 17l-4 4-4-4M17 21V7"/></symbol>
     <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5" fill="currentColor"/><circle cx="15" cy="6" r="1.5" fill="currentColor"/><circle cx="9" cy="12" r="1.5" fill="currentColor"/><circle cx="15" cy="12" r="1.5" fill="currentColor"/><circle cx="9" cy="18" r="1.5" fill="currentColor"/><circle cx="15" cy="18" r="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
   </svg>
 
   <!-- Virtual Cinema Pointer -->
@@ -349,6 +351,33 @@
           <div class="brand-copy">
             <span class="brand-name">ComfyShelf</span>
             <span class="brand-subtitle">WORKFLOW &amp; MODEL SHELF</span>
+          </div>
+        </div>
+        <div class="comfy-launcher-controls pywebview-no-drag" id="comfyLauncherControls">
+          <button type="button" class="comfy-status-pill running" id="comfyStatusPill" title="ComfyUI WebUI öffnen (127.0.0.1:8188)">
+            <span class="comfy-status-dot"></span>
+            <span class="comfy-status-text" id="comfyStatusText">Läuft (8188)</span>
+          </button>
+          <div class="comfy-variant-picker">
+            <select id="comfyVariantSelect" class="comfy-variant-select" title="Start-Variante wählen">
+              <option value="Start ComfyUI KitchenAttention.bat" selected>KitchenAttention</option>
+              <option value="Start ComfyUI SageAttention.bat">SageAttention</option>
+              <option value="Start ComfyUI FlashAttention.bat">FlashAttention</option>
+              <option value="Start ComfyUI.bat">Standard (Default)</option>
+            </select>
+          </div>
+          <div class="comfy-launcher-buttons">
+            <button type="button" class="launcher-btn launcher-start" id="comfyStartButton" title="ComfyUI starten" disabled>
+              <svg><use href="#i-play"/></svg>
+              <span>Start</span>
+            </button>
+            <button type="button" class="launcher-btn launcher-stop" id="comfyStopButton" title="ComfyUI stoppen">
+              <svg><use href="#i-stop"/></svg>
+              <span>Stop</span>
+            </button>
+            <button type="button" class="launcher-btn launcher-restart icon-only" id="comfyRestartButton" title="ComfyUI neu starten">
+              <svg><use href="#i-refresh"/></svg>
+            </button>
           </div>
         </div>
         <div class="window-controls">
@@ -415,7 +444,7 @@
               <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
-                <span class="workflow-name">MiniMax-H3_Ref2VA_2-P...</span>
+                <span class="workflow-name" title="MiniMax-H3_Ref2VA_2-Portraets_16GB">MiniMax-H3_Ref2VA_2-Portraets_16GB</span>
                 <span class="workflow-meta">
                   <span class="workflow-state">ARCHIVED</span>
                   <span>41.4 GiB</span>
@@ -428,7 +457,7 @@
               <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
-                <span class="workflow-name">MiniMax-H3_4070TiS_16...</span>
+                <span class="workflow-name" title="MiniMax-H3_4070TiS_16GB">MiniMax-H3_4070TiS_16GB</span>
                 <span class="workflow-meta">
                   <span class="workflow-state">ARCHIVED</span>
                   <span>41.4 GiB</span>
@@ -441,7 +470,7 @@
               <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
-                <span class="workflow-name">Qwen_Image_2512_3xLoRA</span>
+                <span class="workflow-name" title="Qwen_Image_2512_3xLoRA">Qwen_Image_2512_3xLoRA</span>
                 <span class="workflow-match-hint hidden" id="hintQwenLora">
                   <svg><use href="#i-search"/></svg><span class="match-type">Name:</span><span class="match-text">qwen</span>
                 </span>
@@ -457,7 +486,7 @@
               <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
-                <span class="workflow-name">Qwen_Image_Edit_2511_I...</span>
+                <span class="workflow-name" title="Qwen_Image_Edit_2511_Illustrious">Qwen_Image_Edit_2511_Illustrious</span>
                 <span class="workflow-match-hint hidden" id="hintQwenEdit">
                   <svg><use href="#i-search"/></svg><span class="match-type">Model:</span><span class="match-text">Illustrious-XL-v2.0</span>
                 </span>
@@ -473,7 +502,7 @@
               <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
-                <span class="workflow-name">Minimax Music 3</span>
+                <span class="workflow-name" title="Minimax Music 3">Minimax Music 3</span>
                 <span class="workflow-meta">
                   <span class="workflow-state">LOADED</span>
                   <span>13.3 GiB</span>
@@ -486,7 +515,7 @@
               <span class="workflow-item-grip" aria-hidden="true"><svg><use href="#i-grip"/></svg></span>
               <span class="workflow-item-thumb"><svg><use href="#i-workflow"/></svg></span>
               <span class="workflow-item-info">
-                <span class="workflow-name">RVC_Vocal_Training_Tem...</span>
+                <span class="workflow-name" title="RVC_Vocal_Training_Template">RVC_Vocal_Training_Template</span>
                 <span class="workflow-meta">
                   <span class="workflow-state">ARCHIVED</span>
                   <span>53.7 MiB</span>
@@ -499,6 +528,7 @@
             <button class="footer-action"><svg><use href="#i-folder"/></svg><span>Open archive</span></button>
             <button class="footer-action"><svg><use href="#i-settings"/></svg><span>Settings</span></button>
           </div>
+          <div class="sidebar-resizer" id="demoSidebarResizer" role="separator" aria-orientation="vertical" title="Drag to resize workflow list width (double-click to auto-fit)"></div>
         </aside>
 
         <!-- Main Content -->
@@ -1218,7 +1248,58 @@
     });
 
     // Initialize layout on load
-    window.addEventListener('DOMContentLoaded', resetDemo);
+    window.addEventListener('DOMContentLoaded', () => {
+      resetDemo();
+      const resizer = document.getElementById('demoSidebarResizer');
+      const workspace = document.querySelector('.workspace');
+      const sidebar = document.querySelector('.sidebar');
+      if (resizer && workspace && sidebar) {
+        let drag = null;
+        resizer.addEventListener('pointerdown', e => {
+          if (e.button !== 0) return;
+          try { resizer.setPointerCapture?.(e.pointerId); } catch (_) {}
+          const rect = sidebar.getBoundingClientRect();
+          const offsetWidth = sidebar.offsetWidth || 310;
+          const scale = rect.width ? (rect.width / offsetWidth) : 1;
+          drag = { pointerId: e.pointerId, startX: e.clientX, startWidth: offsetWidth, scale: scale || 1 };
+          resizer.classList.add('resizing');
+          document.body.classList.add('resizing-sidebar');
+          e.preventDefault();
+        });
+        window.addEventListener('pointermove', e => {
+          if (!drag) return;
+          const dx = (e.clientX - drag.startX) / drag.scale;
+          const maxW = Math.min(720, Math.floor((workspace.clientWidth || 1440) * 0.65));
+          const next = Math.max(240, Math.min(maxW, Math.round(drag.startWidth + dx)));
+          workspace.style.setProperty('--sidebar-width', `${next}px`);
+        });
+        const stop = e => {
+          if (!drag) return;
+          try {
+            if (e?.pointerId !== undefined && resizer.hasPointerCapture?.(e.pointerId)) {
+              resizer.releasePointerCapture(e.pointerId);
+            }
+          } catch (_) {}
+          resizer.classList.remove('resizing');
+          document.body.classList.remove('resizing-sidebar');
+          drag = null;
+        };
+        window.addEventListener('pointerup', stop);
+        window.addEventListener('pointercancel', stop);
+        resizer.addEventListener('dblclick', e => {
+          e.preventDefault();
+          const names = [...sidebar.querySelectorAll('.workflow-name')];
+          const maxOverflow = names.reduce((m, el) => Math.max(m, (el.scrollWidth || 0) - (el.clientWidth || 0)), 0);
+          if (maxOverflow > 1) {
+            const maxW = Math.min(720, Math.floor((workspace.clientWidth || 1440) * 0.65));
+            const next = Math.max(240, Math.min(maxW, Math.round(sidebar.offsetWidth + maxOverflow + 16)));
+            workspace.style.setProperty('--sidebar-width', `${next}px`);
+          } else {
+            workspace.style.removeProperty('--sidebar-width');
+          }
+        });
+      }
+    });
   </script>
 </body>
 </html>

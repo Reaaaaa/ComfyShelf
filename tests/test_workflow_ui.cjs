@@ -208,9 +208,13 @@ async function run(language) {
   assert.equal(removed, 2); assert.equal(focused, 2);
 
   // Both dynamically rendered confirmation dialogs use the same copyable rows.
-  context.report = {workflow: 'Test', package: 'Test', output_path: 'test.zip', missing: [context.missingFile], assets: [], extra_models: []};
+  context.report = {
+    workflow: 'Test', package: 'Test', output_path: 'test.zip',
+    missing: [context.missingFile], assets: [{filename: 'm.safetensors', size: 10737418240}],
+    model_bytes: 10737418240, archive_bytes_free: 53687091200, extra_models: []
+  };
   await vm.runInContext(`
-    app.state = {configured: true, packages: []};
+    app.state = {configured: true, packages: [], validation: {archive_free: 53687091200}};
     window.pywebview.api.choose_workflow = async () => ({ok:true, data:'workflow.json'});
     window.pywebview.api.inspect_for_pack = async () => ({ok:true, data:report});
     window.pywebview.api.choose_archive = async () => ({ok:true, data:'test.zip'});
@@ -218,10 +222,18 @@ async function run(language) {
     addWorkflow();
   `, context);
   assert.ok(context.confirmation.copy.includes('data-copy-filename="&lt;model&gt;&quot;&amp;.safetensors"'));
+  assert.ok(context.confirmation.copy.includes(context.messages['detail.model_size']));
+  assert.ok(context.confirmation.copy.includes('10.0 GiB'));
+  assert.ok(context.confirmation.copy.includes(context.messages['summary.archive_free']));
+  assert.ok(context.confirmation.copy.includes('50.0 GiB'));
   // Import installs extra controls after opening its dialog.
   context.document.getElementById = () => ({querySelectorAll: () => [], querySelector: () => null});
   await vm.runInContext('importPackage()', context);
   assert.ok(context.confirmation.copy.includes('data-copy-filename="&lt;model&gt;&quot;&amp;.safetensors"'));
+  assert.ok(context.confirmation.copy.includes(context.messages['detail.model_size']));
+  assert.ok(context.confirmation.copy.includes('10.0 GiB'));
+  assert.ok(context.confirmation.copy.includes(context.messages['summary.archive_free']));
+  assert.ok(context.confirmation.copy.includes('50.0 GiB'));
 
   // Export is independent of pool optimization and needs an explicit destination.
   const exportButton = {disabled: false};
@@ -1023,6 +1035,24 @@ async function run(language) {
     afterDeleteKeys = getCustomWorkflowOrder();
   `, context);
   assert.ok(!Array.from(context.afterDeleteKeys).includes('Charlie.zip'));
+
+  // 8. Sidebar width clamping and persistence
+  assert.equal(vm.runInContext('clampSidebarWidth(180, 1200)', context), 240);
+  assert.equal(vm.runInContext('clampSidebarWidth(420, 1200)', context), 420);
+  assert.equal(vm.runInContext('clampSidebarWidth(900, 1000)', context), 650);
+  const workspaceProps = {};
+  context.document.querySelector = sel => sel === '.workspace' ? {
+    clientWidth: 1200,
+    style: {
+      setProperty(k, v) { workspaceProps[k] = v; },
+      removeProperty(k) { delete workspaceProps[k]; },
+    },
+  } : null;
+  assert.equal(vm.runInContext('applySidebarWidth(450, true)', context), 450);
+  assert.equal(workspaceProps['--sidebar-width'], '450px');
+  assert.equal(vm.runInContext("getStorage('comfyshelf_sidebar_width')", context), '450');
+  assert.equal(vm.runInContext('applySidebarWidth(null, true)', context), null);
+  assert.equal(workspaceProps['--sidebar-width'], undefined);
 }
 
 (async () => {
@@ -1088,6 +1118,8 @@ async function run(language) {
   assert.ok(indexHtml.includes('id="archiveStorageReadout"'));
   assert.ok(indexHtml.includes('id="clipboardOption"'));
   assert.ok(indexHtml.includes('id="copyToClipboardCheckbox"'));
+  assert.ok(indexHtml.includes('id="sidebarResizer"'));
+  assert.ok(indexHtml.includes('class="sidebar-resizer"'));
 
   const readmeMd = fs.readFileSync(path.join(root, '..', 'README.md'), 'utf8');
   assert.ok(readmeMd.includes('Python tests: 206 passed locally'));
@@ -1196,6 +1228,26 @@ async function run(language) {
       'confirm.copy_to_clipboard',
       'confirm.copy_to_clipboard_hint',
       'toast.packed_and_copied',
+      'library.resize_sidebar',
+      'settings.easy_install_path',
+      'settings.easy_install_hint',
+      'launcher.open_web',
+      'launcher.offline',
+      'launcher.starting',
+      'launcher.running',
+      'launcher.stopping',
+      'launcher.select_variant',
+      'launcher.no_variants',
+      'launcher.start',
+      'launcher.start_label',
+      'launcher.stop',
+      'launcher.stop_label',
+      'launcher.restart',
+      'launcher.started',
+      'launcher.stopped',
+      'launcher.restarted',
+      'launcher.already_running',
+      'launcher.setup_needed',
     ]) {
       assert.ok(loc[key], `Missing key ${key} in ${lang}.json`);
     }

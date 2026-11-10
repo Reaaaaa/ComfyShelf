@@ -7,6 +7,8 @@ import base64
 import json
 import logging
 import os
+import re
+import socket
 import subprocess
 import sys
 import threading
@@ -173,6 +175,9 @@ class WorkflowSwitcherApi:
         self._scan_thread: threading.Thread | None = None
         self._frontend_ready = threading.Event()
         self._last_export_dir: Path | None = None
+        self._comfy_process: subprocess.Popen[Any] | None = None
+        self._comfy_starting: bool = False
+        self._comfy_start_time: float = 0.0
 
     def _attach_window(self, window: Any) -> None:
         self._window = window
@@ -471,7 +476,10 @@ class WorkflowSwitcherApi:
         def action() -> str | None:
             installation = engine.active_installation()
             initial = ""
-            if installation:
+            if kind == "easy_install":
+                detected = self._get_easy_install_path()
+                initial = str(detected) if detected else ""
+            elif installation:
                 initial = installation.get("comfy_root" if kind == "comfy" else "archive_root", "")
             selected = self._window.create_file_dialog(
                 webview.FileDialog.FOLDER,
@@ -518,9 +526,19 @@ class WorkflowSwitcherApi:
 
         return self._result(action)
 
-    def save_settings(self, comfy_root: str, archive_root: str, link_mode: str = "auto") -> dict[str, Any]:
+    def save_settings(
+        self,
+        comfy_root: str,
+        archive_root: str,
+        link_mode: str = "auto",
+        easy_install_path: str = "",
+    ) -> dict[str, Any]:
         def action() -> dict[str, Any]:
             result = self._save_settings(Path(comfy_root), Path(archive_root), link_mode)
+            if easy_install_path.strip():
+                preferences = self._read_preferences()
+                preferences["easy_install_path"] = easy_install_path.strip()
+                self._write_preferences(preferences)
             with self._state_lock:
                 self._state_cache = None
             LOGGER.info("ComfyUI and archive paths saved (link_mode=%s)", link_mode)
@@ -538,6 +556,250 @@ class WorkflowSwitcherApi:
             link_mode=link_mode,
         )
         return {"validation": validation, "config_path": str(saved)}
+
+    def _get_easy_install_path(self) -> Path | None:
+        preferences = self._read_preferences()
+        configured = preferences.get("easy_install_path")
+        if configured:
+            p = Path(configured)
+            if p.is_dir():
+                return p
+        installation = engine.active_installation()
+        if installation and installation.get("comfy_root"):
+            comfy_root = Path(installation["comfy_root"])
+            parent = comfy_root.parent
+            if parent.is_dir() and any(parent.glob("Start ComfyUI*.bat")):
+                return parent
+            if comfy_root.is_dir() and any(comfy_root.glob("Start ComfyUI*.bat")):
+                return comfy_root
+        return None
+
+    @staticmethod
+    def _scan_comfy_variants(folder: Path | None) -> list[dict[str, str]]:
+        if not folder or not folder.is_dir():
+            return []
+        variants: list[dict[str, str]] = []
+        for file in sorted(folder.glob("*.bat")):
+            name = file.stem
+            lower = name.lower()
+            if any(term in lower for term in ("update", "install", "setup", "backup", "patch", "test")):
+                continue
+            if "comfyui-ezi" in lower:
+                continue
+            if "start" not in lower and "comfyui" not in lower:
+                continue
+            clean = re.sub(r"^(start\s*comfyui|start|comfyui)[\s_-]*", "", name, flags=re.IGNORECASE).strip()
+            if not clean:
+                clean = "Standard (Default)"
+            variants.append({
+                "id": file.name,
+                "name": clean,
+                "path": str(file),
+            })
+
+        # Sort variants: KitchenAttention FIRST, then SageAttention, FlashAttention, Standard, others
+        def sort_key(v: dict[str, str]) -> tuple[int, str]:
+            n = v["name"].lower()
+            if "kitchen" in n:
+                return (0, n)
+            if "sage" in n:
+                return (1, n)
+            if "flash" in n:
+                return (2, n)
+            if "standard" in n or "default" in n:
+                return (3, n)
+            return (4, n)
+
+        variants.sort(key=sort_key)
+        return variants
+
+    def _resolve_selected_variant(self, variants: list[dict[str, str]]) -> str:
+        if not variants:
+            return ""
+        variant_ids = {v["id"] for v in variants}
+        preferences = self._read_preferences()
+        saved = preferences.get("comfy_launcher_variant")
+        if saved and saved in variant_ids:
+            return saved
+        # Initial selection priority: KitchenAttention
+        for v in variants:
+            if "kitchen" in v["name"].lower():
+                return v["id"]
+        return variants[0]["id"]
+
+    @staticmethod
+    def _is_port_in_use(port: int = 8188, host: str = "127.0.0.1") -> bool:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.3)
+                return s.connect_ex((host, port)) == 0
+        except Exception:
+            return False
+
+    def get_launcher_info(self) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            folder = self._get_easy_install_path()
+            variants = self._scan_comfy_variants(folder)
+            selected = self._resolve_selected_variant(variants)
+            status_res = self.get_comfy_status()
+            status_data = status_res.get("data", {})
+            return {
+                "configured": folder is not None,
+                "path": str(folder) if folder else "",
+                "variants": variants,
+                "selected_variant": selected,
+                "status": status_data,
+            }
+
+        return self._result(action)
+
+    def save_launcher_settings(self, easy_install_path: str = "", variant: str = "") -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            preferences = self._read_preferences()
+            if easy_install_path.strip():
+                preferences["easy_install_path"] = easy_install_path.strip()
+            if variant.strip():
+                preferences["comfy_launcher_variant"] = variant.strip()
+            self._write_preferences(preferences)
+            return self.get_launcher_info()["data"]
+
+        return self._result(action)
+
+    def get_comfy_status(self) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            port_active = self._is_port_in_use(8188)
+            now = time.monotonic()
+            if self._comfy_starting and port_active:
+                self._comfy_starting = False
+            elif self._comfy_starting and (now - self._comfy_start_time > 60.0):
+                self._comfy_starting = False
+
+            if self._comfy_process and self._comfy_process.poll() is not None:
+                self._comfy_process = None
+                if not port_active:
+                    self._comfy_starting = False
+
+            return {
+                "running": port_active,
+                "starting": self._comfy_starting,
+                "port": 8188,
+                "url": "http://127.0.0.1:8188",
+            }
+
+        return self._result(action)
+
+    def start_comfy(self, variant: str = "") -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            if self._is_port_in_use(8188):
+                return {
+                    "started": False,
+                    "already_running": True,
+                    "message": "ComfyUI is already running on port 8188",
+                }
+            folder = self._get_easy_install_path()
+            if not folder or not folder.is_dir():
+                raise FileNotFoundError("Easy-Install folder not configured or not found.")
+            variants = self._scan_comfy_variants(folder)
+            if not variants:
+                raise FileNotFoundError("No ComfyUI start scripts found in folder.")
+
+            chosen_id = variant.strip() or self._resolve_selected_variant(variants)
+            bat_target = None
+            for v in variants:
+                if v["id"] == chosen_id or v["name"] == chosen_id:
+                    bat_target = Path(v["path"])
+                    chosen_id = v["id"]
+                    break
+            if not bat_target or not bat_target.is_file():
+                bat_target = Path(variants[0]["path"])
+                chosen_id = variants[0]["id"]
+
+            preferences = self._read_preferences()
+            preferences["comfy_launcher_variant"] = chosen_id
+            self._write_preferences(preferences)
+
+            creation_flags = 0
+            if os.name == "nt":
+                creation_flags = subprocess.CREATE_NEW_CONSOLE
+
+            LOGGER.info("Starting ComfyUI via %s", bat_target)
+            proc = subprocess.Popen(
+                ["cmd.exe", "/c", str(bat_target)],
+                cwd=str(folder),
+                creationflags=creation_flags,
+            )
+            self._comfy_process = proc
+            self._comfy_starting = True
+            self._comfy_start_time = time.monotonic()
+
+            return {
+                "started": True,
+                "pid": proc.pid,
+                "variant": chosen_id,
+            }
+
+        return self._result(action)
+
+    def stop_comfy(self) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            killed = False
+            if self._comfy_process:
+                pid = self._comfy_process.pid
+                LOGGER.info("Stopping tracked ComfyUI process PID %s", pid)
+                try:
+                    subprocess.run(
+                        ["taskkill", "/PID", str(pid), "/T", "/F"],
+                        capture_output=True,
+                        check=False,
+                    )
+                    killed = True
+                except Exception as exc:
+                    LOGGER.warning("Failed to taskkill PID %s: %s", pid, exc)
+                self._comfy_process = None
+
+            if os.name == "nt":
+                try:
+                    out = subprocess.check_output(
+                        ["netstat", "-ano", "-p", "tcp"],
+                        text=True,
+                        errors="ignore",
+                    )
+                    for line in out.splitlines():
+                        if ":8188" in line and "LISTENING" in line:
+                            parts = line.strip().split()
+                            if parts:
+                                port_pid = parts[-1]
+                                if port_pid.isdigit() and int(port_pid) > 0:
+                                    LOGGER.info("Stopping process %s listening on port 8188", port_pid)
+                                    subprocess.run(
+                                        ["taskkill", "/PID", port_pid, "/T", "/F"],
+                                        capture_output=True,
+                                        check=False,
+                                    )
+                                    killed = True
+                except Exception as exc:
+                    LOGGER.warning("Netstat check during stop failed: %s", exc)
+
+            self._comfy_starting = False
+
+            # Wait briefly for port to close
+            start = time.monotonic()
+            while time.monotonic() - start < 3.0:
+                if not self._is_port_in_use(8188):
+                    break
+                time.sleep(0.2)
+
+            return {"stopped": True, "killed": killed}
+
+        return self._result(action)
+
+    def restart_comfy(self, variant: str = "") -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            self.stop_comfy()
+            time.sleep(1.0)
+            return self.start_comfy(variant)["data"]
+
+        return self._result(action)
 
     def get_state(self) -> dict[str, Any]:
         return self._result(self._start_state_scan)
@@ -965,11 +1227,19 @@ class WorkflowSwitcherApi:
             for asset in report["assets"]
             if not asset["resolved_path"]
         ]
+        model_bytes = sum(
+            int(asset.get("size") or 0)
+            for asset in report["assets"]
+            if asset.get("resolved_path")
+        )
+        validation = engine.validate_installation_paths(comfy_root, archive_root)
         return {
             "workflow": report["workflow"],
             "workflow_path": str(workflow_path),
             "output_path": str(archive_root / f"{workflow_path.stem}.zip"),
             "assets": report["assets"],
+            "model_bytes": model_bytes,
+            "archive_bytes_free": validation.get("archive_free"),
             "custom_nodes": report["custom_nodes"],
             "missing": missing,
             "parser_warnings": report.get("parser_warnings", []),
@@ -1176,6 +1446,59 @@ class WorkflowSwitcherApi:
             archive_root = Path(installation["archive_root"])
             comfy_root = Path(installation["comfy_root"]) if installation.get("comfy_root") else None
             return engine.inspect_model_pool(archive_root, comfy_root)
+
+        return self._operation(action)
+
+    def deploy_pool_model(
+        self,
+        sha256: str,
+        target_rel_path: str,
+        link_mode: str = "auto",
+    ) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            installation = engine.active_installation()
+            if not installation:
+                raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
+            archive_root = Path(installation["archive_root"])
+            comfy_root = Path(installation["comfy_root"])
+            res = engine.deploy_pool_model(
+                archive_root,
+                comfy_root,
+                sha256=sha256,
+                target_rel_path=target_rel_path,
+                link_mode=link_mode,
+                progress=self._progress,
+            )
+            self._record_history(
+                "deploy_model",
+                Path(target_rel_path).name,
+                f"Modell {Path(target_rel_path).name} in ComfyUI bereitgestellt ({res.get('method')})",
+            )
+            return res
+
+        return self._operation(action)
+
+    def undeploy_pool_model(
+        self,
+        target_rel_path: str,
+        expected_sha256: str = "",
+    ) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            installation = engine.active_installation()
+            if not installation:
+                raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
+            comfy_root = Path(installation["comfy_root"])
+            res = engine.undeploy_pool_model(
+                comfy_root,
+                target_rel_path=target_rel_path,
+                expected_sha256=expected_sha256 or None,
+            )
+            self._record_history(
+                "undeploy_model",
+                Path(target_rel_path).name,
+                f"Modell {Path(target_rel_path).name} aus ComfyUI entfernt",
+            )
+            return res
 
         return self._operation(action)
 

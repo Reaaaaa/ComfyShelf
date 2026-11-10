@@ -64,6 +64,9 @@ function applyTranslations() {
     if (app.historyEntries && typeof renderHistoryEntries === 'function') renderHistoryEntries(app.historyEntries);
   } catch (_) {}
   try {
+    if (app.launcher && typeof renderComfyLauncher === 'function') renderComfyLauncher();
+  } catch (_) {}
+  try {
     const tourModal = typeof $ === 'function' ? $('tourModal') : null;
     if (tourModal && !tourModal.classList.contains('hidden') && typeof renderTourStep === 'function') {
       renderTourStep(currentTourStep);
@@ -502,6 +505,7 @@ async function bootstrapNativeApp(trigger) {
     installLocale(await callApi('get_locale'));
     const state = await callApi('get_state');
     applyState(state, app.selectedPath);
+    void initComfyLauncher();
     app.bootstrapCompleted = true;
     clearInterval(app.bootstrapPoll);
     await reportStartupStage('frontend-ready', trigger);
@@ -970,7 +974,7 @@ function renderLibrary() {
         <div class="workflow-item-thumb">${renderItemThumbHtml(item)}</div>
         <div class="workflow-item-info">
           <div class="workflow-name-wrap">
-            <span class="workflow-name">${escapeHtml(item.name)}</span>
+            <span class="workflow-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
             ${item.hidden ? `<span class="workflow-hidden-tag" title="${escapeHtml(t('filter.hidden'))}">${icon('eye-off')}</span>` : ''}
           </div>
           ${matchHintHtml}
@@ -1268,6 +1272,9 @@ function openSettings(required = false) {
   const installation = app.state?.installation;
   $('comfyRootInput').value = installation?.comfy_root || '';
   $('archiveRootInput').value = installation?.archive_root || '';
+  if ($('easyInstallPathInput')) {
+    $('easyInstallPathInput').value = app.launcher?.path || '';
+  }
   if ($('linkModeSelect')) $('linkModeSelect').value = installation?.link_mode || 'auto';
   if ($('autoCopyWorkflowCheckbox')) {
     $('autoCopyWorkflowCheckbox').checked = getStorage('comfyshelf_auto_copy') !== 'false';
@@ -1282,13 +1289,18 @@ function closeSettings() { if (app.state?.configured) $('settingsModal').classLi
 async function browseFolder(kind) {
   try {
     const path = await callApi('choose_folder', kind);
-    if (path) $(kind === 'comfy' ? 'comfyRootInput' : 'archiveRootInput').value = path;
+    if (path) {
+      if (kind === 'comfy') $('comfyRootInput').value = path;
+      else if (kind === 'archive') $('archiveRootInput').value = path;
+      else if (kind === 'easy_install') $('easyInstallPathInput').value = path;
+    }
   } catch (error) { toast(error.message, true); }
 }
 
 async function saveSettings() {
   const comfy = $('comfyRootInput').value.trim();
   const archive = $('archiveRootInput').value.trim();
+  const easyInstall = $('easyInstallPathInput')?.value?.trim() || '';
   const linkMode = $('linkModeSelect')?.value || 'auto';
   const box = $('settingsValidation');
   if (!comfy || !archive) {
@@ -1301,7 +1313,9 @@ async function saveSettings() {
   }
   showBusy(t('settings.checking'), t('settings.checking_detail'), false);
   try {
-    const result = await callApi('save_settings', comfy, archive, linkMode);
+    const result = easyInstall
+      ? await callApi('save_settings', comfy, archive, linkMode, easyInstall)
+      : await callApi('save_settings', comfy, archive, linkMode);
     hideBusy();
     const warnings = result.validation.warnings || [];
     if (warnings.length) {
@@ -1312,6 +1326,7 @@ async function saveSettings() {
     }
     toast(t('settings.saved'));
     await refreshState();
+    await initComfyLauncher();
     if (!warnings.length) $('settingsModal').classList.add('hidden');
   } catch (error) {
     hideBusy();
@@ -1336,9 +1351,15 @@ async function inspectAndPackWorkflow(path) {
   const missingNodesCount = detectedNodes.filter(n => !n.installed).length;
   const nodeStat = detectedNodes.length ? `
     <div class="confirm-stat"><span>${t('detail.custom_nodes_used')}</span><strong>${detectedNodes.length}${missingNodesCount ? ` (${missingNodesCount} ${t('detail.custom_node_missing')})` : ''}</strong></div>` : '';
+  const modelFootprintBytes = report.model_bytes !== undefined
+    ? Number(report.model_bytes || 0)
+    : (report.assets || []).reduce((sum, asset) => sum + Number(asset.size || 0), 0);
+  const poolFreeBytes = report.archive_bytes_free ?? app.state?.validation?.archive_free ?? null;
   const copy = `
     <p>${t('pack.copy', {workflow: escapeHtml(report.workflow)})}</p>
     <div class="confirm-stat"><span>${t('pack.detected')}</span><strong>${report.assets.length}</strong></div>
+    <div class="confirm-stat"><span>${t('detail.model_size')}</span><strong>${formatBytes(modelFootprintBytes)}</strong></div>
+    <div class="confirm-stat"><span>${t('summary.archive_free')}</span><strong>${poolFreeBytes !== null ? formatBytes(poolFreeBytes) : '—'}</strong></div>
     <div class="confirm-stat"><span>${t('pack.missing')}</span><strong>${missing.length}</strong></div>
     ${nodeStat}
     ${missingDetails}
@@ -1399,6 +1420,10 @@ async function inspectAndImportArchive(path) {
     : report.target_exists
       ? t('import.replace_existing')
       : t('import.add_library');
+  const importModelFootprint = report.model_bytes !== undefined
+    ? Number(report.model_bytes || 0)
+    : (report.assets || []).reduce((sum, asset) => sum + Number(asset.size || 0), 0);
+  const importPoolFree = report.archive_bytes_free ?? app.state?.validation?.archive_free ?? null;
   const copy = `
     <p>${t('import.copy', {package: escapeHtml(report.package)})}</p>
     <div class="import-chain">
@@ -1406,6 +1431,8 @@ async function inspectAndImportArchive(path) {
       <div class="import-chain-row ${missing.length ? 'warning' : ''}">${icon(missing.length ? 'alert' : 'check')}<span>${t('import.models_matched', {matched: report.matched_count, total: report.assets.length})}<small>${t('import.models_hint')}</small></span></div>
       <div class="import-chain-row">${icon('shield')}<span>${t('import.manifest')}<small>${t('import.manifest_hint')}</small></span></div>
     </div>
+    <div class="confirm-stat"><span>${t('detail.model_size')}</span><strong>${formatBytes(importModelFootprint)}</strong></div>
+    <div class="confirm-stat"><span>${t('summary.archive_free')}</span><strong>${importPoolFree !== null ? formatBytes(importPoolFree) : '—'}</strong></div>
     <div class="confirm-stat"><span>${t('import.extras')}</span><strong>${extras.length}</strong></div>
     <div class="confirm-stat"><span>${t('common.target')}</span><strong>${escapeHtml(report.target_path)}</strong></div>
     ${missingDetails}
@@ -1644,6 +1671,187 @@ async function openComfyWebUi() {
     toast(t('summary.web_opened'));
   } catch (err) {
     toast(err.message, true);
+  }
+}
+
+let comfyPollTimer = null;
+let comfyPollInterval = 3000;
+
+async function initComfyLauncher() {
+  try {
+    const info = await callApi('get_launcher_info');
+    if (info) {
+      app.launcher = info;
+      renderComfyLauncher();
+      startComfyStatusPolling();
+    }
+  } catch (_) {}
+}
+
+function renderComfyLauncher() {
+  const launcher = app.launcher || {};
+  const select = $('comfyVariantSelect');
+  if (select) {
+    select.innerHTML = '';
+    const variants = launcher.variants || [];
+    if (variants.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = t('launcher.no_variants');
+      select.appendChild(opt);
+    } else {
+      for (const v of variants) {
+        const opt = document.createElement('option');
+        opt.value = v.id;
+        opt.textContent = v.name;
+        select.appendChild(opt);
+      }
+      if (launcher.selected_variant) {
+        select.value = launcher.selected_variant;
+      }
+    }
+  }
+  updateLauncherStatus(launcher.status || {});
+}
+
+function updateLauncherStatus(status) {
+  const pill = $('comfyStatusPill');
+  const text = $('comfyStatusText');
+  const startBtn = $('comfyStartButton');
+  const stopBtn = $('comfyStopButton');
+  const restartBtn = $('comfyRestartButton');
+  if (!pill) return;
+
+  const running = Boolean(status.running);
+  const starting = Boolean(status.starting);
+  const stopping = Boolean(status.stopping);
+  const hasVariants = Boolean(app.launcher?.variants?.length);
+
+  pill.classList.remove('running', 'starting', 'stopped');
+
+  if (running) {
+    pill.classList.add('running');
+    if (text) text.textContent = t('launcher.running');
+    if (startBtn) startBtn.disabled = true;
+    if (stopBtn) stopBtn.disabled = false;
+    if (restartBtn) restartBtn.disabled = false;
+    comfyPollInterval = 3000;
+  } else if (starting) {
+    pill.classList.add('starting');
+    if (text) text.textContent = t('launcher.starting');
+    if (startBtn) startBtn.disabled = true;
+    if (stopBtn) stopBtn.disabled = false;
+    if (restartBtn) restartBtn.disabled = true;
+    comfyPollInterval = 1000;
+  } else if (stopping) {
+    pill.classList.add('starting');
+    if (text) text.textContent = t('launcher.stopping');
+    if (startBtn) startBtn.disabled = true;
+    if (stopBtn) stopBtn.disabled = true;
+    if (restartBtn) restartBtn.disabled = true;
+    comfyPollInterval = 1000;
+  } else {
+    pill.classList.add('stopped');
+    if (text) text.textContent = t('launcher.offline');
+    if (startBtn) startBtn.disabled = !hasVariants;
+    if (stopBtn) stopBtn.disabled = true;
+    if (restartBtn) restartBtn.disabled = true;
+    comfyPollInterval = 3000;
+  }
+}
+
+async function checkComfyStatus() {
+  try {
+    const res = await callApi('get_comfy_status');
+    if (res) {
+      if (app.launcher) app.launcher.status = res;
+      updateLauncherStatus(res);
+    }
+  } catch (_) {}
+}
+
+function startComfyStatusPolling() {
+  if (comfyPollTimer) clearInterval(comfyPollTimer);
+  const tick = async () => {
+    await checkComfyStatus();
+    if (comfyPollTimer) {
+      clearInterval(comfyPollTimer);
+      comfyPollTimer = setInterval(tick, comfyPollInterval);
+    }
+  };
+  comfyPollTimer = setInterval(tick, comfyPollInterval);
+}
+
+async function startComfyUI() {
+  if (!app.launcher?.variants?.length) {
+    openSettings(false);
+    return;
+  }
+  const variant = $('comfyVariantSelect')?.value || app.launcher.selected_variant || '';
+  updateLauncherStatus({ starting: true, running: false });
+  try {
+    const res = await callApi('start_comfy', variant);
+    if (res?.already_running) {
+      toast(t('launcher.already_running'));
+      updateLauncherStatus({ running: true, starting: false });
+    } else {
+      const selectedObj = app.launcher.variants.find(v => v.id === variant);
+      const label = selectedObj ? selectedObj.name : variant;
+      toast(t('launcher.started', { variant: label }));
+      startComfyStatusPolling();
+    }
+  } catch (err) {
+    toast(err.message, true);
+    await checkComfyStatus();
+  }
+}
+
+async function stopComfyUI() {
+  updateLauncherStatus({ stopping: true, running: false });
+  try {
+    await callApi('stop_comfy');
+    toast(t('launcher.stopped'));
+    await checkComfyStatus();
+  } catch (err) {
+    toast(err.message, true);
+    await checkComfyStatus();
+  }
+}
+
+async function restartComfyUI() {
+  if (!app.launcher?.variants?.length) {
+    openSettings(false);
+    return;
+  }
+  const variant = $('comfyVariantSelect')?.value || app.launcher.selected_variant || '';
+  updateLauncherStatus({ starting: true, running: false });
+  try {
+    const selectedObj = app.launcher.variants.find(v => v.id === variant);
+    const label = selectedObj ? selectedObj.name : variant;
+    await callApi('restart_comfy', variant);
+    toast(t('launcher.restarted', { variant: label }));
+    startComfyStatusPolling();
+  } catch (err) {
+    toast(err.message, true);
+    await checkComfyStatus();
+  }
+}
+
+async function onComfyVariantChange(e) {
+  const newVariant = e.target.value;
+  if (app.launcher) app.launcher.selected_variant = newVariant;
+  try {
+    await callApi('save_launcher_settings', '', newVariant);
+  } catch (_) {}
+}
+
+function onComfyStatusPillClick() {
+  if (app.launcher?.status?.running) {
+    openComfyWebUi();
+  } else if (!app.launcher?.variants?.length) {
+    openSettings(false);
+  } else {
+    startComfyUI();
   }
 }
 
@@ -2173,7 +2381,11 @@ function renderModelPool() {
   $('modelPoolList').innerHTML = filtered.map(m => {
     const kindClass = `pool-kind-${m.kind || 'model'}`;
     const statusClass = m.present_in_comfy ? 'active' : 'archived';
-    const statusText = m.present_in_comfy ? t('model_pool.active_in_comfy') : t('model_pool.archived_in_pool');
+    let statusText = m.present_in_comfy ? t('model_pool.active_in_comfy') : t('model_pool.archived_in_pool');
+    if (m.present_in_comfy && m.link_type) {
+      const typeLabel = m.link_type === 'symlink' ? 'Symlink' : (m.link_type === 'hardlink' ? 'Hardlink' : (app.language === 'de' ? 'Kopie' : 'Copy'));
+      statusText += ` (${typeLabel})`;
+    }
 
     const wfCount = m.workflows?.length || 0;
     const wfListHtml = (m.workflows || []).map(w => {
@@ -2200,6 +2412,17 @@ function renderModelPool() {
             ${wfListHtml}
           </div>
           <div class="pool-model-actions">
+            ${!m.present_in_comfy ? `
+              <button class="pool-action-btn load-pool-model-btn" data-sha="${escapeHtml(m.sha256 || m.id || '')}" data-filename="${escapeHtml(m.filename)}" data-kind="${escapeHtml(m.kind || '')}" data-relpath="${escapeHtml(m.relative_path || '')}" data-size="${m.size || 0}" title="${t('model_pool.load_button')}">
+                <svg><use href="#i-drive"/></svg>
+                <span>${t('model_pool.load_button')}</span>
+              </button>
+            ` : `
+              <button class="pool-action-btn unload-pool-model-btn danger-hover" data-sha="${escapeHtml(m.sha256 || m.id || '')}" data-filename="${escapeHtml(m.filename)}" data-relpath="${escapeHtml(m.relative_path || '')}" data-comfypath="${escapeHtml(m.comfy_path || '')}" title="${t('model_pool.unload_button')}">
+                <svg><use href="#i-trash"/></svg>
+                <span>${t('model_pool.unload_button')}</span>
+              </button>
+            `}
             ${shortHash ? `<button class="pool-action-icon-btn copy-hash-btn" data-hash="${escapeHtml(m.sha256)}" title="${t('model_pool.copy_hash')} (${shortHash})">${icon('shield')}</button>` : ''}
             <button class="pool-action-icon-btn copy-name-btn" data-filename="${escapeHtml(m.filename)}" title="${t('model_pool.copy_name')}">${icon('copy')}</button>
           </div>
@@ -2216,6 +2439,31 @@ function renderModelPool() {
         closeModelPool();
         selectWorkflowByPath(archivePath);
       }
+    });
+  });
+
+  $('modelPoolList').querySelectorAll('.load-pool-model-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openLoadPoolModel({
+        sha: btn.dataset.sha,
+        filename: btn.dataset.filename,
+        kind: btn.dataset.kind,
+        relPath: btn.dataset.relpath,
+        size: Number(btn.dataset.size || 0),
+      });
+    });
+  });
+
+  $('modelPoolList').querySelectorAll('.unload-pool-model-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openUnloadPoolModel({
+        sha: btn.dataset.sha,
+        filename: btn.dataset.filename,
+        relPath: btn.dataset.relpath,
+        comfyPath: btn.dataset.comfypath,
+      });
     });
   });
 
@@ -2240,6 +2488,93 @@ function renderModelPool() {
       } catch (_) {}
     });
   });
+}
+
+let currentLoadPoolModelTarget = null;
+let currentUnloadPoolModelTarget = null;
+
+function openLoadPoolModel(model) {
+  currentLoadPoolModelTarget = model;
+  $('loadPoolModelName').textContent = model.filename;
+  $('loadPoolModelSize').textContent = formatBytes(model.size);
+  let defaultRelPath = model.relPath;
+  if (!defaultRelPath) {
+    const cat = model.kind ? (app.state?.categories?.[model.kind] || model.kind) : 'checkpoints';
+    defaultRelPath = `models/${cat}/${model.filename}`;
+  }
+  $('loadPoolModelTargetPath').value = defaultRelPath;
+  $('loadPoolModelMethodSelect').value = 'auto';
+  $('loadPoolModelModal').classList.remove('hidden');
+  requestAnimationFrame(() => {
+    $('loadPoolModelTargetPath').focus();
+    $('loadPoolModelTargetPath').select();
+  });
+}
+
+function closeLoadPoolModel() {
+  $('loadPoolModelModal').classList.add('hidden');
+  currentLoadPoolModelTarget = null;
+}
+
+async function submitLoadPoolModel() {
+  if (!currentLoadPoolModelTarget) return;
+  const sha = currentLoadPoolModelTarget.sha;
+  const targetPath = $('loadPoolModelTargetPath').value.trim();
+  const method = $('loadPoolModelMethodSelect').value;
+
+  if (!targetPath) {
+    toast(t('errors.invalid_path') || 'Bitte gib einen Zielpfad an.', 'error');
+    return;
+  }
+
+  const submitBtn = $('loadPoolModelSubmitButton');
+  submitBtn.disabled = true;
+  try {
+    await callApi('deploy_pool_model', sha, targetPath, method);
+    closeLoadPoolModel();
+    toast(t('model_pool.load_success'));
+    await loadModelPoolData();
+    if (nativeApiReady() && window.pywebview?.api?.get_state) {
+      callApi('get_state').then(st => updateState(st)).catch(() => {});
+    }
+  } catch (err) {
+    toast(err.message || String(err), 'error');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+function openUnloadPoolModel(model) {
+  currentUnloadPoolModelTarget = model;
+  $('unloadPoolModelMessage').textContent = `${t('model_pool.unload_modal_confirm')} (${model.filename})`;
+  $('unloadPoolModelModal').classList.remove('hidden');
+}
+
+function closeUnloadPoolModel() {
+  $('unloadPoolModelModal').classList.add('hidden');
+  currentUnloadPoolModelTarget = null;
+}
+
+async function submitUnloadPoolModel() {
+  if (!currentUnloadPoolModelTarget) return;
+  const { sha, relPath, comfyPath } = currentUnloadPoolModelTarget;
+  const targetPath = relPath || comfyPath;
+
+  const submitBtn = $('unloadPoolModelSubmitButton');
+  submitBtn.disabled = true;
+  try {
+    await callApi('undeploy_pool_model', targetPath, sha);
+    closeUnloadPoolModel();
+    toast(t('model_pool.unload_success'));
+    await loadModelPoolData();
+    if (nativeApiReady() && window.pywebview?.api?.get_state) {
+      callApi('get_state').then(st => updateState(st)).catch(() => {});
+    }
+  } catch (err) {
+    toast(err.message || String(err), 'error');
+  } finally {
+    submitBtn.disabled = false;
+  }
 }
 
 function selectedPackage() {
@@ -2432,9 +2767,42 @@ async function proceedConfirm() {
   try { await action(flags); } catch (error) { hideBusy(); operationError(error); }
 }
 
+const SIDEBAR_MIN_WIDTH = 240;
+const SIDEBAR_DEFAULT_WIDTH = 310;
+const SIDEBAR_MAX_WIDTH = 760;
+
+function clampSidebarWidth(width, containerWidth = 0) {
+  const numeric = Number(width);
+  if (!Number.isFinite(numeric)) return SIDEBAR_DEFAULT_WIDTH;
+  const maxByContainer = containerWidth > 0
+    ? Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, Math.floor(containerWidth * 0.65)))
+    : SIDEBAR_MAX_WIDTH;
+  return Math.max(SIDEBAR_MIN_WIDTH, Math.min(maxByContainer, Math.round(numeric)));
+}
+
+function applySidebarWidth(width, persist = false) {
+  const workspace = typeof document !== 'undefined' ? document.querySelector?.('.workspace') : null;
+  if (width === null || width === undefined || width === '') {
+    workspace?.style?.removeProperty?.('--sidebar-width');
+    if (persist) setStorage('comfyshelf_sidebar_width', '');
+    return null;
+  }
+  const containerWidth = workspace?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 0) || 0;
+  const clamped = clampSidebarWidth(width, containerWidth);
+  workspace?.style?.setProperty?.('--sidebar-width', `${clamped}px`);
+  if (persist) setStorage('comfyshelf_sidebar_width', String(clamped));
+  return clamped;
+}
+
 function installEvents() {
   $('copyWorkflowButton')?.addEventListener('click', () => copySelectedWorkflowJson());
   $('openWebUiButton')?.addEventListener('click', openComfyWebUi);
+  $('browseEasyInstallButton')?.addEventListener('click', () => browseFolder('easy_install'));
+  $('comfyStartButton')?.addEventListener('click', startComfyUI);
+  $('comfyStopButton')?.addEventListener('click', stopComfyUI);
+  $('comfyRestartButton')?.addEventListener('click', restartComfyUI);
+  $('comfyVariantSelect')?.addEventListener('change', onComfyVariantChange);
+  $('comfyStatusPill')?.addEventListener('click', onComfyStatusPillClick);
   $('showWorkflowFileButton').addEventListener('click', showSelectedWorkflowFile);
   $('dependencyScanButton').addEventListener('click', scanSelectedDependencies);
   $('exportButton').addEventListener('click', exportSelectedPackage);
@@ -2464,6 +2832,18 @@ function installEvents() {
     $('modelPoolSearchInput').value = modelPoolSearch = '';
     $('modelPoolSearchClear').classList.add('hidden');
     renderModelPool();
+  });
+  $('loadPoolModelCloseButton')?.addEventListener('click', closeLoadPoolModel);
+  $('loadPoolModelCancelButton')?.addEventListener('click', closeLoadPoolModel);
+  $('loadPoolModelSubmitButton')?.addEventListener('click', submitLoadPoolModel);
+  $('loadPoolModelModal')?.addEventListener('click', event => {
+    if (event.target === $('loadPoolModelModal')) closeLoadPoolModel();
+  });
+  $('unloadPoolModelCloseButton')?.addEventListener('click', closeUnloadPoolModel);
+  $('unloadPoolModelCancelButton')?.addEventListener('click', closeUnloadPoolModel);
+  $('unloadPoolModelSubmitButton')?.addEventListener('click', submitUnloadPoolModel);
+  $('unloadPoolModelModal')?.addEventListener('click', event => {
+    if (event.target === $('unloadPoolModelModal')) closeUnloadPoolModel();
   });
   $('renameButton').addEventListener('click', openRename);
   $('hideWorkflowButton')?.addEventListener('click', toggleHideSelected);
@@ -2750,6 +3130,80 @@ function installResizeHandles() {
   });
 }
 
+function installSidebarResizer() {
+  const savedWidth = getStorage('comfyshelf_sidebar_width');
+  if (savedWidth && Number.isFinite(Number(savedWidth))) {
+    applySidebarWidth(Number(savedWidth), false);
+  }
+
+  const resizer = $('sidebarResizer');
+  if (!resizer) return;
+  let drag = null;
+
+  resizer.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    try { resizer.setPointerCapture?.(event.pointerId); } catch (_) {}
+    const sidebar = resizer.closest('.sidebar') || document.querySelector('.sidebar');
+    const rect = sidebar?.getBoundingClientRect?.();
+    const offsetWidth = sidebar?.offsetWidth || rect?.width || SIDEBAR_DEFAULT_WIDTH;
+    const scale = rect && offsetWidth ? (rect.width / offsetWidth) : 1;
+    drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: offsetWidth,
+      scale: scale || 1,
+    };
+    resizer.classList.add('resizing');
+    document.body?.classList?.add('resizing-sidebar');
+    event.preventDefault();
+  });
+
+  window.addEventListener('pointermove', event => {
+    if (!drag) return;
+    const dx = (event.clientX - drag.startX) / drag.scale;
+    applySidebarWidth(drag.startWidth + dx, false);
+  });
+
+  const stop = event => {
+    if (!drag) return;
+    try {
+      if (event?.pointerId !== undefined && resizer.hasPointerCapture?.(event.pointerId)) {
+        resizer.releasePointerCapture(event.pointerId);
+      }
+    } catch (_) {}
+    const sidebar = resizer.closest('.sidebar') || document.querySelector('.sidebar');
+    if (sidebar?.offsetWidth) {
+      applySidebarWidth(sidebar.offsetWidth, true);
+    }
+    resizer.classList.remove('resizing');
+    document.body?.classList?.remove('resizing-sidebar');
+    drag = null;
+  };
+
+  window.addEventListener('pointerup', stop);
+  window.addEventListener('pointercancel', stop);
+
+  resizer.addEventListener('dblclick', event => {
+    event.preventDefault();
+    const sidebar = resizer.closest('.sidebar') || document.querySelector('.sidebar');
+    const currentWidth = sidebar?.offsetWidth || SIDEBAR_DEFAULT_WIDTH;
+    const names = [...(document.querySelectorAll?.('.workflow-name') || [])];
+    const maxOverflow = names.reduce((max, el) => Math.max(max, (el.scrollWidth || 0) - (el.clientWidth || 0)), 0);
+    if (maxOverflow > 1) {
+      applySidebarWidth(currentWidth + maxOverflow + 16, true);
+    } else {
+      applySidebarWidth(null, true);
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    const saved = getStorage('comfyshelf_sidebar_width');
+    if (saved && Number.isFinite(Number(saved))) {
+      applySidebarWidth(Number(saved), false);
+    }
+  });
+}
+
 function renderDemo() {
   app.state = {
     configured: true,
@@ -2767,6 +3221,7 @@ function renderDemo() {
 
 installEvents();
 installResizeHandles();
+installSidebarResizer();
 const demoParams = new URLSearchParams(location.search);
 if (demoParams.has('demo')) {
   const demoLanguage = demoParams.get('lang') === 'de' ? 'de' : 'en';

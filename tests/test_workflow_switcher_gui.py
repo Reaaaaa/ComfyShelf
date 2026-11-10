@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import sys
 import os
 import tempfile
@@ -686,6 +687,116 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
                 self.assertIn("summary", res["data"])
                 self.assertIn("categories", res["data"])
                 self.assertIn("models", res["data"])
+
+    def test_deploy_and_undeploy_pool_model_api(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy = base / "Comfy"
+            archive_dir = base / "Archive"
+            (comfy / "models").mkdir(parents=True)
+            archive_dir.mkdir()
+
+            model_bytes = b"api-model-test-data"
+            sha = hashlib.sha256(model_bytes).hexdigest()
+            obj = GUI.engine._shared_object_path(archive_dir, sha)
+            obj.parent.mkdir(parents=True, exist_ok=True)
+            obj.write_bytes(model_bytes)
+
+            api = GUI.WorkflowSwitcherApi()
+            with patch.object(GUI.engine, "active_installation", return_value={"comfy_root": str(comfy), "archive_root": str(archive_dir)}):
+                res = api.deploy_pool_model(sha, "models/checkpoints/api_model.safetensors", "copy")
+                self.assertTrue(res["ok"])
+                self.assertTrue(res["data"]["success"])
+                self.assertEqual(res["data"]["method"], "copy")
+                self.assertTrue((comfy / "models" / "checkpoints" / "api_model.safetensors").is_file())
+
+                res_un = api.undeploy_pool_model("models/checkpoints/api_model.safetensors", sha)
+                self.assertTrue(res_un["ok"])
+                self.assertTrue(res_un["data"]["success"])
+                self.assertFalse((comfy / "models" / "checkpoints" / "api_model.safetensors").exists())
+
+    def test_scan_comfy_variants_prioritizes_kitchen_attention(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            (folder / "Start ComfyUI SageAttention.bat").write_text("@echo off", encoding="utf-8")
+            (folder / "Start ComfyUI KitchenAttention.bat").write_text("@echo off", encoding="utf-8")
+            (folder / "Start ComfyUI FlashAttention.bat").write_text("@echo off", encoding="utf-8")
+            (folder / "Start ComfyUI.bat").write_text("@echo off", encoding="utf-8")
+            (folder / "ComfyUI-EZi KitchenAttention.bat").write_text("@echo off", encoding="utf-8")
+            (folder / "Update ComfyUI.bat").write_text("@echo off", encoding="utf-8")
+
+            variants = GUI.WorkflowSwitcherApi._scan_comfy_variants(folder)
+            self.assertEqual(len(variants), 4)
+            # Verify KitchenAttention is ranked first
+            self.assertEqual(variants[0]["name"], "KitchenAttention")
+            self.assertEqual(variants[0]["id"], "Start ComfyUI KitchenAttention.bat")
+            self.assertEqual(variants[1]["name"], "SageAttention")
+            self.assertEqual(variants[2]["name"], "FlashAttention")
+            self.assertEqual(variants[3]["name"], "Standard (Default)")
+
+            api = GUI.WorkflowSwitcherApi()
+            with patch.object(api, "_read_preferences", return_value={}):
+                selected = api._resolve_selected_variant(variants)
+                self.assertEqual(selected, "Start ComfyUI KitchenAttention.bat")
+
+    def test_launcher_info_and_settings_persistence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            (folder / "Start ComfyUI KitchenAttention.bat").write_text("@echo off", encoding="utf-8")
+            (folder / "Start ComfyUI SageAttention.bat").write_text("@echo off", encoding="utf-8")
+
+            pref_file = folder / "preferences.json"
+            api = GUI.WorkflowSwitcherApi()
+            with patch.object(GUI, "PREFERENCES_PATH", pref_file):
+                save_res = api.save_launcher_settings(str(folder), "Start ComfyUI KitchenAttention.bat")
+                self.assertTrue(save_res["ok"])
+                data = save_res["data"]
+                self.assertTrue(data["configured"])
+                self.assertEqual(data["path"], str(folder))
+                self.assertEqual(data["selected_variant"], "Start ComfyUI KitchenAttention.bat")
+                self.assertEqual(len(data["variants"]), 2)
+
+                # Switch variant
+                sw_res = api.save_launcher_settings("", "Start ComfyUI SageAttention.bat")
+                self.assertTrue(sw_res["ok"])
+                self.assertEqual(sw_res["data"]["selected_variant"], "Start ComfyUI SageAttention.bat")
+
+    def test_start_and_stop_comfy_api(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            (folder / "Start ComfyUI KitchenAttention.bat").write_text("@echo off", encoding="utf-8")
+            pref_file = folder / "preferences.json"
+
+            api = GUI.WorkflowSwitcherApi()
+            mock_proc = Mock()
+            mock_proc.pid = 12345
+            mock_proc.poll.return_value = None
+
+            port_status = {"active": False}
+            def mock_port_check(*args, **kwargs):
+                return port_status["active"]
+
+            with patch.object(GUI, "PREFERENCES_PATH", pref_file), \
+                 patch.object(api, "_is_port_in_use", side_effect=mock_port_check), \
+                 patch("subprocess.Popen", return_value=mock_proc) as mock_popen, \
+                 patch("subprocess.run") as mock_run:
+                
+                api.save_launcher_settings(str(folder))
+                start_res = api.start_comfy()
+                self.assertTrue(start_res["ok"])
+                self.assertTrue(start_res["data"]["started"])
+                self.assertEqual(start_res["data"]["pid"], 12345)
+                self.assertEqual(start_res["data"]["variant"], "Start ComfyUI KitchenAttention.bat")
+
+                port_status["active"] = True
+                status_res = api.get_comfy_status()
+                self.assertTrue(status_res["ok"])
+                self.assertTrue(status_res["data"]["running"])
+
+                port_status["active"] = False
+                stop_res = api.stop_comfy()
+                self.assertTrue(stop_res["ok"])
+                self.assertTrue(stop_res["data"]["stopped"])
 
 
 if __name__ == "__main__":
