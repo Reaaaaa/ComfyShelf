@@ -1865,6 +1865,7 @@ def _watch_frontend_startup(api: WorkflowSwitcherApi, app_closed: threading.Even
     while time.monotonic() < deadline:
         if api._wait_for_frontend(0.25):
             LOGGER.info("Startup watchdog: frontend reported ready")
+            _apply_window_icon(api._window)
             return
         if app_closed.is_set():
             return
@@ -1874,7 +1875,63 @@ def _watch_frontend_startup(api: WorkflowSwitcherApi, app_closed: threading.Even
     )
 
 
+def _apply_window_icon(window: Any) -> None:
+    if os.name != "nt":
+        return
+    icon_path = APP_DIR / "assets" / "comfyshelf.ico"
+    if not icon_path.is_file():
+        return
+    try:
+        import ctypes
+        IMAGE_ICON = 1
+        LR_LOADFROMFILE = 0x00000010
+        LR_DEFAULTSIZE = 0x00000040
+        h_icon = ctypes.windll.user32.LoadImageW(
+            0,
+            str(icon_path),
+            IMAGE_ICON,
+            0,
+            0,
+            LR_LOADFROMFILE | LR_DEFAULTSIZE,
+        )
+        if h_icon:
+            native = getattr(window, "native", None)
+            hwnd = None
+            if native and hasattr(native, "Handle"):
+                try:
+                    hwnd = int(native.Handle.ToInt64())
+                except Exception:
+                    pass
+            if not hwnd:
+                hwnd = ctypes.windll.user32.FindWindowW(None, "ComfyShelf — Workflow & Model Shelf")
+            if hwnd:
+                WM_SETICON = 0x0080
+                ICON_SMALL = 0
+                ICON_BIG = 1
+                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, h_icon)
+                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, h_icon)
+    except Exception as exc:
+        LOGGER.warning("Could not set window icon via Win32: %s", exc)
+
+    try:
+        native = getattr(window, "native", None)
+        if native:
+            from System.Drawing import Icon
+            native.Icon = Icon(str(icon_path))
+    except Exception as exc:
+        LOGGER.debug("Could not set WinForms Form.Icon: %s", exc)
+
+
 def main() -> int:
+    if os.name == "nt":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "comfyshelf.workflowswitcher.app"
+            )
+        except Exception as exc:
+            LOGGER.warning("Could not set AppUserModelID: %s", exc)
+
     LOGGER.info("ComfyShelf starting | Python %s", sys.version.split()[0])
     html_path = WEB_DIR / "index.html"
     if not html_path.is_file():
@@ -1897,6 +1954,10 @@ def main() -> int:
         text_select=False,
     )
     api._attach_window(window)
+    try:
+        window.events.shown += lambda: _apply_window_icon(window)
+    except Exception:
+        pass
     LOGGER.info("WebView window created; loading interface")
     app_closed = threading.Event()
     threading.Thread(
