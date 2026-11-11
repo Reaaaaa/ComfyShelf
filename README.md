@@ -4,7 +4,7 @@
 
 # ComfyShelf
 
-[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 227 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v1.1.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
+[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 227 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v1.2.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
 
 <sub>Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.</sub>
 
@@ -99,15 +99,15 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 
 ## Get started on Windows
 
-**ComfyShelf v1.1.0** is available in three convenient ways:
+**ComfyShelf v1.2.0** is available in three convenient ways:
 
 ### Option 1: Windows Setup Installer (`.exe`) — *Recommended*
-1. Download **`ComfyShelf-v1.1.0-windows-setup.exe`** from the [Releases](https://github.com/Reaaaaa/ComfyShelf/releases) page.
+1. Download **`ComfyShelf-v1.2.0-windows-setup.exe`** from the [Releases](https://github.com/Reaaaaa/ComfyShelf/releases) page.
 2. Run the installer. It installs per-user into `%LOCALAPPDATA%\Programs\ComfyShelf` — **no administrator privileges required**, no system modifications.
 3. Launch ComfyShelf directly from your Start Menu or Desktop shortcut.
 
 ### Option 2: Portable Version (`.zip`)
-1. Download **`ComfyShelf-v1.1.0-windows-portable.zip`**.
+1. Download **`ComfyShelf-v1.2.0-windows-portable.zip`**.
 2. Extract the folder anywhere you like (e.g. on your desktop, secondary drive, or USB drive).
 3. Double-click **`ComfyShelf.exe`** to run immediately — no installation, no extra runtime setup.
 

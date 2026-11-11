@@ -2,7 +2,7 @@
 ; Builds a modern, per-user Windows Installer without requiring administrative privileges.
 
 #define MyAppName "ComfyShelf"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "ComfyShelf Contributors"
 #define MyAppURL "https://github.com/Reaaaaa/ComfyShelf"
 #define MyAppExeName "ComfyShelf.exe"
