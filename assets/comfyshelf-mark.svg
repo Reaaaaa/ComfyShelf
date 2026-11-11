@@ -9,9 +9,9 @@
   <rect x="88" y="314" width="22" height="68" rx="11" fill="#426d68"/>
 
   <!-- Connections are drawn first so every line ends cleanly beneath its nodes. -->
-  <rect x="254" y="157" width="36" height="14" rx="7" fill="#426d68"/>
-  <rect x="292" y="249" width="38" height="14" rx="7" fill="#79afa7"/>
-  <rect x="218" y="341" width="38" height="14" rx="7" fill="#426d68"/>
+  <rect x="254" y="161" width="36" height="6" rx="3" fill="#426d68"/>
+  <rect x="292" y="253" width="38" height="6" rx="3" fill="#79afa7"/>
+  <rect x="218" y="345" width="38" height="6" rx="3" fill="#426d68"/>
 
   <rect x="132" y="137" width="128" height="54" rx="12" fill="#426d68"/>
   <rect x="284" y="137" width="128" height="54" rx="12" fill="#426d68"/>
