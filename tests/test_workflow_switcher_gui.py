@@ -827,6 +827,99 @@ class WorkflowSwitcherGuiTests(unittest.TestCase):
         self.assertEqual(data["live"]["library_scan_state"], "idle")
         self.assertEqual(data["live"]["operation_state"], "idle")
 
+    def test_scan_packages_and_workflow_sync_revert_api(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy = base / "ComfyUI"
+            archive_dir = base / "Archive"
+            (comfy / "models" / "loras").mkdir(parents=True)
+            workflows = comfy / "user" / "default" / "workflows"
+            workflows.mkdir(parents=True)
+            archive_dir.mkdir()
+
+            (comfy / "models" / "loras" / "a.safetensors").write_bytes(b"lora-a")
+            (comfy / "models" / "loras" / "b.safetensors").write_bytes(b"lora-b")
+            wf = workflows / "api_sync.json"
+            original_json = json.dumps({"nodes": [{"id": 1, "type": "LoraLoader", "widgets_values": ["a.safetensors"]}]})
+            wf.write_text(original_json, encoding="utf-8")
+
+            pkg_path = archive_dir / "ApiSync.zip"
+            GUI.engine.build_package(wf, comfy, pkg_path, False, False, shared_pool=True)
+
+            api = GUI.WorkflowSwitcherApi()
+            with patch.object(GUI.engine, "active_installation", return_value={"comfy_root": str(comfy), "archive_root": str(archive_dir), "link_mode": "copy"}):
+                scanned0 = api._scan_packages(comfy, archive_dir)
+                self.assertEqual(len(scanned0), 1)
+                self.assertTrue(scanned0[0]["local_workflow_exists"])
+                self.assertFalse(scanned0[0]["local_workflow_modified"])
+
+                edited_json = json.dumps({
+                    "nodes": [
+                        {"id": 1, "type": "LoraLoader", "widgets_values": ["a.safetensors"]},
+                        {"id": 2, "type": "LoraLoader", "widgets_values": ["b.safetensors"]},
+                    ]
+                }, indent=2)
+                wf.write_text(edited_json, encoding="utf-8")
+
+                scanned1 = api._scan_packages(comfy, archive_dir)
+                self.assertTrue(scanned1[0]["local_workflow_modified"])
+
+                prev = api.preview_workflow_sync(str(pkg_path))
+                self.assertTrue(prev["ok"])
+                self.assertTrue(prev["data"]["modified"])
+                self.assertEqual([m["filename"] for m in prev["data"]["added_models"]], ["b.safetensors"])
+
+                rev = api.revert_local_workflow(str(pkg_path))
+                self.assertTrue(rev["ok"])
+                self.assertTrue(rev["data"]["reverted"])
+                self.assertEqual(wf.read_text(encoding="utf-8"), original_json)
+                scanned2 = api._scan_packages(comfy, archive_dir)
+                self.assertFalse(scanned2[0]["local_workflow_modified"])
+
+                wf.write_text(edited_json, encoding="utf-8")
+                synced = api.sync_workflow_from_local(str(pkg_path), True)
+                self.assertTrue(synced["ok"])
+                self.assertTrue(synced["data"]["synced"])
+                scanned3 = api._scan_packages(comfy, archive_dir)
+                self.assertFalse(scanned3[0]["local_workflow_modified"])
+
+    def test_sync_workflow_flag_forwarding_in_unload_switch_and_export_api(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy = base / "ComfyUI"
+            archive_dir = base / "Archive"
+            comfy.mkdir()
+            archive_dir.mkdir()
+            archive = archive_dir / "Flow.zip"
+            archive.write_bytes(b"zip")
+            out_zip = base / "Flow-portable.zip"
+
+            api = GUI.WorkflowSwitcherApi()
+            installation = {"comfy_root": str(comfy), "archive_root": str(archive_dir), "link_mode": "copy"}
+            with patch.object(GUI.engine, "active_installation", return_value=installation):
+                with patch.object(GUI.engine, "preview_portable_export", return_value={"local_workflow_modified": True}) as mock_prev_exp:
+                    res = api.preview_portable_archive(str(archive), str(out_zip))
+                    self.assertTrue(res["ok"])
+                    self.assertEqual(mock_prev_exp.call_args.kwargs["comfy_root"], comfy)
+
+                with patch.object(GUI.engine, "export_portable_package", return_value={"package": "Flow", "output_path": str(out_zip), "archive_size": 123}) as mock_exp:
+                    res = api.export_portable_archive(str(archive), str(out_zip), True, True)
+                    self.assertTrue(res["ok"])
+                    self.assertEqual(mock_exp.call_args.kwargs["comfy_root"], comfy)
+                    self.assertTrue(mock_exp.call_args.kwargs["sync_workflow"])
+                    self.assertTrue(mock_exp.call_args.kwargs["allow_incomplete"])
+
+                with patch.object(GUI.engine, "unload_package", return_value={"package": "Flow", "removed": [], "candidates": []}) as mock_unload:
+                    res = api.execute_action("unload", str(archive), False, False, True)
+                    self.assertTrue(res["ok"])
+                    self.assertTrue(mock_unload.call_args.kwargs["sync_workflow"])
+
+                api._state_cache = {"packages": [{"path": str((archive_dir / "Other.zip").resolve()), "state": "loaded"}]}
+                with patch.object(GUI.engine, "switch_package", return_value={"package": "Flow", "removed": [], "bytes_required": 0, "bytes_reclaimable": 0}) as mock_switch:
+                    res = api.execute_switch(str(archive), False, False, True)
+                    self.assertTrue(res["ok"])
+                    self.assertTrue(mock_switch.call_args.kwargs["sync_workflow"])
+
 
 if __name__ == "__main__":
     unittest.main()

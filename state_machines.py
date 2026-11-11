@@ -599,6 +599,7 @@ STATE_MACHINE_SPECS: dict[str, StateMachineSpec] = {
             "dependency_scan.py:complete_dependencies",
             "workflow_file.py:preview_restore",
             "workflow_file.py:restore",
+            "workflow_file.py:revert",
             "gui/app.js:openConfirm",
         ),
     ),

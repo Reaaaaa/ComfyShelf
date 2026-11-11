@@ -36,7 +36,17 @@ not turn a successful hash check into an integrity failure.
 
 Unload works on selected package model paths and verifies the archived and local
 bytes. Recognized references from other local workflow JSONs are protected unless
-explicitly overridden; unknown or dynamic references can still be missed.
+explicitly overridden; unknown or dynamic references can still be missed. When a
+modified local workflow is synced before unloading or switching, updated workflow
+JSON and newly referenced models are written into the package and shared pool
+before local copies (including models removed from the workflow) are removed.
+
+During library scans, ComfyShelf compares local workflow JSON files against
+their archived copy by size and SHA-256 checksum. Using **Revert local changes**
+overwrites the local ComfyUI workflow file with the verified JSON from the `.zip`
+package after explicit confirmation, discarding unsynced local edits. Using
+**Update package** atomically rewrites the package metadata and shared-pool links
+while keeping previously unloaded pool objects intact.
 
 Windows deletion-access checks are advisory. Another process can change access
 or file state between checks. If removal fails, ComfyShelf stops and reports the

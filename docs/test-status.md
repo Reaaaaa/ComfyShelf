@@ -3,11 +3,11 @@
 The README test badges describe the local checks recorded here, **not a live
 GitHub Actions result**. They do not update automatically when code changes.
 
-Snapshot date: **2026-11-10**. Environment: Windows, Python 3.11.9 and Node.js 24.14.0.
+Snapshot date: **2026-11-11**. Environment: Windows, Python 3.11.9 and Node.js 24.14.0.
 
 | Check | Result |
 | --- | --- |
-| Python unit and regression suite | 222 passed, no failures or skips |
+| Python unit and regression suite | 227 passed, no failures or skips |
 | JavaScript frontend tests | Passed for English and German |
 | Frontend JavaScript syntax | Passed |
 | Python module compilation | Passed |
@@ -46,8 +46,15 @@ ZIP bytes/metadata, and does not read model payloads or write verification recor
 Workflow-file tests cover metadata-only lookup, JSON-only recovery from an
 incomplete package, local edits, original subfolders, checksum and format failures,
 unsafe paths, duplicate/symlink/oversized ZIP entries, changed confirmations,
-concurrent file creation and temporary-file cleanup. The EN/DE frontend checks
-exercise immediate reveal, separate restore consent, escaped paths and API errors.
+concurrent file creation, temporary-file cleanup, and resetting locally modified
+JSONs back to the verified package state (`workflow_file.revert`). Live workflow
+sync tests additionally cover local size/SHA-256 modification detection during
+library scans, atomic package/shared-pool synchronization preserving already
+unloaded pool models, default pre-unload/switch/portable-export sync checks and
+flag forwarding in the desktop API, and EN/DE frontend rendering of modified
+badges, warning notices, sync/revert buttons, and confirmation checkboxes.
+The EN/DE frontend checks exercise immediate reveal, separate restore consent,
+escaped paths and API errors.
 Explorer launching is mocked; these checks do not verify native Explorer selection
 or drag-and-drop into a running ComfyUI instance.
 The browser-only German fixture was visually reviewed at 1280 × 720: the new

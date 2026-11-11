@@ -111,6 +111,57 @@ def restore(archive_path, comfy_root, token):
     return {**report, "exists": True, "restored": True}
 
 
+def revert(archive_path, comfy_root, token=None):
+    """Overwrite a locally modified workflow file with the verified archived version."""
+    report, name, entry = _metadata(archive_path, comfy_root)
+    if token is not None and report["token"] != token:
+        raise WorkflowFileError("workflow_changed", "Package or destination changed; preview again")
+    target = Path(report["path"])
+    if target.is_symlink():
+        raise ValueError(f"Workflow destination is a symbolic link: {target}")
+    with zipfile.ZipFile(archive_path) as archive:
+        members = [info for info in archive.infolist() if info.filename.casefold() == name.casefold()]
+        if len(members) != 1:
+            raise ValueError("Workflow JSON is missing or duplicated in ZIP")
+        info = members[0]
+        if (info.is_dir() or info.file_size > MAX_JSON_BYTES or info.flag_bits & 1
+                or (info.external_attr >> 16) & 0o170000 == 0o120000):
+            raise ValueError("Unsafe or oversized workflow JSON in ZIP")
+        with archive.open(info) as source:
+            payload = source.read(MAX_JSON_BYTES + 1)
+    if (len(payload) > MAX_JSON_BYTES or len(payload) != entry.get("size")
+            or hashlib.sha256(payload).hexdigest() != entry.get("sha256")):
+        raise WorkflowFileError("workflow_integrity", "Workflow JSON checksum or size mismatch")
+    try:
+        if name.lower().endswith(".png"):
+            data = engine.load_png_workflow_from_bytes(payload)
+        else:
+            data = json.loads(payload)
+        if not isinstance(data, dict) or engine.workflow_format(data) == "unknown":
+            raise ValueError("Unsupported workflow")
+    except (ValueError, UnicodeError) as exc:
+        raise WorkflowFileError("workflow_integrity", "Invalid workflow file") from exc
+    if token is not None and inspect(archive_path, comfy_root)["token"] != token:
+        raise WorkflowFileError("workflow_changed", "Package or destination changed; preview again")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".comfyshelf-workflow-",
+                                         suffix=".tmp", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if token is not None and inspect(archive_path, comfy_root)["token"] != token:
+            raise WorkflowFileError("workflow_changed", "Package or destination changed; preview again")
+        os.replace(temporary, target)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return {**report, "exists": True, "reverted": True}
+
+
 def extract_json(archive_path):
     """Safely extract the workflow graph as a dictionary without modifying files."""
     archive_path = Path(archive_path).resolve()

@@ -3004,7 +3004,11 @@ def undeploy_pool_model(
     }
 
 
-def preview_portable_export(archive_path: Path, output_path: Path) -> dict[str, Any]:
+def preview_portable_export(
+    archive_path: Path,
+    output_path: Path,
+    comfy_root: Path | None = None,
+) -> dict[str, Any]:
     """Read-only destination/space preview; integrity is checked during export."""
     source = archive_path.expanduser().resolve()
     output = output_path.expanduser()
@@ -3060,12 +3064,22 @@ def preview_portable_export(archive_path: Path, output_path: Path) -> dict[str, 
                 blockers.append({"code": "fat32"})
         except OSError:
             blockers.append({"code": "unavailable"})
-    return {
+    local_workflow_modified = False
+    if comfy_root is not None:
+        try:
+            wf_status = inspect_local_workflow_status(source, comfy_root, manifest)
+            local_workflow_modified = bool(wf_status.get("modified"))
+        except Exception:
+            local_workflow_modified = False
+    result = {
         "package": source.stem, "output_path": str(output),
         "model_bytes": model_bytes, "bytes_required": required, "bytes_free": free,
         "complete": bool(manifest.get("complete")) and not manifest.get("missing"),
         "missing": manifest.get("missing", []), "blockers": blockers,
     }
+    if comfy_root is not None:
+        result["local_workflow_modified"] = local_workflow_modified
+    return result
 
 
 def export_portable_package(
@@ -3074,8 +3088,21 @@ def export_portable_package(
     force: bool = False,
     progress: ProgressCallback = None,
     allow_incomplete: bool = False,
+    comfy_root: Path | None = None,
+    sync_workflow: bool = False,
 ) -> dict[str, Any]:
     """Export embedded or pool-backed files, verifying before publishing the ZIP."""
+    synced_workflow = False
+    if sync_workflow and comfy_root is not None:
+        wf_status = inspect_local_workflow_status(archive_path, comfy_root)
+        if wf_status.get("modified"):
+            sync_workflow_from_local(
+                archive_path,
+                comfy_root,
+                allow_missing=allow_incomplete,
+                progress=progress,
+            )
+            synced_workflow = True
     report = preview_portable_export(archive_path, output_path)
     blockers = [item for item in report["blockers"] if not (force and item["code"] == "exists")]
     if any(item["code"] == "exists" for item in blockers):
@@ -3139,12 +3166,15 @@ def export_portable_package(
             Path(temporary_name).unlink(missing_ok=True)
 
     exported_verification["archive"] = str(output_path.resolve())
-    return {
+    result = {
         "package": manifest.get("package"),
         "output_path": str(output_path.resolve()),
         "archive_size": output_path.stat().st_size,
         "verification": exported_verification,
     }
+    if comfy_root is not None:
+        result["workflow_synced"] = synced_workflow
+    return result
 
 
 def verify_package(archive_path: Path, progress: ProgressCallback = None) -> dict[str, Any]:
@@ -3259,6 +3289,574 @@ def load_package_manifest(archive_path: Path) -> dict[str, Any]:
     if manifest.get("package_type") != "comfyui-workflow-overlay":
         raise ValueError("Das ZIP ist kein unterstütztes ComfyUI-Workflow-Paket.")
     return manifest
+
+
+def inspect_local_workflow_status(
+    archive_path: Path,
+    comfy_root: Path | None,
+    manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compare the local workflow file in ComfyUI against the archived workflow entry."""
+    source = archive_path.resolve()
+    if manifest is None:
+        manifest = load_package_manifest(source)
+    wf_entry = next(
+        (entry for entry in manifest.get("files", []) if entry.get("role") == "workflow"),
+        None,
+    )
+    wf_arc = str(
+        (wf_entry.get("path") if wf_entry else None)
+        or manifest.get("workflow", {}).get("archive_path")
+        or ""
+    )
+    archived_sha256 = str(wf_entry.get("sha256") or "").casefold() if wf_entry else ""
+    archived_size = int(wf_entry.get("size") or 0) if wf_entry else 0
+    result: dict[str, Any] = {
+        "package": manifest.get("package") or source.stem,
+        "archive_path": wf_arc,
+        "local_path": None,
+        "local_exists": False,
+        "modified": False,
+        "archived_sha256": archived_sha256,
+        "archived_size": archived_size,
+        "local_sha256": None,
+        "local_size": None,
+    }
+    if not comfy_root or not wf_arc:
+        return result
+    try:
+        comfy_resolved = comfy_root.resolve()
+        if not comfy_resolved.is_dir():
+            return result
+        target = _safe_restore_target(comfy_resolved, wf_arc, "workflow")
+    except (OSError, ValueError):
+        return result
+    result["local_path"] = str(target)
+    try:
+        if not target.is_file() or target.is_symlink():
+            return result
+        st = target.stat()
+        local_size = int(st.st_size)
+        result["local_exists"] = True
+        result["local_size"] = local_size
+        if local_size > 64 * 1024 * 1024:
+            result["modified"] = True
+            return result
+        local_sha256 = sha256_file(target).casefold()
+        result["local_sha256"] = local_sha256
+        if archived_sha256:
+            result["modified"] = bool(local_size != archived_size or local_sha256 != archived_sha256)
+    except OSError:
+        return result
+    return result
+
+
+def _match_existing_manifest_asset(
+    asset: dict[str, Any],
+    old_manifest: dict[str, Any],
+    archive_path: Path,
+    source_archive_names: set[str],
+) -> dict[str, Any] | None:
+    """Find an already-archived model entry in old_manifest when the model is currently unloaded from ComfyUI."""
+    old_files_by_path = {
+        str(entry.get("path", "")).casefold(): entry
+        for entry in old_manifest.get("files", [])
+        if entry.get("role") == "model" and entry.get("path")
+    }
+
+    def _backing_exists(file_entry: dict[str, Any]) -> bool:
+        if file_entry.get("storage") == SHARED_OBJECT_STORAGE:
+            try:
+                obj = _shared_object_path(
+                    archive_path,
+                    str(file_entry.get("object_sha256") or file_entry.get("sha256") or ""),
+                )
+                return obj.is_file() and obj.stat().st_size == int(file_entry.get("size", -1))
+            except (OSError, ValueError):
+                return False
+        return str(file_entry.get("path", "")).casefold() in source_archive_names
+
+    wanted_name = str(asset.get("filename") or "").replace("\\", "/").casefold()
+    wanted_base = PurePosixPath(wanted_name).name.casefold() if wanted_name else ""
+    wanted_kind = str(asset.get("kind") or "model").casefold()
+
+    # 1. Exact kind + filename match in old_manifest["assets"]
+    for old_asset in old_manifest.get("assets", []):
+        if old_asset.get("status") != "included" or not old_asset.get("archive_path"):
+            continue
+        old_fn = str(old_asset.get("filename") or "").replace("\\", "/").casefold()
+        old_kind = str(old_asset.get("kind") or "model").casefold()
+        if old_fn == wanted_name and (old_kind == wanted_kind or "model" in {old_kind, wanted_kind}):
+            fe = old_files_by_path.get(str(old_asset["archive_path"]).casefold())
+            if fe and _backing_exists(fe):
+                return fe
+
+    # 2. Match by normalized path or unique basename across old_files_by_path
+    normalized = _model_relative_path(str(asset.get("filename") or ""))
+    if normalized is not None:
+        search_cats = asset.get("search_categories") or []
+        expected = {
+            PurePosixPath("models", cat, *normalized.parts).as_posix().casefold()
+            for cat in search_cats
+        }
+        for path_key, fe in old_files_by_path.items():
+            if path_key in expected and _backing_exists(fe):
+                return fe
+        fallback = [
+            fe for path_key, fe in old_files_by_path.items()
+            if PurePosixPath(path_key).name.casefold() == wanted_base and _backing_exists(fe)
+        ]
+        if len(fallback) == 1:
+            return fallback[0]
+    return None
+
+
+def preview_workflow_sync(
+    archive_path: Path,
+    comfy_root: Path,
+) -> dict[str, Any]:
+    """Inspect how syncing the local workflow file from ComfyUI would update the archive package."""
+    source_archive_path = archive_path.resolve()
+    comfy_resolved = comfy_root.resolve()
+    old_manifest = load_package_manifest(source_archive_path)
+    wf_status = inspect_local_workflow_status(source_archive_path, comfy_resolved, old_manifest)
+    if not wf_status["local_exists"] or not wf_status["local_path"]:
+        raise FileNotFoundError(
+            f"Lokale Workflow-Datei wurde in ComfyUI nicht gefunden: {wf_status.get('archive_path')}"
+        )
+    local_workflow_path = Path(wf_status["local_path"])
+    report = inspect_workflow(local_workflow_path, comfy_resolved, calculate_hashes=False)
+
+    with zipfile.ZipFile(source_archive_path, "r") as zf:
+        source_archive_names = {name.casefold() for name in zf.namelist()}
+
+    old_files_by_path = {
+        str(entry.get("path", "")).casefold(): entry
+        for entry in old_manifest.get("files", [])
+        if entry.get("role") == "model" and entry.get("path")
+    }
+    old_assets_by_path = {
+        str(item.get("archive_path", "")).casefold(): item
+        for item in old_manifest.get("assets", [])
+        if item.get("status") == "included" and item.get("archive_path")
+    }
+
+    added_models: list[dict[str, Any]] = []
+    unchanged_models: list[dict[str, Any]] = []
+    missing: list[dict[str, str]] = []
+    retained_paths: set[str] = set()
+
+    for asset in report["assets"]:
+        if asset["resolved_path"]:
+            source = Path(asset["resolved_path"])
+            relative = (source.parent.resolve() / source.name).relative_to(comfy_resolved)
+            arc = _zip_path(relative)
+            arc_key = arc.casefold()
+            kind = infer_model_kind(asset["kind"], arc, asset["filename"])
+            size = int(source.stat().st_size)
+            if arc_key in retained_paths:
+                continue
+            retained_paths.add(arc_key)
+            if arc_key in old_files_by_path and int(old_files_by_path[arc_key].get("size", -1)) == size:
+                unchanged_models.append({"filename": asset["filename"], "kind": kind, "archive_path": arc, "size": size})
+            else:
+                added_models.append({"filename": asset["filename"], "kind": kind, "archive_path": arc, "size": size})
+        else:
+            matched_old = _match_existing_manifest_asset(asset, old_manifest, source_archive_path, source_archive_names)
+            if matched_old:
+                arc = str(matched_old["path"])
+                arc_key = arc.casefold()
+                kind = infer_model_kind(asset["kind"], arc, asset["filename"])
+                if arc_key not in retained_paths:
+                    retained_paths.add(arc_key)
+                    unchanged_models.append({
+                        "filename": asset["filename"],
+                        "kind": kind,
+                        "archive_path": arc,
+                        "size": int(matched_old.get("size", 0)),
+                    })
+            else:
+                reason = {"path-mismatch": "Unterpfad stimmt nicht überein", "unsafe-path": "unsicherer Modellpfad"}.get(
+                    asset.get("resolution"),
+                    "mehrdeutig" if asset["filename"] in report["ambiguous_matches"] else "nicht gefunden",
+                )
+                missing.append({
+                    "type": "asset",
+                    "kind": asset["kind"],
+                    "name": asset["filename"],
+                    "reason": reason,
+                })
+
+    removed_models: list[dict[str, Any]] = []
+    for arc_key, old_file in old_files_by_path.items():
+        if arc_key not in retained_paths:
+            old_asset = old_assets_by_path.get(arc_key, {})
+            removed_models.append({
+                "filename": old_asset.get("filename") or Path(old_file["path"]).name,
+                "kind": old_asset.get("kind") or "model",
+                "archive_path": old_file["path"],
+                "size": int(old_file.get("size", 0)),
+            })
+
+    old_nodes = {str(n.get("package")) for n in old_manifest.get("custom_nodes", []) if n.get("package")}
+    new_nodes = {str(n.get("package")) for n in report.get("custom_nodes", []) if n.get("package")}
+
+    return {
+        "package": old_manifest.get("package") or source_archive_path.stem,
+        "archive": str(source_archive_path),
+        "local_path": str(local_workflow_path),
+        "archive_path": wf_status["archive_path"],
+        "modified": wf_status["modified"],
+        "added_models": added_models,
+        "removed_models": removed_models,
+        "unchanged_models": unchanged_models,
+        "unchanged_models_count": len(unchanged_models),
+        "added_custom_nodes": sorted(new_nodes - old_nodes),
+        "removed_custom_nodes": sorted(old_nodes - new_nodes),
+        "missing": missing,
+        "complete": not missing,
+        "parser_warnings": report.get("parser_warnings", []),
+    }
+
+
+def sync_workflow_from_local(
+    archive_path: Path,
+    comfy_root: Path,
+    allow_missing: bool = True,
+    progress: ProgressCallback = None,
+) -> dict[str, Any]:
+    """Update an existing archive package with the modified local workflow from ComfyUI and any newly added models."""
+    import verification_cache
+
+    source_archive_path = archive_path.resolve()
+    comfy_resolved = comfy_root.resolve()
+    old_manifest = load_package_manifest(source_archive_path)
+    old_cache_status = verification_cache.status(source_archive_path, old_manifest)
+    was_verified = old_cache_status.get("state") == "verified"
+
+    wf_status = inspect_local_workflow_status(source_archive_path, comfy_resolved, old_manifest)
+    if not wf_status["local_exists"] or not wf_status["local_path"]:
+        raise FileNotFoundError(
+            f"Lokale Workflow-Datei wurde in ComfyUI nicht gefunden: {wf_status.get('archive_path')}"
+        )
+    local_workflow_path = Path(wf_status["local_path"])
+
+    _emit_progress(
+        progress,
+        phase="scan",
+        message="Lokale Workflow-Änderungen werden analysiert",
+        file=local_workflow_path.name,
+        log=True,
+    )
+    report = inspect_workflow(local_workflow_path, comfy_resolved, calculate_hashes=False)
+    raw_workflow = load_workflow(local_workflow_path)
+
+    with zipfile.ZipFile(source_archive_path, "r") as zf:
+        source_archive_names = {name.casefold() for name in zf.namelist()}
+
+    old_files_by_path = {
+        str(entry.get("path", "")).casefold(): entry
+        for entry in old_manifest.get("files", [])
+        if entry.get("role") == "model" and entry.get("path")
+    }
+
+    missing: list[dict[str, str]] = []
+    resolved_plan: list[tuple[dict[str, Any], Path | None, dict[str, Any] | None, str | None]] = []
+    for asset in report["assets"]:
+        if asset["resolved_path"]:
+            source = Path(asset["resolved_path"])
+            try:
+                relative = (source.parent.resolve() / source.name).relative_to(comfy_resolved)
+            except ValueError as exc:
+                raise ValueError(f"Asset liegt außerhalb des ComfyUI-Roots: {source}") from exc
+            arc = _zip_path(relative)
+            resolved_plan.append((asset, source, old_files_by_path.get(arc.casefold()), arc))
+        else:
+            matched_old = _match_existing_manifest_asset(asset, old_manifest, source_archive_path, source_archive_names)
+            if matched_old is not None:
+                resolved_plan.append((asset, None, matched_old, str(matched_old["path"])))
+            else:
+                reason = {"path-mismatch": "Unterpfad stimmt nicht überein", "unsafe-path": "unsicherer Modellpfad"}.get(
+                    asset.get("resolution"),
+                    "mehrdeutig" if asset["filename"] in report["ambiguous_matches"] else "nicht gefunden",
+                )
+                missing.append({
+                    "type": "asset",
+                    "kind": asset["kind"],
+                    "name": asset["filename"],
+                    "reason": reason,
+                })
+                resolved_plan.append((asset, None, None, None))
+
+    if missing and not allow_missing:
+        details = "\n".join(f"- {item['kind']}: {item['name']} ({item['reason']})" for item in missing)
+        raise ValueError(
+            "Paket konnte nicht aktualisiert werden, weil Abhängigkeiten fehlen:\n"
+            f"{details}"
+        )
+
+    use_shared_pool = bool(
+        old_manifest.get("storage_mode") == "shared-object-pool"
+        or any(entry.get("storage") == SHARED_OBJECT_STORAGE for entry in old_manifest.get("files", []))
+        or (source_archive_path.parent / ".comfyshelf" / "objects").is_dir()
+    )
+
+    manifest: dict[str, Any] = {
+        "schema_version": max(int(old_manifest.get("schema_version", 1)), 2 if use_shared_pool else 1),
+        "package_type": "comfyui-workflow-overlay",
+        "package": old_manifest.get("package") or source_archive_path.stem,
+        "created_at": old_manifest.get("created_at") or datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "complete": not missing,
+        "created_with_allow_missing": bool(old_manifest.get("created_with_allow_missing") or bool(missing)),
+        "parser_warnings": report["parser_warnings"],
+        "workflow": {
+            "filename": old_manifest.get("workflow", {}).get("filename") or local_workflow_path.name,
+            "format": report["format"],
+            "archive_path": wf_status["archive_path"],
+        },
+        "environment": {
+            "frontend_version": None,
+            "comfy_core_version": None,
+        },
+        "assets": [],
+        "custom_nodes_policy": "record-only",
+        "custom_nodes": [],
+        "missing": missing,
+        "files": [],
+    }
+    if use_shared_pool:
+        manifest["storage_mode"] = "shared-object-pool"
+        manifest["deduplicated_at"] = old_manifest.get("deduplicated_at") or datetime.now(timezone.utc).isoformat()
+
+    extra = raw_workflow.get("extra") or {}
+    manifest["environment"]["frontend_version"] = extra.get("frontendVersion")
+    manifest["environment"]["comfy_core_version"] = (extra.get("node_versions") or {}).get("comfy-core")
+
+    nodes_by_package: dict[str, set[str]] = {}
+    if isinstance(raw_workflow.get("nodes"), list):
+        for node in raw_workflow["nodes"]:
+            if not isinstance(node, dict):
+                continue
+            properties = node.get("properties") or {}
+            if not isinstance(properties, dict):
+                continue
+            package = properties.get("cnr_id")
+            if package and package != "comfy-core":
+                nodes_by_package.setdefault(str(package), set()).add(str(node.get("type", "unknown")))
+    for dependency in report["custom_nodes"]:
+        installed_path = resolve_custom_node(dependency["package"], comfy_resolved)
+        manifest["custom_nodes"].append({
+            "package": dependency["package"],
+            "revision": dependency["revision"],
+            "installed_when_packed": installed_path is not None,
+            "node_types": sorted(nodes_by_package.get(dependency["package"], set())),
+            "packaged": False,
+        })
+
+    added_models_count = 0
+    retained_paths: set[str] = set()
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{source_archive_path.stem}.sync.",
+            suffix=".tmp",
+            dir=source_archive_path.parent,
+            delete=False,
+        ) as temporary:
+            temporary_name = temporary.name
+
+        archive_paths: set[str] = set()
+        with zipfile.ZipFile(source_archive_path, "r") as source_archive, zipfile.ZipFile(
+            temporary_name, "w", allowZip64=True
+        ) as target_archive:
+            workflow_arc = wf_status["archive_path"]
+            manifest["files"].append(
+                _add_file_to_zip(target_archive, local_workflow_path, workflow_arc, "workflow", progress)
+            )
+            archive_paths.add(workflow_arc.casefold())
+
+            # Preserve existing thumbnail if present
+            old_thumb = old_manifest.get("thumbnail")
+            if old_thumb:
+                if old_thumb.casefold() == workflow_arc.casefold():
+                    manifest["thumbnail"] = workflow_arc
+                else:
+                    thumb_members = [
+                        info for info in source_archive.infolist()
+                        if info.filename.casefold() == str(old_thumb).casefold()
+                    ]
+                    old_thumb_entry = next(
+                        (e for e in old_manifest.get("files", []) if str(e.get("path", "")).casefold() == str(old_thumb).casefold()),
+                        None,
+                    )
+                    if thumb_members:
+                        _copy_zip_member(source_archive, thumb_members[0], target_archive, progress)
+                        manifest["thumbnail"] = old_thumb
+                        if old_thumb_entry:
+                            manifest["files"].append(dict(old_thumb_entry))
+                        archive_paths.add(str(old_thumb).casefold())
+
+            for asset, source, old_file, arc in resolved_plan:
+                entry = {
+                    "kind": asset["kind"],
+                    "filename": asset["filename"],
+                    "source_node_id": asset["source_node_id"],
+                    "source_node_type": asset["source_node_type"],
+                    "source_field": asset["source_field"],
+                    "detection": asset["detection"],
+                    "resolution": asset["resolution"],
+                    "status": "missing",
+                    "archive_path": None,
+                    "sha256": None,
+                    "size": None,
+                }
+                if arc is not None:
+                    entry["kind"] = infer_model_kind(asset["kind"], arc, asset["filename"])
+                    arc_key = arc.casefold()
+                    retained_paths.add(arc_key)
+                    if arc_key not in archive_paths:
+                        file_entry: dict[str, Any] | None = None
+                        if source is None and old_file is not None:
+                            # Model is currently unloaded from ComfyUI; preserve from old_manifest
+                            if old_file.get("storage") == SHARED_OBJECT_STORAGE:
+                                file_entry = dict(old_file)
+                            else:
+                                member_info = next(
+                                    (info for info in source_archive.infolist() if info.filename.casefold() == arc_key),
+                                    None,
+                                )
+                                if member_info is None:
+                                    raise ValueError(f"Archiviertes Modell fehlt im Paket: {arc}")
+                                _copy_zip_member(source_archive, member_info, target_archive, progress)
+                                file_entry = dict(old_file)
+                        elif source is not None:
+                            source_size = int(source.stat().st_size)
+                            can_reuse_old = False
+                            if old_file is not None and int(old_file.get("size", -1)) == source_size:
+                                old_sha = str(old_file.get("sha256") or "").casefold()
+                                if old_file.get("storage") == SHARED_OBJECT_STORAGE:
+                                    try:
+                                        obj_path = _shared_object_path(
+                                            source_archive_path,
+                                            str(old_file.get("object_sha256") or old_sha),
+                                        )
+                                        if obj_path.is_file() and obj_path.stat().st_size == source_size:
+                                            if os.path.samefile(source, obj_path):
+                                                can_reuse_old = True
+                                            elif sha256_file(source, progress=progress, phase="local-hash", message=f"Prüfe {source.name}") == old_sha:
+                                                can_reuse_old = True
+                                    except (OSError, ValueError):
+                                        can_reuse_old = False
+                                else:
+                                    member_info = next(
+                                        (info for info in source_archive.infolist() if info.filename.casefold() == arc_key),
+                                        None,
+                                    )
+                                    if member_info is not None and sha256_file(source, progress=progress, phase="local-hash", message=f"Prüfe {source.name}") == old_sha:
+                                        _copy_zip_member(source_archive, member_info, target_archive, progress)
+                                        can_reuse_old = True
+
+                            if can_reuse_old and old_file is not None:
+                                file_entry = dict(old_file)
+                            else:
+                                added_models_count += 1
+                                if use_shared_pool:
+                                    _, digest, _ = _store_file_as_object(
+                                        source_archive_path,
+                                        source,
+                                        progress,
+                                    )
+                                    file_entry = {
+                                        "path": arc,
+                                        "role": "model",
+                                        "size": source_size,
+                                        "sha256": digest,
+                                        "storage": SHARED_OBJECT_STORAGE,
+                                        "object_sha256": digest,
+                                    }
+                                else:
+                                    file_entry = _add_file_to_zip(target_archive, source, arc, "model", progress)
+
+                        if file_entry is None:
+                            raise ValueError(f"Modell konnte nicht verarbeitet werden: {arc}")
+                        manifest["files"].append(file_entry)
+                        archive_paths.add(arc_key)
+                    else:
+                        file_entry = next(
+                            item for item in manifest["files"] if item["path"].casefold() == arc_key
+                        )
+                    entry.update(
+                        status="included",
+                        archive_path=arc,
+                        sha256=file_entry["sha256"],
+                        size=file_entry["size"],
+                    )
+                manifest["assets"].append(entry)
+
+            # If use_shared_pool is active and an embedded model was removed from the workflow,
+            # ensure it is backed up into the shared pool before replacing the ZIP.
+            if use_shared_pool:
+                for arc_key, old_file in old_files_by_path.items():
+                    if arc_key not in retained_paths and old_file.get("storage") != SHARED_OBJECT_STORAGE:
+                        member_info = next(
+                            (info for info in source_archive.infolist() if info.filename.casefold() == arc_key),
+                            None,
+                        )
+                        if member_info is not None:
+                            _store_zip_member_as_object(source_archive_path, source_archive, old_file, progress)
+
+            custom_text = custom_nodes_text(manifest["custom_nodes"]).encode("utf-8")
+            manifest["files"].append(
+                _add_bytes_to_zip(
+                    target_archive,
+                    custom_text,
+                    "custom-nodes.txt",
+                    "custom_node_inventory",
+                    progress,
+                )
+            )
+            target_archive.writestr(
+                "comfy-package.json",
+                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                compress_type=zipfile.ZIP_DEFLATED,
+            )
+
+        os.replace(temporary_name, source_archive_path)
+        temporary_name = None
+    finally:
+        if temporary_name:
+            try:
+                Path(temporary_name).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    removed_models_count = sum(1 for arc_key in old_files_by_path if arc_key not in retained_paths)
+    if was_verified:
+        snap = verification_cache.safe_snapshot(source_archive_path, manifest)
+        if snap is not None:
+            verification_cache.remember(source_archive_path, manifest, snap, True)
+
+    _emit_progress(
+        progress,
+        phase="complete",
+        message="Workflow-Paket wurde mit lokalem Stand aktualisiert",
+        current=1,
+        total=1,
+        level="success",
+        log=True,
+    )
+    return {
+        "synced": True,
+        "package": manifest["package"],
+        "archive": str(source_archive_path),
+        "local_path": str(local_workflow_path),
+        "complete": manifest["complete"],
+        "missing": manifest["missing"],
+        "added_models_count": added_models_count,
+        "removed_models_count": removed_models_count,
+        "archive_size": source_archive_path.stat().st_size,
+    }
 
 
 _WINDOWS_RESERVED_STEMS = {
@@ -3703,8 +4301,11 @@ def unload_package(
     allow_shared: bool,
     progress: ProgressCallback = None,
     archive_preverified: bool = False,
+    sync_workflow: bool = False,
 ) -> dict[str, Any]:
     initial_manifest = load_package_manifest(archive_path)
+    wf_status = inspect_local_workflow_status(archive_path, comfy_root, initial_manifest)
+    local_workflow_modified = bool(wf_status.get("modified"))
     pool_preparation_required = any(
         entry.get("role") == "model" and entry.get("storage") != SHARED_OBJECT_STORAGE
         for entry in initial_manifest.get("files", [])
@@ -3719,6 +4320,17 @@ def unload_package(
         )
         pool_preparation = deduplicate_package(archive_path, progress)
         archive_preverified = False
+
+    pre_sync_manifest: dict[str, Any] | None = None
+    workflow_sync: dict[str, Any] | None = None
+    if confirm and sync_workflow and local_workflow_modified:
+        pre_sync_manifest = load_package_manifest(archive_path)
+        workflow_sync = sync_workflow_from_local(
+            archive_path,
+            comfy_root,
+            allow_missing=allow_incomplete,
+            progress=progress,
+        )
 
     verification = (
         {"valid": True, "errors": []}
@@ -3736,16 +4348,38 @@ def unload_package(
     if not manifest.get("complete", False) and not allow_incomplete:
         blockers.append("Paket ist unvollständig (für bewusstes Fortfahren --allow-incomplete verwenden).")
 
+    combined_manifest = dict(manifest)
+    combined_files = list(manifest.get("files", []))
+    combined_assets = list(manifest.get("assets", []))
+    if pre_sync_manifest is not None:
+        existing_paths = {str(f.get("path", "")).casefold() for f in combined_files}
+        for old_f in pre_sync_manifest.get("files", []):
+            if (
+                old_f.get("role") == "model"
+                and old_f.get("storage") == SHARED_OBJECT_STORAGE
+                and str(old_f.get("path", "")).casefold() not in existing_paths
+            ):
+                combined_files.append(old_f)
+                existing_paths.add(str(old_f.get("path", "")).casefold())
+        existing_asset_paths = {str(a.get("archive_path", "")).casefold() for a in combined_assets if a.get("archive_path")}
+        for old_a in pre_sync_manifest.get("assets", []):
+            if old_a.get("status") == "included" and old_a.get("archive_path"):
+                if str(old_a["archive_path"]).casefold() not in existing_asset_paths:
+                    combined_assets.append(old_a)
+                    existing_asset_paths.add(str(old_a["archive_path"]).casefold())
+        combined_manifest["files"] = combined_files
+        combined_manifest["assets"] = combined_assets
+
     _emit_progress(
         progress,
         phase="references",
         message="Andere lokale Workflows werden auf gemeinsame Modelle geprüft",
         log=True,
     )
-    shared = find_shared_model_references(manifest, comfy_root)
+    shared = find_shared_model_references(combined_manifest, comfy_root)
     asset_by_path = {
         asset.get("archive_path"): asset
-        for asset in manifest.get("assets", [])
+        for asset in combined_manifest.get("assets", [])
         if asset.get("status") == "included" and asset.get("archive_path")
     }
     candidates: list[dict[str, Any]] = []
@@ -3754,7 +4388,7 @@ def unload_package(
     removal_issues: list[dict[str, Any]] = []
     seen: set[str] = set()
 
-    for file_entry in manifest.get("files", []):
+    for file_entry in combined_manifest.get("files", []):
         if file_entry.get("role") != "model":
             continue
         archive_model_path = str(file_entry.get("path", ""))
@@ -3848,6 +4482,10 @@ def unload_package(
         "bytes_unlinked": bytes_unlinked,
         "pool_preparation_required": pool_preparation_required,
         "pool_preparation": pool_preparation,
+        "local_workflow_modified": local_workflow_modified,
+        "local_workflow_path": wf_status.get("local_path"),
+        "workflow_synced": workflow_sync is not None,
+        "workflow_sync": workflow_sync,
         "removed": [],
         "removed_empty_directories": [],
     }
@@ -4248,9 +4886,12 @@ def switch_package(
     progress: ProgressCallback = None,
     archive_preverified: bool = False,
     link_mode: str = "auto",
+    sync_workflow: bool = False,
 ) -> dict[str, Any]:
     """Load the target first, then remove verified models not needed by it."""
     pool_preparations: list[dict[str, Any]] = []
+    pre_sync_other_manifests: dict[str, dict[str, Any]] = {}
+    synced_source_workflows: list[str] = []
     if confirm:
         involved_archives = [target_archive, *other_archives]
         seen_archives: set[str] = set()
@@ -4272,6 +4913,25 @@ def switch_package(
                     log=True,
                 )
                 pool_preparations.append(deduplicate_package(archive_path, progress))
+        if sync_workflow:
+            seen_sync: set[str] = set()
+            for archive_path in other_archives:
+                if archive_path.resolve() == target_archive.resolve():
+                    continue
+                resolved_key = str(archive_path.resolve()).casefold()
+                if resolved_key in seen_sync:
+                    continue
+                seen_sync.add(resolved_key)
+                wf_status = inspect_local_workflow_status(archive_path, comfy_root)
+                if wf_status.get("modified"):
+                    pre_sync_other_manifests[resolved_key] = load_package_manifest(archive_path)
+                    sync_workflow_from_local(
+                        archive_path,
+                        comfy_root,
+                        allow_missing=True,
+                        progress=progress,
+                    )
+                    synced_source_workflows.append(str(wf_status.get("package") or archive_path.stem))
     target_manifest = load_package_manifest(target_archive)
     target_paths = {
         str(item.get("path", "")).casefold()
@@ -4293,6 +4953,7 @@ def switch_package(
     removal_issues: list[dict[str, Any]] = []
     seen_targets: set[str] = set()
     source_packages: list[str] = []
+    modified_source_workflows: list[str] = list(synced_source_workflows)
     shared_count = 0
 
     for archive_path in other_archives:
@@ -4308,14 +4969,43 @@ def switch_package(
         if not verification["valid"]:
             blockers.append(f"Anderes Paket ist beschädigt: {archive_path.name}")
             continue
-        source_packages.append(str(manifest.get("package") or archive_path.stem))
-        shared = find_shared_model_references(manifest, comfy_root)
+        pkg_label = str(manifest.get("package") or archive_path.stem)
+        source_packages.append(pkg_label)
+        if not confirm:
+            wf_status = inspect_local_workflow_status(archive_path, comfy_root, manifest)
+            if wf_status.get("modified") and pkg_label not in modified_source_workflows:
+                modified_source_workflows.append(pkg_label)
+
+        combined_manifest = dict(manifest)
+        pre_sync = pre_sync_other_manifests.get(str(archive_path.resolve()).casefold())
+        if pre_sync is not None:
+            combined_files = list(manifest.get("files", []))
+            existing_paths = {str(f.get("path", "")).casefold() for f in combined_files}
+            for old_f in pre_sync.get("files", []):
+                if (
+                    old_f.get("role") == "model"
+                    and old_f.get("storage") == SHARED_OBJECT_STORAGE
+                    and str(old_f.get("path", "")).casefold() not in existing_paths
+                ):
+                    combined_files.append(old_f)
+                    existing_paths.add(str(old_f.get("path", "")).casefold())
+            combined_assets = list(manifest.get("assets", []))
+            existing_asset_paths = {str(a.get("archive_path", "")).casefold() for a in combined_assets if a.get("archive_path")}
+            for old_a in pre_sync.get("assets", []):
+                if old_a.get("status") == "included" and old_a.get("archive_path"):
+                    if str(old_a["archive_path"]).casefold() not in existing_asset_paths:
+                        combined_assets.append(old_a)
+                        existing_asset_paths.add(str(old_a["archive_path"]).casefold())
+            combined_manifest["files"] = combined_files
+            combined_manifest["assets"] = combined_assets
+
+        shared = find_shared_model_references(combined_manifest, comfy_root)
         assets_by_path = {
             item.get("archive_path"): item
-            for item in manifest.get("assets", [])
+            for item in combined_manifest.get("assets", [])
             if item.get("status") == "included" and item.get("archive_path")
         }
-        for file_entry in manifest.get("files", []):
+        for file_entry in combined_manifest.get("files", []):
             if file_entry.get("role") != "model":
                 continue
             archive_model_path = str(file_entry.get("path", ""))
@@ -4397,6 +5087,9 @@ def switch_package(
         "package": target_manifest.get("package"),
         "target_archive": str(target_archive.resolve()),
         "source_packages": source_packages,
+        "modified_source_workflows": modified_source_workflows,
+        "local_workflow_modified": bool(modified_source_workflows),
+        "synced_source_workflows": synced_source_workflows,
         "dry_run": not confirm,
         "restore": restore_preview,
         "unload_candidates": unload_candidates,

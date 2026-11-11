@@ -155,6 +155,26 @@ An exit code of zero for a preview does not mean it has no blockers.
 workflows. Neither overrides a conflicting local model hash. Existing modified
 workflow JSONs are kept by restore rather than overwritten.
 
+### Live local workflow sync (GUI)
+
+During library scans, the GUI uses `inspect_local_workflow_status` to compare the
+local workflow JSON under `<comfy_root>\user\default\workflows\...` against the
+`.zip` archive entry by file size and SHA-256 checksum:
+
+- **Update package (`preview_workflow_sync` / `sync_workflow_from_local`):**
+  previews newly added, no-longer-referenced, and unchanged models before
+  atomically updating the package JSON and shared pool while preserving
+  previously unloaded pool objects.
+- **Revert local changes (`workflow_file.revert` / `revert_local_workflow`):**
+  restores the verified archived workflow JSON locally after token-guarded
+  confirmation.
+- **Unload, switch, and portable export safeguard:** `unload_package`,
+  `switch_package`, `preview_portable_export`, and `export_portable_package`
+  automatically detect modified active local workflows and provide a
+  default-enabled `sync_workflow` option to commit workflow changes and new
+  models into the archive and shared pool before removing local files or writing
+  the portable archive.
+
 The CLI returns `0` for normal completion, `2` for caught input/filesystem errors
 or interrupted removal, and `3` when `verify` returns an invalid integrity result.
 A verified but incomplete package can return `0`; inspect the completeness field.

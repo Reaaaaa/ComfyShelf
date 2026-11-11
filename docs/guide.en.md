@@ -135,8 +135,14 @@ save an incomplete archive. Missing files are not downloaded automatically.
 
 Stop running generations in ComfyUI first.
 
-Select the archived workflow and choose **Unload workflow**. Read the preview,
-then confirm if the listed removals are what you want.
+Select the archived workflow and choose **Unload workflow**. If the local
+workflow JSON in ComfyUI was edited, the confirmation dialog offers a
+default-enabled option **Sync modified local workflow into package before
+unloading** so updated workflow edits and newly referenced models are saved in
+the shared pool before local copies (including models removed from the workflow)
+are deleted from ComfyUI. Uncheck this option only if you intentionally want to
+keep an experiment out of the archive. Read the preview, then confirm if the
+listed removals are what you want.
 
 Unloading **deletes verified local model copies from your ComfyUI drive**.
 The archived copies stay in the archive folder. Workflow JSONs and custom-node
@@ -164,7 +170,7 @@ Because Windows and the NTFS file system resolve symlinks and hardlinks transpar
 - **PyTorch & Safetensors:** Native loaders (`torch.load`, `safetensors.torch.load_file`) and memory mapping (`mmap`) read linked models directly with zero overhead or configuration changes.
 - **Zero Configuration Needed:** Neither your workflows nor external tools need special configuration to interact with linked models.
 
-### Open the workflow in ComfyUI again
+### Open the workflow in ComfyUI again and sync local changes
 
 Click **Show workflow file** below the workflow name. Explorer opens with the
 JSON selected; drag it into ComfyUI in your browser. You do not need to unpack
@@ -173,6 +179,19 @@ just this file from the package. No models are loaded, existing JSONs (including
 your local edits) are not overwritten, and the package stays unchanged.
 This checks only the JSON, not the whole package, and does not change its verified
 status. The button does not start ComfyUI or automatically open a browser tab.
+
+When you edit and save the workflow in ComfyUI (`Ctrl + S`), ComfyShelf
+automatically compares the local file in the ComfyUI workflow folder against the
+`.zip` package during library scans. If it differs, the workflow list shows a
+**Modified** tag, the detail header shows **Modified locally**, and a warning banner
+appears alongside two additional action buttons:
+
+- **Update package:** previews newly added, no-longer-referenced, and unchanged
+  models before confirming, then saves the updated workflow JSON and any new
+  models into the `.zip` archive via the shared pool. Models already unloaded in
+  the pool stay safely preserved.
+- **Revert local changes:** resets an unintended local edit in ComfyUI back to
+  the exact verified JSON stored in the `.zip` archive after confirmation.
 
 ### Rename, hide, or delete workflows
 
@@ -193,7 +212,11 @@ Click the database icon in the top storage summary bar or the **Model Pool** but
 
 - **Load in addition:** loads the chosen workflow's files and keeps other loaded files.
 - **Switch to this workflow:** loads the target first, then attempts to remove
-  eligible files belonging to the previous workflow packages.
+  eligible files belonging to the previous workflow packages. If an active
+  previous workflow was edited locally, the confirmation dialog defaults to
+  enabling **Sync modified local workflow into package before switching**, so
+  edits and newly referenced models are saved in the pool before unneeded local
+  files are unloaded from ComfyUI.
 
 Shared files detected as needed elsewhere are protected; the app may ask you to
 review an exception. Do not override warnings unless you understand the effect.
@@ -224,12 +247,16 @@ already recorded in package metadata without rereading large models; it is not
 a fresh integrity check or the local-workflow safety check described above.
 
 **To take one workflow elsewhere:** select the workflow, then **Export portable
-ZIP…**. Choose a folder and filename in the save dialog. Before exporting,
-ComfyShelf shows the destination, estimated space needed and available space.
-The ZIP includes the workflow and its archived models, VAEs, LoRAs and text
-encoders. It works without your shared model pool, but still needs a compatible
-ComfyUI installation. Custom nodes are listed; their code and Python dependencies
-are not included.
+ZIP…**. If the matching local workflow JSON in ComfyUI has been edited,
+ComfyShelf detects it automatically and offers a default-enabled option inside
+the export dialog (**Sync modified local workflow into package before
+exporting**) so both your library package and the portable ZIP contain the
+latest workflow and models. Choose a folder and filename in the save dialog.
+Before exporting, ComfyShelf shows the destination, estimated space needed and
+available space. The ZIP includes the workflow and its archived models, VAEs,
+LoRAs and text encoders. It works without your shared model pool, but still
+needs a compatible ComfyUI installation. Custom nodes are listed; their code and
+Python dependencies are not included.
 
 If the package is incomplete, the missing filenames are shown and you must
 explicitly accept exporting without them. Export cannot supply missing files.

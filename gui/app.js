@@ -1148,6 +1148,7 @@ function renderLibrary() {
         <div class="workflow-item-info">
           <div class="workflow-name-wrap">
             <span class="workflow-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+            ${item.local_workflow_modified ? `<span class="workflow-modified-tag" title="${escapeHtml(t('workflow_sync.modified_badge_hint'))}">${icon('edit')}<span>${escapeHtml(t('workflow_sync.modified_short'))}</span></span>` : ''}
             ${item.hidden ? `<span class="workflow-hidden-tag" title="${escapeHtml(t('filter.hidden'))}">${icon('eye-off')}</span>` : ''}
           </div>
           ${matchHintHtml}
@@ -1337,6 +1338,12 @@ function renderDetail(pkg) {
   if (hiddenPill) {
     hiddenPill.classList.toggle('hidden', !pkg.hidden);
   }
+  const modifiedPill = $('modifiedWorkflowPill');
+  if (modifiedPill) {
+    modifiedPill.classList?.toggle?.('hidden', !pkg.local_workflow_modified);
+  }
+  $('syncWorkflowButton')?.classList?.toggle?.('hidden', !pkg.local_workflow_modified);
+  $('revertWorkflowButton')?.classList?.toggle?.('hidden', !pkg.local_workflow_modified);
 
   renderIntegrity(pkg);
 
@@ -1348,6 +1355,13 @@ function renderDetail(pkg) {
     </div>`).join('') : `<div class="workflow-list-empty">${t('detail.no_models')}</div>`;
 
   const notices = [];
+  if (pkg.local_workflow_modified) {
+    notices.push({
+      warning: true,
+      text: t('workflow_sync.notice_title'),
+      subtext: t('workflow_sync.notice_hint'),
+    });
+  }
   const missingDependencies = pkg.missing || [];
   if (!pkg.complete) notices.push({
     warning: true,
@@ -1783,6 +1797,85 @@ async function showSelectedWorkflowFile() {
   finally { button.disabled = false; }
 }
 
+async function syncSelectedWorkflow() {
+  const pkg = selectedPackage();
+  if (!pkg) return;
+  const button = $('syncWorkflowButton');
+  if (button) button.disabled = true;
+  try {
+    showBusy(t('workflow_sync.sync_eyebrow'), t('workflow_sync.sync_busy_detail'));
+    const report = await callApi('preview_workflow_sync', pkg.path);
+    hideBusy();
+    const addedModels = report.added_models || [];
+    const removedModels = report.removed_models || [];
+    const missing = report.missing || [];
+    const addedText = addedModels.length
+      ? addedModels.map(m => `${escapeHtml(m.filename)} (${formatBytes(m.size || 0)})`).join(', ')
+      : escapeHtml(t('workflow_sync.none'));
+    const removedText = removedModels.length
+      ? removedModels.map(m => escapeHtml(m.filename)).join(', ')
+      : escapeHtml(t('workflow_sync.none'));
+    const copy = `
+      <p>${t('workflow_sync.sync_intro')}</p>
+      <p class="workflow-file-path">${escapeHtml(report.local_path || pkg.local_workflow_path || '')}</p>
+      <div class="confirm-stat"><span>${t('workflow_sync.added_models_label')}</span><strong>${addedText}</strong></div>
+      <div class="confirm-stat"><span>${t('workflow_sync.removed_models_label')}</span><strong>${removedText}</strong></div>
+      <div class="confirm-stat"><span>${t('workflow_sync.unchanged_models_label')}</span><strong>${Number(report.unchanged_models_count || 0)}</strong></div>
+      ${!report.complete ? `<div class="missing-detail"><span class="missing-detail-label">${t('pack.missing_label')}</span>${missing.map(item => missingFileHtml(item)).join('')}</div>` : ''}`;
+    openConfirm({
+      eyebrow: t('workflow_sync.sync_eyebrow'),
+      title: t('workflow_sync.sync_title', {name: pkg.name}),
+      copy,
+      wide: true,
+      showIncomplete: !report.complete,
+      proceedLabel: t('workflow_sync.sync_proceed'),
+      action: async (flags = {}) => {
+        showBusy(t('workflow_sync.sync_busy_title'), t('workflow_sync.sync_busy_detail'));
+        await callApi('sync_workflow_from_local', pkg.path, Boolean(flags.allowIncomplete));
+        hideBusy();
+        toast(t('workflow_sync.sync_done'));
+        await refreshState(pkg.path);
+      },
+    });
+  } catch (error) {
+    hideBusy();
+    operationError(error);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function revertSelectedWorkflow() {
+  const pkg = selectedPackage();
+  if (!pkg) return;
+  const button = $('revertWorkflowButton');
+  if (button) button.disabled = true;
+  try {
+    const localPath = pkg.local_workflow_path || pkg.name;
+    openConfirm({
+      eyebrow: t('workflow_sync.revert_eyebrow'),
+      title: t('workflow_sync.revert_title', {name: pkg.name}),
+      copy: `<p>${t('workflow_sync.revert_intro')}</p><p class="workflow-file-path">${escapeHtml(localPath)}</p><p>${t('workflow_sync.revert_note')}</p>`,
+      danger: true,
+      proceedLabel: t('workflow_sync.revert_proceed'),
+      action: async () => {
+        showBusy(t('workflow_sync.revert_eyebrow'), t('workflow_sync.revert_intro'), false);
+        try {
+          await callApi('revert_local_workflow', pkg.path);
+          toast(t('workflow_sync.revert_done'));
+          await refreshState(pkg.path);
+        } finally {
+          hideBusy();
+        }
+      },
+    });
+  } catch (error) {
+    operationError(error);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function copySelectedWorkflowJson(options = {}) {
   const pkg = selectedPackage();
   if (!pkg) return;
@@ -2195,12 +2288,21 @@ function showPortableExportPreview(pkg, report) {
   openConfirm({
     eyebrow: t('storage.export_button'), title: t('storage.export_title'), copy,
     wide: true, showIncomplete: !report.complete, disabled: blockers.length > 0,
+    showSyncWorkflow: !!report.local_workflow_modified,
+    defaultSyncWorkflow: true,
+    syncWorkflowTitle: t('workflow_sync.confirm_export_title'),
+    syncWorkflowHint: t('workflow_sync.confirm_export_hint'),
     proceedLabel: t('storage.export_proceed'),
     action: async (flags = {}) => {
       showBusy(t('storage.export_running'), t('storage.export_detail'));
-      const result = await callApi('export_portable_archive', pkg.path, report.output_path, !!flags.allowIncomplete);
+      const result = flags.syncWorkflow
+        ? await callApi('export_portable_archive', pkg.path, report.output_path, !!flags.allowIncomplete, true)
+        : await callApi('export_portable_archive', pkg.path, report.output_path, !!flags.allowIncomplete);
       hideBusy();
       toast(t('storage.export_done', {name: result.output_path}));
+      if (flags.syncWorkflow) {
+        await refreshState(pkg.path);
+      }
     },
   });
 }
@@ -2325,10 +2427,18 @@ async function previewPackageAction(actionName) {
       showIncomplete: !pkg.complete, showShared: shared, wide: shared,
       showClipboard: isRestore,
       defaultClipboard: getStorage('comfyshelf_auto_copy') !== 'false',
+      showSyncWorkflow: !isRestore && !!preview.local_workflow_modified,
+      defaultSyncWorkflow: true,
+      syncWorkflowTitle: t('workflow_sync.confirm_unload_title'),
+      syncWorkflowHint: t('workflow_sync.confirm_unload_hint'),
       disabled: conflictCount > 0 || !!preview.removal_issues?.length,
-      action: async ({allowIncomplete, allowShared, copyToClipboard}) => {
+      action: async ({allowIncomplete, allowShared, copyToClipboard, syncWorkflow}) => {
         showBusy(t(isRestore ? 'restore.running' : 'restore.unload_running'), t(isRestore ? 'restore.running_detail' : 'restore.unload_running_detail'));
-        await callApi('execute_action', actionName, pkg.path, allowIncomplete, allowShared);
+        if (!isRestore && syncWorkflow) {
+          await callApi('execute_action', actionName, pkg.path, allowIncomplete, allowShared, true);
+        } else {
+          await callApi('execute_action', actionName, pkg.path, allowIncomplete, allowShared);
+        }
         hideBusy();
         if (isRestore && copyToClipboard) {
           try {
@@ -2356,6 +2466,7 @@ async function previewWorkflowSwitch() {
     const conflictCount = (preview.conflicts?.length || 0) + (preview.restore?.conflicts?.length || 0);
     const shared = (preview.shared_count || 0) > 0 || !!preview.unload_candidates?.some(item => item.shared_by?.length);
     const hardBlockers = (preview.blockers || []).filter(item => !item.toLowerCase().includes('unvollständig') && !item.toLowerCase().includes('referenziert'));
+    const modifiedSources = preview.modified_source_workflows || [];
     const copy = `
       <p>${t('switch.copy', {name: escapeHtml(pkg.name)})}</p>
       ${shared ? sharedFilesHtml(preview.unload_candidates, {force: true}) : ''}
@@ -2373,10 +2484,16 @@ async function previewWorkflowSwitch() {
       showIncomplete: !pkg.complete, showShared: shared, wide: shared,
       showClipboard: true,
       defaultClipboard: getStorage('comfyshelf_auto_copy') !== 'false',
+      showSyncWorkflow: modifiedSources.length > 0,
+      defaultSyncWorkflow: true,
+      syncWorkflowTitle: t('workflow_sync.confirm_switch_title', {names: modifiedSources.join(', ')}),
+      syncWorkflowHint: t('workflow_sync.confirm_switch_hint'),
       disabled: conflictCount > 0 || hardBlockers.length > 0,
-      action: async ({allowIncomplete, allowShared, copyToClipboard}) => {
+      action: async ({allowIncomplete, allowShared, copyToClipboard, syncWorkflow}) => {
         showBusy(t('switch.running'), t('switch.running_detail'));
-        const result = await callApi('execute_switch', pkg.path, allowIncomplete, allowShared);
+        const result = syncWorkflow
+          ? await callApi('execute_switch', pkg.path, allowIncomplete, allowShared, true)
+          : await callApi('execute_switch', pkg.path, allowIncomplete, allowShared);
         hideBusy();
         if (copyToClipboard) {
           try {
@@ -2419,7 +2536,7 @@ async function refreshDiskState() {
 const historyIcons = {
   archive: 'upload', import: 'import', import_load: 'download', restore: 'download',
   unload: 'upload', switch: 'switch', rename: 'edit', optimize: 'drive', export: 'upload', optimize_library: 'drive',
-  unload_partial: 'alert', switch_partial: 'alert'
+  unload_partial: 'alert', switch_partial: 'alert', sync_workflow: 'refresh', revert_workflow: 'history'
 };
 
 function renderHistoryEntries(entries) {
@@ -2919,6 +3036,18 @@ function openConfirm(options) {
   $('incompleteOption').classList.toggle('hidden', !options.showIncomplete);
   $('sharedOption').classList.toggle('hidden', !options.showShared);
   $('clipboardOption')?.classList.toggle('hidden', !options.showClipboard);
+  const syncOpt = $('syncWorkflowOption');
+  if (syncOpt) {
+    syncOpt.classList?.toggle?.('hidden', !options.showSyncWorkflow);
+    if (options.showSyncWorkflow) {
+      const titleEl = $('syncWorkflowOptionTitle');
+      const hintEl = $('syncWorkflowOptionHint');
+      if (titleEl) titleEl.textContent = options.syncWorkflowTitle || t('workflow_sync.confirm_option_title');
+      if (hintEl) hintEl.textContent = options.syncWorkflowHint || t('workflow_sync.confirm_option_hint');
+      const cb = $('syncWorkflowCheckbox');
+      if (cb) cb.checked = options.defaultSyncWorkflow !== undefined ? !!options.defaultSyncWorkflow : true;
+    }
+  }
   $('allowIncompleteCheckbox').checked = false;
   $('allowSharedCheckbox').checked = false;
   if ($('copyToClipboardCheckbox')) {
@@ -2938,10 +3067,14 @@ async function proceedConfirm() {
     toast(t('confirm.shared_required'), true); return;
   }
   const action = app.pendingConfirm.action;
+  const syncWorkflow = app.pendingConfirm.showSyncWorkflow
+    ? Boolean($('syncWorkflowCheckbox')?.checked)
+    : false;
   const flags = {
     allowIncomplete: $('allowIncompleteCheckbox').checked,
     allowShared: $('allowSharedCheckbox').checked,
-    copyToClipboard: $('copyToClipboardCheckbox')?.checked || false
+    copyToClipboard: $('copyToClipboardCheckbox')?.checked || false,
+    syncWorkflow
   };
   closeConfirm();
   try { await action(flags); } catch (error) { hideBusy(); operationError(error); }
@@ -2984,6 +3117,8 @@ function installEvents() {
   $('comfyVariantSelect')?.addEventListener('change', onComfyVariantChange);
   $('comfyStatusPill')?.addEventListener('click', onComfyStatusPillClick);
   $('showWorkflowFileButton').addEventListener('click', showSelectedWorkflowFile);
+  $('syncWorkflowButton')?.addEventListener('click', syncSelectedWorkflow);
+  $('revertWorkflowButton')?.addEventListener('click', revertSelectedWorkflow);
   $('dependencyScanButton').addEventListener('click', scanSelectedDependencies);
   $('exportButton').addEventListener('click', exportSelectedPackage);
   $('minimizeButton').addEventListener('click', () => window.pywebview?.api?.minimize_window());

@@ -161,7 +161,7 @@ stateDiagram-v2
 ### 8. Two-Phase Token-Guarded Preview & Commit Lifecycle (`transactional_token`)
 - **Locations**: [`dependency_scan.py`](../dependency_scan.py), [`workflow_file.py`](../workflow_file.py), [`TransactionalTokenState` in `state_machines.py`](../state_machines.py)
 - **Invariants**:
-  - Phase 1 (`previewed`) computes a cryptographic SHA-256 `token` over the archive, target, and candidate file stamps `(exists, size, mtime_ns)`.
+  - Phase 1 (`previewed`) computes a cryptographic SHA-256 `token` over the archive, target, and candidate file stamps `(exists, size, mtime_ns)` (for both dependency completion and `workflow_file.preview_restore` / `workflow_file.revert`).
   - Phase 2 (`confirmed`) re-scans and recomputes the token; if any file drifted while the user was reading the confirmation dialog, the commit aborts with `dependency_stale` or `workflow_changed` (`stale_aborted`) before mutating disk state.
 
 ---

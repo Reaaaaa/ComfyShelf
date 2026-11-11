@@ -4,7 +4,7 @@
 
 # ComfyShelf
 
-[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 222 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v1.1.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
+[![License: AGPL-3.0-only](docs/assets/license-agpl.svg)](LICENSE) [![Python tests: 227 passed locally](docs/assets/python-tests.svg)](docs/test-status.md) [![UI tests: EN + DE passed locally](docs/assets/ui-tests.svg)](docs/test-status.md) [![Python: 3.10+](docs/assets/python-version.svg)](https://www.python.org/) [![Platform: Windows · v1.1.0](docs/assets/windows-preview.svg)](#get-started-on-windows)
 
 <sub>Test badges show a [dated local test snapshot](docs/test-status.md), not a live GitHub build.</sub>
 
@@ -69,8 +69,11 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 - **Smart Template & Dummy Model Filter (No False Alarms)**  
   Template workflows shared online frequently contain placeholder model names (`YOUR_LORA_2_DISABLED.safetensors`, `PUT_YOUR_LORA_HERE`, `PLACEHOLDER`, `[none]`, etc.). ComfyShelf recognizes and excludes these dummy entries automatically, ensuring your template workflows stay valid and green without falsely warning about missing files.
 
+- **Live Local Workflow Sync & Safety Reset (`Ctrl + S` in ComfyUI)**<br>
+  When you edit and save a loaded workflow in ComfyUI (`<comfy_root>\user\default\workflows\...`), ComfyShelf automatically compares the local JSON file against the archive by file size and SHA-256 checksum during library scans. Diverging workflows display a **Modified** / **Modified locally** badge, a detail warning, and two dedicated controls: **Update package** previews newly added, no-longer-referenced, and unchanged models and atomically updates the `.zip` and shared pool while preserving already-unloaded models in the pool; **Revert local changes** restores the verified archived JSON after confirmation if an edit went wrong. Unloading or switching workflows also detects modified active workflows and offers a default-enabled safety option to sync changes before removing local models.
+
 - **Self-Healing Archives & 1-Click Portable ZIP Export**  
-  Archived a workflow while a model was still downloading? The **Rescan Incomplete Workflow** feature scans for newly acquired files, verifies their hashes, creates a timestamped backup of the archive, and completes the package. Need to take a workflow to another PC or share it with a friend? **Export Portable ZIP** bundles the workflow and its required models into a self-contained, standalone package.
+  Archived a workflow while a model was still downloading? The **Rescan Incomplete Workflow** feature scans for newly acquired files, verifies their hashes, creates a timestamped backup of the archive, and completes the package. Need to take a workflow to another PC or share it with a friend? **Export Portable ZIP** bundles the workflow and its required models into a self-contained, standalone package — and automatically detects newer local workflow edits, offering a default-enabled pre-export sync option so both your library archive and the portable ZIP contain the latest workflow and models.
 
 - **Real-Time Search & Scope Filtering (`Ctrl + F`)**  
   Find any workflow in your library quickly. Filter across custom scopes (`[All]`, `[Name]`, `[Model]`, `[Node]`). Match badges highlight exact hits directly in the workflow list (e.g. `🔍 Model: qwen_image_edit_fp8.safetensors`), so you immediately see why a workflow matched without digging through complex node graphs.

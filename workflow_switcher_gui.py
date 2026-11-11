@@ -1170,6 +1170,7 @@ class WorkflowSwitcherApi:
                     }
                 )
             state = state_machines.derive_package_load_state(present, len(model_files)).value
+            wf_status = engine.inspect_local_workflow_status(archive_path, comfy_root, manifest)
             packages.append(
                 {
                     # The ZIP name is the portable, user-controlled display name.
@@ -1195,6 +1196,9 @@ class WorkflowSwitcherApi:
                         manifest.get("custom_nodes", []), comfy_root
                     ),
                     "workflow": manifest.get("workflow", {}),
+                    "local_workflow_exists": wf_status["local_exists"],
+                    "local_workflow_modified": wf_status["modified"],
+                    "local_workflow_path": wf_status["local_path"],
                     "storage_mode": manifest.get("storage_mode", "embedded-portable"),
                     "deduplicated": manifest.get("storage_mode") == "shared-object-pool",
                     "has_thumbnail": bool(
@@ -1741,15 +1745,41 @@ class WorkflowSwitcherApi:
         return self._result(action)
 
     def preview_portable_archive(self, archive_path: str, output_path: str) -> dict[str, Any]:
-        return self._result(lambda: engine.preview_portable_export(Path(archive_path), Path(output_path)))
+        def action() -> dict[str, Any]:
+            installation = engine.active_installation()
+            comfy_root = (
+                Path(installation["comfy_root"])
+                if installation and installation.get("comfy_root")
+                else None
+            )
+            return engine.preview_portable_export(
+                Path(archive_path), Path(output_path), comfy_root=comfy_root
+            )
+
+        return self._result(action)
 
     def export_portable_archive(
-        self, archive_path: str, output_path: str, allow_incomplete: bool = False,
+        self,
+        archive_path: str,
+        output_path: str,
+        allow_incomplete: bool = False,
+        sync_workflow: bool = False,
     ) -> dict[str, Any]:
         def action() -> dict[str, Any]:
             source = Path(archive_path)
+            installation = engine.active_installation()
+            comfy_root = (
+                Path(installation["comfy_root"])
+                if installation and installation.get("comfy_root")
+                else None
+            )
             result = engine.export_portable_package(
-                source, Path(output_path), progress=self._progress, allow_incomplete=allow_incomplete,
+                source,
+                Path(output_path),
+                progress=self._progress,
+                allow_incomplete=allow_incomplete,
+                comfy_root=comfy_root,
+                sync_workflow=sync_workflow,
             )
             self._last_export_dir = Path(result["output_path"]).parent
             self._record_history(
@@ -1775,6 +1805,7 @@ class WorkflowSwitcherApi:
         archive_path: str,
         allow_incomplete: bool,
         allow_shared: bool,
+        sync_workflow: bool = False,
     ) -> dict[str, Any]:
         def action() -> dict[str, Any]:
             result = self._run_action(
@@ -1784,6 +1815,7 @@ class WorkflowSwitcherApi:
                 allow_incomplete,
                 allow_shared,
                 self._progress,
+                sync_workflow=sync_workflow,
             )
             changed = result.get("restored", []) if action_name == "restore" else result.get("removed", [])
             bytes_changed = sum(int(item.get("size", 0)) for item in result.get("candidates", []))
@@ -1809,10 +1841,15 @@ class WorkflowSwitcherApi:
         archive_path: str,
         allow_incomplete: bool,
         allow_shared: bool,
+        sync_workflow: bool = False,
     ) -> dict[str, Any]:
         def action() -> dict[str, Any]:
             result = self._run_switch(
-                Path(archive_path), True, allow_incomplete, allow_shared
+                Path(archive_path),
+                True,
+                allow_incomplete,
+                allow_shared,
+                sync_workflow=sync_workflow,
             )
             self._remove_hidden_workflow(Path(archive_path).name)
             self._record_history(
@@ -1831,6 +1868,7 @@ class WorkflowSwitcherApi:
         confirm: bool,
         allow_incomplete: bool,
         allow_shared: bool,
+        sync_workflow: bool = False,
     ) -> dict[str, Any]:
         installation = engine.active_installation()
         if not installation:
@@ -1859,6 +1897,7 @@ class WorkflowSwitcherApi:
             self._progress,
             archive_preverified=confirm,
             link_mode=link_mode,
+            sync_workflow=sync_workflow,
         )
 
     @staticmethod
@@ -1869,6 +1908,7 @@ class WorkflowSwitcherApi:
         allow_incomplete: bool,
         allow_shared: bool,
         progress: engine.ProgressCallback = None,
+        sync_workflow: bool = False,
     ) -> dict[str, Any]:
         installation = engine.active_installation()
         if not installation:
@@ -1894,8 +1934,66 @@ class WorkflowSwitcherApi:
                 allow_shared,
                 progress,
                 archive_preverified=confirm,
+                sync_workflow=sync_workflow,
             )
         raise ValueError(f"Unknown action: {action_name}")
+
+    def preview_workflow_sync(self, archive_path: str) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            installation = engine.active_installation()
+            if not installation:
+                raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
+            return engine.preview_workflow_sync(
+                Path(archive_path),
+                Path(installation["comfy_root"]),
+            )
+
+        return self._result(action)
+
+    def sync_workflow_from_local(
+        self, archive_path: str, allow_incomplete: bool = True
+    ) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            installation = engine.active_installation()
+            if not installation:
+                raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
+            result = engine.sync_workflow_from_local(
+                Path(archive_path),
+                Path(installation["comfy_root"]),
+                allow_missing=allow_incomplete,
+                progress=self._progress,
+            )
+            self._record_history(
+                "sync_workflow",
+                result.get("package"),
+                "Workflow package updated from local ComfyUI file",
+                int(result.get("archive_size", 0)),
+            )
+            return result
+
+        return self._operation(action)
+
+    def revert_local_workflow(
+        self, archive_path: str, token: str | None = None
+    ) -> dict[str, Any]:
+        def action() -> dict[str, Any]:
+            installation = engine.active_installation()
+            if not installation:
+                raise ValueError("Bitte zuerst ComfyUI- und Auslagerungsordner einrichten.")
+            report = workflow_file.revert(
+                Path(archive_path),
+                Path(installation["comfy_root"]),
+                token=token,
+            )
+            self._record_history(
+                "revert_workflow",
+                Path(archive_path).stem,
+                f"Local workflow reverted to archived state: {Path(report['path']).name}",
+                0,
+            )
+            return report
+
+        return self._result(action)
 
     def show_workflow_file(self, archive_path: str) -> dict[str, Any]:
         def action():

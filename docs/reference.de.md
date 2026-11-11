@@ -278,6 +278,27 @@ Bewusste Sicherheitsausnahmen müssen separat angegeben werden:
 Diese Schalter sind unabhängig. Ein abweichender lokaler Datei-Hash kann niemals
 übergangen werden.
 
+## Live-Abgleich lokaler Workflow-Änderungen (GUI)
+
+Beim Bibliotheks-Scan prüft die GUI über `inspect_local_workflow_status`, ob die
+lokale JSON unter `<comfy_root>\user\default\workflows\...` per Dateigröße und
+SHA-256-Hash vom archivierten Eintrag in der `.zip` abweicht:
+
+- **Paket aktualisieren (`preview_workflow_sync` / `sync_workflow_from_local`):**
+  listet neu hinzugekommene, nicht mehr referenzierte und unveränderte Modelle vor
+  dem Bestätigen auf und schreibt die aktualisierte JSON samt neuen Modellen
+  über den Shared Pool atomar ins Paket. Bereits im Pool entladene Modelle bleiben
+  erhalten.
+- **Lokale Änderung verwerfen (`workflow_file.revert` / `revert_local_workflow`):**
+  stellt nach Token-gesicherter Vorschau und Sicherheitsabfrage exakt den geprüften
+  Workflow-Stand aus der `.zip` lokal wieder her.
+- **Sicherheitsnetz bei Entladen, Wechsel und Portable-Export:**
+  `unload_package`, `switch_package`, `preview_portable_export` und
+  `export_portable_package` erkennen geänderte aktive Workflows automatisch und
+  bieten eine standardmäßig aktive Option (`sync_workflow`), Änderungen samt neuen
+  Modellen vor dem Entfernen lokaler Dateien bzw. dem Erstellen der portablen ZIP
+  ins Paket zu übernehmen.
+
 ## Aktuelle Grenzen
 
 - Standard-Loader werden über feste, überprüfbare Regeln erkannt.

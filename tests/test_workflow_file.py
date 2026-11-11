@@ -154,6 +154,14 @@ class WorkflowFileTests(unittest.TestCase):
                 self.restore()
         self.assertEqual([p for p in self.root.rglob("*") if p.is_file()], [])
 
+    def test_revert_overwrites_modified_local_workflow_with_archived_json(self):
+        path = Path(self.restore()["path"])
+        path.write_bytes(b'{"nodes": [{"id": 99}], "edited": true}')
+        self.assertNotEqual(path.read_bytes(), self.payload)
+        result = subject.revert(self.archive, self.root)
+        self.assertTrue(result["reverted"])
+        self.assertEqual(Path(result["path"]).read_bytes(), self.payload)
+
 
 if __name__ == "__main__":
     unittest.main()

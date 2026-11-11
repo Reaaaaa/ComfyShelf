@@ -143,8 +143,14 @@ Fehlende Dateien werden nicht automatisch heruntergeladen.
 
 Beende zuerst laufende Generierungen in ComfyUI.
 
-Wähle den archivierten Workflow und **Workflow entladen**. Lies die Vorschau und
-bestätige nur, wenn du die aufgelisteten Dateien wirklich entfernen möchtest.
+Wähle den archivierten Workflow und **Workflow entladen**. Wurde die lokale
+Workflow-JSON in ComfyUI geändert, bietet der Bestätigungsdialog standardmäßig
+die Option **Geänderten lokalen Workflow vor dem Entladen ins Paket übernehmen**
+an, damit neue Änderungen und neue Modelle im gemeinsamen Pool gesichert werden,
+bevor die lokalen Dateien in ComfyUI (einschließlich nicht mehr verwendeter
+Modelle) entfernt werden. Deaktiviere den Haken nur, wenn ein lokales Experiment
+bewusst nicht archiviert werden soll. Lies die Vorschau und bestätige nur, wenn
+du die aufgelisteten Dateien wirklich entfernen möchtest.
 
 Entladen **löscht die geprüften lokalen Modellkopien auf deinem ComfyUI-Laufwerk**.
 Die archivierten Kopien bleiben im Auslagerungsordner. Workflow-JSONs und
@@ -173,7 +179,7 @@ Da Windows Symlinks und Hardlinks direkt auf Betriebssystem-Ebene (NTFS) auflös
 - **PyTorch & Safetensors:** PyTorch (`torch.load`, `safetensors.torch.load_file`) und Memory-Mapping (`mmap`) laden verlinkte Dateien ohne Geschwindigkeitsverlust oder Konfigurationsänderungen.
 - **Keine Anpassungen nötig:** Weder deine Workflows noch Drittanwendungen müssen wissen, dass die Modelldateien physisch im zentralen Modellpool liegen.
 
-### Den Workflow wieder in ComfyUI öffnen
+### Den Workflow wieder in ComfyUI öffnen und lokale Änderungen abgleichen
 
 Klicke unter dem Workflow-Namen auf **Workflow-Datei anzeigen**. Der Explorer
 öffnet sich mit markierter JSON; ziehe sie in ComfyUI im Browser. Du musst die
@@ -183,6 +189,20 @@ vorhandene JSONs (auch deine lokalen Änderungen) nicht überschrieben und das
 Paket bleibt unverändert. Dabei wird nur die JSON geprüft, nicht das ganze Paket;
 der Verifiziert-Status ändert sich nicht. Der Button startet ComfyUI nicht und
 öffnet auch keinen Workflow automatisch im Browser.
+
+Wenn du den Workflow in ComfyUI bearbeitest und speicherst (`Strg + S`),
+vergleicht ComfyShelf beim Scannen der Bibliothek die lokale Datei im
+ComfyUI-Workflow-Ordner automatisch mit dem Stand im `.zip`-Paket. Weicht sie ab,
+erscheinen in der Workflow-Liste das Badge **Geändert**, oben in der Detailansicht
+das Badge **Lokal geändert**, ein gelber Hinweis sowie zwei zusätzliche Buttons:
+
+- **Paket aktualisieren:** zeigt vorab in einer Vorschau neu hinzugekommene,
+  nicht mehr referenzierte und unveränderte Modelle an und übernimmt beim
+  Bestätigen die neue Workflow-JSON samt neuen Modellen über den gemeinsamen
+  Pool in das `.zip`-Paket. Bereits entladene Pool-Modelle bleiben dabei erhalten.
+- **Lokale Änderung verwerfen:** setzt eine versehentlich im Browser
+  gespeicherte oder verstellte lokale JSON nach Sicherheitsabfrage exakt auf den
+  geprüften Stand aus dem `.zip`-Paket zurück.
 
 ### Workflows umbenennen, ausblenden oder löschen
 
@@ -204,7 +224,11 @@ der Verifiziert-Status ändert sich nicht. Der Button startet ComfyUI nicht und
 - **Nur zusätzlich laden:** lädt die Dateien des gewählten Workflows und lässt
   andere geladene Dateien liegen.
 - **Zu diesem Workflow wechseln:** lädt zuerst das Ziel und versucht anschließend,
-  geeignete Dateien der bisherigen Workflow-Pakete zu entfernen.
+  geeignete Dateien der bisherigen Workflow-Pakete zu entfernen. Wurde ein
+  bisher geladener Workflow lokal geändert, bietet der Dialog standardmäßig die
+  Option **Geänderten lokalen Workflow vor dem Wechsel ins Paket übernehmen**
+  an, sodass Änderungen und neue Modelle im Pool gesichert werden, bevor nicht
+  mehr benötigte Dateien aus ComfyUI entladen werden.
 
 Dateien, die als weiterhin benötigt erkannt werden, sind geschützt; die App kann
 dich um die Prüfung einer Ausnahme bitten. Warnungen nicht übergehen, wenn du
@@ -238,12 +262,17 @@ Modelldateien neu eingelesen. Das ist weder eine erneute Integritätsprüfung no
 die oben beschriebene Sicherheitsprüfung lokaler Workflows.
 
 **Einen Workflow mitnehmen:** Wähle den Workflow und anschließend **Portable ZIP
-exportieren…**. Im Speichern-Dialog bestimmst du Ordner und Dateinamen. Vor dem
-Export zeigt ComfyShelf das Ziel, den geschätzten Platzbedarf und den freien Platz.
-Die ZIP enthält den Workflow und seine archivierten Modelle, VAEs, LoRAs und
-Text-Encoder. Deinen gemeinsamen Modellpool braucht sie nicht; eine passende
-ComfyUI-Installation ist weiterhin nötig. Custom Nodes werden aufgelistet, ihr
-Code und ihre Python-Abhängigkeiten sind aber nicht enthalten.
+exportieren…**. Wurde die zugehörige lokale Workflow-JSON in ComfyUI geändert,
+erkennt ComfyShelf das automatisch und bietet direkt im Export-Dialog eine
+standardmäßig aktivierte Option (**Geänderten lokalen Workflow vor dem Export ins
+Paket übernehmen**), damit sowohl das Bibliothekspaket als auch die portable ZIP
+den neuesten Workflow samt neuen Modellen enthalten. Im Speichern-Dialog
+bestimmst du Ordner und Dateinamen. Vor dem Export zeigt ComfyShelf das Ziel,
+den geschätzten Platzbedarf und den freien Platz. Die ZIP enthält den Workflow
+und seine archivierten Modelle, VAEs, LoRAs und Text-Encoder. Deinen gemeinsamen
+Modellpool braucht sie nicht; eine passende ComfyUI-Installation ist weiterhin
+nötig. Custom Nodes werden aufgelistet, ihr Code und ihre Python-Abhängigkeiten
+sind aber nicht enthalten.
 
 Bei unvollständigen Paketen werden die fehlenden Dateinamen angezeigt. Du musst
 ausdrücklich bestätigen, dass du ohne diese Dateien exportieren möchtest.

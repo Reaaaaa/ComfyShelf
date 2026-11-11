@@ -216,6 +216,7 @@
               <div class="detail-kicker">
                 <span class="status-pill" id="statusPill">Archived</span>
                 <span class="status-pill hidden-badge hidden" id="hiddenPill" data-i18n="filter.hidden">Hidden</span>
+                <span class="status-pill modified-badge hidden" id="modifiedWorkflowPill" data-i18n="workflow_sync.modified_badge" data-i18n-title="workflow_sync.modified_badge_hint">Modified locally</span>
                 <span class="integrity-label" id="integrityLabel"><svg><use href="#i-shield"/></svg>Not verified</span>
               </div>
               <div class="package-name-row">
@@ -231,6 +232,8 @@
                   <span class="kbd-chip">Ctrl+V</span>
                 </button>
                 <button class="secondary-button workflow-file-button" id="showWorkflowFileButton" data-i18n-title="workflow_file.hint"><svg aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="workflow_file.button">Show workflow file</span></button>
+                <button class="secondary-button workflow-file-button sync-workflow-button hidden" id="syncWorkflowButton" data-i18n-title="workflow_sync.sync_button_hint"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span data-i18n="workflow_sync.sync_button">Update package</span></button>
+                <button class="secondary-button workflow-file-button revert-workflow-button hidden" id="revertWorkflowButton" data-i18n-title="workflow_sync.revert_button_hint"><svg aria-hidden="true"><use href="#i-history"/></svg><span data-i18n="workflow_sync.revert_button">Revert local changes</span></button>
               </div>
             </div>
             <div class="hero-cover hidden" id="heroCover" title="Click to view full preview" data-i18n-title="detail.preview_zoom">
@@ -357,6 +360,7 @@
       <label class="safety-option hidden" id="incompleteOption"><input type="checkbox" id="allowIncompleteCheckbox"><span><strong data-i18n="confirm.allow_incomplete">Accept incomplete package</strong><small data-i18n="confirm.allow_incomplete_hint">Known missing dependencies remain documented.</small></span></label>
       <label class="safety-option hidden" id="sharedOption"><input type="checkbox" id="allowSharedCheckbox"><span><strong data-i18n="confirm.allow_shared">Remove shared models anyway</strong><small data-i18n="confirm.allow_shared_hint">Other local workflows may be missing models afterwards.</small></span></label>
       <label class="safety-option hidden" id="clipboardOption"><input type="checkbox" id="copyToClipboardCheckbox"><span><strong data-i18n="confirm.copy_to_clipboard">Copy workflow to clipboard</strong><small data-i18n="confirm.copy_to_clipboard_hint">Places the workflow graph into your clipboard, ready for Ctrl+V in ComfyUI.</small></span></label>
+      <label class="safety-option sync-workflow-option hidden" id="syncWorkflowOption"><input type="checkbox" id="syncWorkflowCheckbox" checked><span><strong id="syncWorkflowOptionTitle" data-i18n="workflow_sync.confirm_option_title">Sync modified local workflow into package</strong><small id="syncWorkflowOptionHint" data-i18n="workflow_sync.confirm_option_hint">Updates the package ZIP with your local ComfyUI workflow changes and any newly added models.</small></span></label>
       <div class="modal-actions"><button class="text-button" id="confirmCancelButton" data-i18n="common.cancel">Cancel</button><button class="primary-button" id="confirmProceedButton">Continue</button></div>
     </section>
   </div>

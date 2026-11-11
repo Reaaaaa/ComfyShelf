@@ -613,6 +613,13 @@ h1, h2, h3, p { margin: 0; }
 .workflow-name { display: block; min-width: 0; flex: 1; color: var(--text-soft); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .workflow-hidden-tag { display: inline-flex; align-items: center; color: #d9a04f; flex-shrink: 0; opacity: .85; }
 .workflow-hidden-tag svg { width: 13px; height: 13px; }
+.workflow-modified-tag {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px;
+  border-radius: 5px; background: rgba(217, 160, 79, 0.16); border: 1px solid rgba(217, 160, 79, 0.35);
+  color: #e6b870; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  flex-shrink: 0;
+}
+.workflow-modified-tag svg { width: 11px; height: 11px; }
 .workflow-item.active .workflow-name { color: #ffffff; font-weight: 650; }
 .workflow-item.active .workflow-meta { color: var(--text-soft); }
 .workflow-item.active .workflow-item-thumb { border-color: #384c57; }
@@ -823,6 +830,7 @@ h1, h2, h3, p { margin: 0; }
 .status-pill.loaded { background: var(--teal-wash); color: #a8d0ca; }
 .status-pill.partial { background: var(--amber-wash); color: #d9b97e; }
 .status-pill.hidden-badge { background: rgba(224, 162, 75, 0.16); color: #d9a04f; border: 1px solid rgba(224, 162, 75, 0.3); }
+.status-pill.modified-badge { background: rgba(224, 162, 75, 0.18); color: #e8bd78; border: 1px solid rgba(224, 162, 75, 0.38); }
 .integrity-label { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
 .integrity-label svg { width: 14px; height: 14px; }
 .integrity-label.valid { color: var(--teal); }
@@ -1165,6 +1173,38 @@ button:focus-visible, input:not(.search-box input):focus-visible { outline: 2px 
   flex-shrink: 0;
 }
 .workflow-file-button:disabled { opacity: .5; cursor: wait; }
+.sync-workflow-button {
+  background: rgba(217, 160, 79, 0.16);
+  border-color: rgba(217, 160, 79, 0.45);
+  color: #efd09e;
+}
+.sync-workflow-button:hover:not(:disabled) {
+  background: rgba(217, 160, 79, 0.28);
+  border-color: #e0a858;
+  color: #ffffff;
+}
+.revert-workflow-button {
+  border-color: rgba(199, 123, 120, 0.35);
+  color: #dcb0ae;
+}
+.revert-workflow-button:hover:not(:disabled) {
+  background: rgba(199, 123, 120, 0.15);
+  border-color: rgba(199, 123, 120, 0.65);
+  color: #ffd8d6;
+}
+.safety-option.sync-workflow-option {
+  border-color: rgba(121, 175, 167, 0.42);
+  background: rgba(121, 175, 167, 0.12);
+}
+.safety-option.sync-workflow-option input {
+  accent-color: var(--teal);
+}
+.safety-option.sync-workflow-option strong {
+  color: #c7e6e1;
+}
+.safety-option.sync-workflow-option small {
+  color: #93b8b2;
+}
 .workflow-file-path { overflow-wrap: anywhere; user-select: text; color: var(--text); }
 
 .lightbox-dialog {

@@ -1107,6 +1107,173 @@ async function run(language) {
   assert.equal(snapshot.libraryScanState, 'ready');
   assert.equal(snapshot.busyOverlayActive, false);
   context.document.getElementById = prevGetElForModals;
+
+  // 10. Local workflow modification badges, detail notices/buttons, sync/revert & unload/switch/export sync option
+  const detailElements = {};
+  const makeEl = () => ({
+    textContent: '',
+    innerHTML: '',
+    value: '',
+    src: '',
+    title: '',
+    disabled: false,
+    className: '',
+    hidden: false,
+    classList: {
+      _set: new Set(),
+      add(...cls) { cls.forEach(c => this._set.add(c)); },
+      remove(...cls) { cls.forEach(c => this._set.delete(c)); },
+      toggle(c, force) {
+        if (force === undefined) {
+          this._set.has(c) ? this._set.delete(c) : this._set.add(c);
+        } else if (force) {
+          this._set.add(c);
+        } else {
+          this._set.delete(c);
+        }
+      },
+      contains(c) { return this._set.has(c); },
+    },
+    setAttribute() {},
+    addEventListener() {},
+    querySelectorAll() { return []; },
+  });
+  const getDetailEl = id => (detailElements[id] ||= makeEl());
+  const prevGetElForSync = context.document.getElementById;
+  context.document.getElementById = getDetailEl;
+
+  context.syncPkg = {
+    name: 'Sync Flow',
+    path: 'E:/Archive/SyncFlow.zip',
+    archive_size: 2048,
+    state: 'loaded',
+    complete: true,
+    hidden: false,
+    present_models: 1,
+    model_count: 1,
+    model_bytes: 1024,
+    models: [{ filename: 'a.safetensors', kind: 'lora', size: 1024, present: true }],
+    missing: [],
+    custom_nodes: [],
+    parser_warnings: [],
+    local_workflow_exists: true,
+    local_workflow_modified: true,
+    local_workflow_path: 'C:/ComfyUI/user/default/workflows/SyncFlow.json',
+  };
+  vm.runInContext(`
+    app.state = { configured: true, packages: [syncPkg] };
+    app.selectedPath = syncPkg.path;
+    app.filter = 'all';
+    app.searchQuery = '';
+    renderLibrary();
+    renderDetail(syncPkg);
+  `, context);
+
+  assert.ok(detailElements.workflowList.innerHTML.includes('workflow-modified-tag'));
+  assert.ok(detailElements.workflowList.innerHTML.includes(context.messages['workflow_sync.modified_short']));
+  assert.equal(detailElements.modifiedWorkflowPill.classList.contains('hidden'), false);
+  assert.equal(detailElements.syncWorkflowButton.classList.contains('hidden'), false);
+  assert.equal(detailElements.revertWorkflowButton.classList.contains('hidden'), false);
+  assert.ok(detailElements.noticeList.innerHTML.includes(context.messages['workflow_sync.notice_title']));
+
+  vm.runInContext('syncPkg.local_workflow_modified = false; renderLibrary(); renderDetail(syncPkg);', context);
+  assert.ok(!detailElements.workflowList.innerHTML.includes('workflow-modified-tag'));
+  assert.equal(detailElements.modifiedWorkflowPill.classList.contains('hidden'), true);
+  assert.equal(detailElements.syncWorkflowButton.classList.contains('hidden'), true);
+  assert.equal(detailElements.revertWorkflowButton.classList.contains('hidden'), true);
+
+  let syncCallArgs = null;
+  let revertCallArgs = null;
+  let unloadCallArgs = null;
+  let switchCallArgs = null;
+  let exportCallArgs = null;
+  context.window.pywebview.api.preview_workflow_sync = async p => ({
+    ok: true,
+    data: {
+      complete: true,
+      local_path: 'C:/ComfyUI/user/default/workflows/SyncFlow.json',
+      added_models: [{ filename: 'new_lora.safetensors', size: 512 }],
+      removed_models: [{ filename: 'old_lora.safetensors' }],
+      unchanged_models_count: 1,
+      missing: [],
+    },
+  });
+  context.window.pywebview.api.sync_workflow_from_local = async (...args) => {
+    syncCallArgs = args;
+    return { ok: true, data: { synced: true } };
+  };
+  context.window.pywebview.api.revert_local_workflow = async (...args) => {
+    revertCallArgs = args;
+    return { ok: true, data: { reverted: true } };
+  };
+  context.window.pywebview.api.preview_action = async () => ({
+    ok: true,
+    data: { candidates: [], conflicts: [], bytes_reclaimable: 0, local_workflow_modified: true },
+  });
+  context.window.pywebview.api.execute_action = async (...args) => {
+    unloadCallArgs = args;
+    return { ok: true, data: { removed: [] } };
+  };
+  context.window.pywebview.api.preview_switch = async () => ({
+    ok: true,
+    data: {
+      unload_candidates: [], shared_count: 0, conflicts: [], blockers: [],
+      restore: { conflicts: [] }, source_packages: ['Prev'],
+      bytes_required: 0, bytes_reclaimable: 0,
+      modified_source_workflows: ['Prev'],
+    },
+  });
+  context.window.pywebview.api.execute_switch = async (...args) => {
+    switchCallArgs = args;
+    return { ok: true, data: { package: 'Sync Flow' } };
+  };
+  context.window.pywebview.api.export_portable_archive = async (...args) => {
+    exportCallArgs = args;
+    return { ok: true, data: { output_path: 'D:/SyncFlow-portable.zip' } };
+  };
+
+  await vm.runInContext('syncSelectedWorkflow()', context);
+  assert.ok(context.confirmation.copy.includes('new_lora.safetensors'));
+  assert.ok(context.confirmation.copy.includes('old_lora.safetensors'));
+  await vm.runInContext('confirmation.action({allowIncomplete: false})', context);
+  assert.deepEqual(syncCallArgs, ['E:/Archive/SyncFlow.zip', false]);
+
+  await vm.runInContext('revertSelectedWorkflow()', context);
+  assert.equal(context.confirmation.danger, true);
+  await vm.runInContext('confirmation.action({})', context);
+  assert.deepEqual(revertCallArgs, ['E:/Archive/SyncFlow.zip']);
+
+  await vm.runInContext("previewPackageAction('unload')", context);
+  assert.equal(context.confirmation.showSyncWorkflow, true);
+  assert.equal(context.confirmation.defaultSyncWorkflow, true);
+  assert.equal(context.confirmation.syncWorkflowTitle, context.messages['workflow_sync.confirm_unload_title']);
+  await vm.runInContext('confirmation.action({allowIncomplete: false, allowShared: false, syncWorkflow: true})', context);
+  assert.deepEqual(unloadCallArgs, ['unload', 'E:/Archive/SyncFlow.zip', false, false, true]);
+
+  await vm.runInContext('previewWorkflowSwitch()', context);
+  assert.equal(context.confirmation.showSyncWorkflow, true);
+  assert.equal(context.confirmation.defaultSyncWorkflow, true);
+  await vm.runInContext('confirmation.action({allowIncomplete: false, allowShared: false, copyToClipboard: false, syncWorkflow: true})', context);
+  assert.deepEqual(switchCallArgs, ['E:/Archive/SyncFlow.zip', false, false, true]);
+
+  await vm.runInContext(`
+    showPortableExportPreview(syncPkg, {
+      complete: true,
+      missing: [],
+      blockers: [],
+      output_path: 'D:/SyncFlow-portable.zip',
+      bytes_required: 100,
+      bytes_free: 1000,
+      local_workflow_modified: true,
+    });
+  `, context);
+  assert.equal(context.confirmation.showSyncWorkflow, true);
+  assert.equal(context.confirmation.defaultSyncWorkflow, true);
+  assert.equal(context.confirmation.syncWorkflowTitle, context.messages['workflow_sync.confirm_export_title']);
+  await vm.runInContext('confirmation.action({allowIncomplete: false, syncWorkflow: true})', context);
+  assert.deepEqual(exportCallArgs, ['E:/Archive/SyncFlow.zip', 'D:/SyncFlow-portable.zip', false, true]);
+
+  context.document.getElementById = prevGetElForSync;
 }
 
 (async () => {
@@ -1174,17 +1341,22 @@ async function run(language) {
   assert.ok(indexHtml.includes('id="copyToClipboardCheckbox"'));
   assert.ok(indexHtml.includes('id="sidebarResizer"'));
   assert.ok(indexHtml.includes('class="sidebar-resizer"'));
+  assert.ok(indexHtml.includes('id="modifiedWorkflowPill"'));
+  assert.ok(indexHtml.includes('id="syncWorkflowButton"'));
+  assert.ok(indexHtml.includes('id="revertWorkflowButton"'));
+  assert.ok(indexHtml.includes('id="syncWorkflowOption"'));
+  assert.ok(indexHtml.includes('id="syncWorkflowCheckbox"'));
 
   const readmeMd = fs.readFileSync(path.join(root, '..', 'README.md'), 'utf8');
-  assert.ok(readmeMd.includes('Python tests: 222 passed locally'));
-  assert.ok(!readmeMd.includes('206 passed'));
+  assert.ok(readmeMd.includes('Python tests: 227 passed locally'));
+  assert.ok(!readmeMd.includes('225 passed'));
 
   const testStatusMd = fs.readFileSync(path.join(root, '..', 'docs', 'test-status.md'), 'utf8');
-  assert.ok(testStatusMd.includes('222 passed, no failures or skips'));
+  assert.ok(testStatusMd.includes('227 passed, no failures or skips'));
 
   const pythonBadgeSvg = fs.readFileSync(path.join(root, '..', 'docs', 'assets', 'python-tests.svg'), 'utf8');
-  assert.ok(pythonBadgeSvg.includes('222 passed'));
-  assert.ok(!pythonBadgeSvg.includes('206 passed'));
+  assert.ok(pythonBadgeSvg.includes('227 passed'));
+  assert.ok(!pythonBadgeSvg.includes('225 passed'));
 
   const contributingMd = fs.readFileSync(path.join(root, '..', 'CONTRIBUTING.md'), 'utf8');
   assert.ok(!contributingMd.includes('development draft'));
@@ -1299,10 +1471,17 @@ async function run(language) {
       'launcher.restarted',
       'launcher.already_running',
       'launcher.setup_needed',
+      'workflow_sync.modified_badge',
+      'workflow_sync.modified_short',
+      'workflow_sync.sync_button',
+      'workflow_sync.revert_button',
+      'workflow_sync.confirm_unload_title',
+      'workflow_sync.confirm_switch_title',
+      'workflow_sync.confirm_export_title',
     ]) {
       assert.ok(loc[key], `Missing key ${key} in ${lang}.json`);
     }
   }
 
-  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore confirmation, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, custom nodes live status, Drag & Drop file staging, library instant search with match hints and scopes, hidden workflow toggle & filtering, and workflow Drag & Drop reordering with sort modes.');
+  console.log('Frontend EN/DE tests passed: workflow JSON reveal/restore/revert confirmation, live local workflow sync badges & pre-unload/switch/export sync safeguards, grouped parser notices, dependency scan/add and backup results, persistent verification, shared-file consent, diagnostics, copy buttons, pack/import, portable export, archive deletion modal, PNG thumbnails with lightbox, instant-load link modes with badges, custom nodes live status, Drag & Drop file staging, library instant search with match hints and scopes, hidden workflow toggle & filtering, and workflow Drag & Drop reordering with sort modes.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

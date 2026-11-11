@@ -1381,6 +1381,134 @@ class ParserTests(unittest.TestCase):
             self.assertEqual(lora.read_bytes(), lora_bytes)
             self.assertTrue(obj_path.is_file())
 
+    def test_workflow_sync_and_revert_lifecycle(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy_root = base / "ComfyUI"
+            archive_root = base / "Archive"
+            (comfy_root / "models" / "loras").mkdir(parents=True)
+            workflows = comfy_root / "user" / "default" / "workflows"
+            workflows.mkdir(parents=True)
+            archive_root.mkdir()
+
+            lora_a = comfy_root / "models" / "loras" / "lora_a.safetensors"
+            lora_a.write_bytes(b"lora-a-content")
+            lora_b = comfy_root / "models" / "loras" / "lora_b.safetensors"
+            lora_b.write_bytes(b"lora-b-content")
+
+            wf = workflows / "sync_test.json"
+            wf.write_text(json.dumps({
+                "nodes": [{"id": 1, "type": "LoraLoader", "widgets_values": ["lora_a.safetensors"]}]
+            }), encoding="utf-8")
+
+            pkg_path = archive_root / "SyncTest.zip"
+            MODULE.build_package(wf, comfy_root, pkg_path, False, False, shared_pool=True)
+
+            # Initially unmodified
+            status0 = MODULE.inspect_local_workflow_status(pkg_path, comfy_root)
+            self.assertTrue(status0["local_exists"])
+            self.assertFalse(status0["modified"])
+
+            # Unload lora_a from comfy_root so it only lives in the shared pool
+            lora_a.unlink()
+
+            # Simulate Ctrl+S in ComfyUI: keep lora_a (even though unloaded locally!) and add lora_b
+            edited_wf_text = json.dumps({
+                "nodes": [
+                    {"id": 1, "type": "LoraLoader", "widgets_values": ["lora_a.safetensors"]},
+                    {"id": 2, "type": "LoraLoader", "widgets_values": ["lora_b.safetensors"]},
+                ]
+            }, indent=2)
+            wf.write_text(edited_wf_text, encoding="utf-8")
+
+            status1 = MODULE.inspect_local_workflow_status(pkg_path, comfy_root)
+            self.assertTrue(status1["local_exists"])
+            self.assertTrue(status1["modified"])
+
+            preview = MODULE.preview_workflow_sync(pkg_path, comfy_root)
+            self.assertTrue(preview["modified"])
+            self.assertTrue(preview["complete"])
+            self.assertEqual([m["filename"] for m in preview["added_models"]], ["lora_b.safetensors"])
+            self.assertEqual(preview["removed_models"], [])
+            self.assertEqual(preview["unchanged_models_count"], 1)
+
+            sync_res = MODULE.sync_workflow_from_local(pkg_path, comfy_root)
+            self.assertTrue(sync_res["synced"])
+            self.assertTrue(sync_res["complete"])
+
+            status2 = MODULE.inspect_local_workflow_status(pkg_path, comfy_root)
+            self.assertFalse(status2["modified"])
+
+            manifest = MODULE.load_package_manifest(pkg_path)
+            model_paths = sorted(f["path"] for f in manifest["files"] if f.get("role") == "model")
+            self.assertEqual(model_paths, [
+                "models/loras/lora_a.safetensors",
+                "models/loras/lora_b.safetensors",
+            ])
+
+    def test_unload_and_portable_export_with_sync_workflow(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            comfy_root = base / "ComfyUI"
+            archive_root = base / "Archive"
+            export_dir = base / "Export"
+            (comfy_root / "models" / "loras").mkdir(parents=True)
+            workflows = comfy_root / "user" / "default" / "workflows"
+            workflows.mkdir(parents=True)
+            archive_root.mkdir()
+            export_dir.mkdir()
+
+            lora_old = comfy_root / "models" / "loras" / "lora_old.safetensors"
+            lora_old.write_bytes(b"old-lora-bytes")
+            lora_new = comfy_root / "models" / "loras" / "lora_new.safetensors"
+            lora_new.write_bytes(b"new-lora-bytes")
+
+            wf = workflows / "colleague.json"
+            wf.write_text(json.dumps({
+                "nodes": [{"id": 1, "type": "LoraLoader", "widgets_values": ["lora_old.safetensors"]}]
+            }), encoding="utf-8")
+
+            pkg_path = archive_root / "Colleague.zip"
+            MODULE.build_package(wf, comfy_root, pkg_path, False, False, shared_pool=True)
+
+            # Edit workflow locally (Ctrl+S): replace lora_old with lora_new
+            wf.write_text(json.dumps({
+                "nodes": [{"id": 1, "type": "LoraLoader", "widgets_values": ["lora_new.safetensors"]}]
+            }), encoding="utf-8")
+
+            # Portable export preview detects modified local workflow
+            export_zip = export_dir / "Colleague-portable.zip"
+            exp_preview = MODULE.preview_portable_export(pkg_path, export_zip, comfy_root=comfy_root)
+            self.assertTrue(exp_preview["local_workflow_modified"])
+
+            # Export portable package with sync_workflow=True updates package and includes lora_new
+            exp_res = MODULE.export_portable_package(
+                pkg_path,
+                export_zip,
+                comfy_root=comfy_root,
+                sync_workflow=True,
+            )
+            self.assertTrue(exp_res["workflow_synced"])
+            with zipfile.ZipFile(export_zip, "r") as zf:
+                names = set(zf.namelist())
+                self.assertIn("models/loras/lora_new.safetensors", names)
+                self.assertNotIn("models/loras/lora_old.safetensors", names)
+
+            # Now edit local workflow again to reference both lora_old and lora_new, then test unload with sync_workflow=True
+            wf.write_text(json.dumps({
+                "nodes": [
+                    {"id": 1, "type": "LoraLoader", "widgets_values": ["lora_old.safetensors"]},
+                    {"id": 2, "type": "LoraLoader", "widgets_values": ["lora_new.safetensors"]},
+                ]
+            }), encoding="utf-8")
+            unload_preview = MODULE.unload_package(pkg_path, comfy_root, False, False, False)
+            self.assertTrue(unload_preview["local_workflow_modified"])
+
+            unload_res = MODULE.unload_package(pkg_path, comfy_root, True, False, False, sync_workflow=True)
+            self.assertTrue(unload_res["workflow_synced"])
+            self.assertFalse(lora_old.exists())
+            self.assertFalse(lora_new.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
