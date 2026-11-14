@@ -19,7 +19,7 @@ Park unused workflows on secondary storage, free up SSD space with confidence, a
 [User guide (English)](docs/guide.en.md) · [Deutsche Anleitung](docs/guide.de.md) · [Architecture & State Machines](docs/state-machines.md)
 
 <p align="center">
-  <img src="demo.gif" alt="ComfyShelf demo — workflow switching, missing model resolution, and instant loading" width="100%">
+  <img src="assets/comfyshelf-screenshot.png" alt="ComfyShelf screenshot — workflow switching, missing model resolution, and instant loading" width="100%">
 </p>
 
 ---
